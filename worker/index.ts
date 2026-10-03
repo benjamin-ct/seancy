@@ -525,16 +525,38 @@ async function handleTestAccountNotification(
   return json({ ok: true, channel });
 }
 
+// Comparaison en temps constant d'une clé de debug (évite qu'une différence
+// de durée de réponse ne laisse deviner la clé secrète octet par octet,
+// audit F2). Passe par un hachage pour que `timingSafeEqual` compare toujours
+// deux tampons de même longueur, quelle que soit celle des chaînes d'origine.
+async function timingSafeEqualString(received: string | null, expected: string): Promise<boolean> {
+  if (received === null) {
+    return false;
+  }
+  const encoder = new TextEncoder();
+  const [receivedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(received)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(receivedHash, expectedHash);
+}
+
 // Déclenchement manuel de la vérification quotidienne, pour diagnostiquer
 // sans attendre le prochain passage du cron. Protégé par une clé partagée
 // pour éviter qu'un tiers ne déclenche des requêtes TMDB / push à volonté ;
-// désactivé par défaut si la clé n'est pas configurée.
-async function handleManualRun(request: Request, env: Env): Promise<Response> {
+// désactivé par défaut si la clé n'est pas configurée. Le travail est confié
+// à `waitUntil` (comme le vrai cron) : la requête HTTP ne reste pas ouverte
+// le temps de toute la vérification quotidienne (audit F2).
+async function handleManualRun(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
-  await runDailyCheck(env);
+  ctx.waitUntil(runDailyCheck(env));
   return json({ ok: true });
 }
 
@@ -543,7 +565,7 @@ async function handleManualRun(request: Request, env: Env): Promise<Response> {
 // /api/run-check.
 async function handleManualSyncSearchIndex(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
   await syncPopularTitles(env);
@@ -573,7 +595,7 @@ async function handleSearchIndex(request: Request, env: Env): Promise<Response> 
 // vraie erreur survienne en prod. Même protection que /api/run-check.
 async function handleTestError(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
   logError(
@@ -583,51 +605,55 @@ async function handleTestError(request: Request, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
-// Envoie une notification de test à tous les abonnements, pour vérifier que
-// toute la chaîne fonctionne (VAPID, service worker, permission navigateur)
-// sans dépendre de la logique métier — au premier passage, celle-ci ne
-// notifie jamais rien (elle se contente de prendre une référence). Même
-// protection que /api/run-check.
+// Envoie une notification de test à UN SEUL abonnement (?subscriptionId=…),
+// pour vérifier que toute la chaîne fonctionne (VAPID, service worker,
+// permission navigateur) sans dépendre de la logique métier. Ciblé plutôt que
+// diffusé à tous les abonnés de la prod (audit F2 : un appel par erreur ne
+// doit pas spammer toute la base).
 async function handleTestNotification(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
 
-  const subscriptions = await getAllSubscriptions(env.DB);
-  if (subscriptions.length === 0) {
+  const subscriptionId = Number(new URL(request.url).searchParams.get("subscriptionId"));
+  if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) {
     return json(
-      { error: "Aucun abonnement enregistré. Activez d'abord les notifications dans l'app." },
-      404
+      {
+        error:
+          "Paramètre ?subscriptionId=<id> requis (évite un envoi à tous les abonnés par erreur).",
+      },
+      400
     );
   }
 
-  const results: Array<{ id: number; ok: boolean; error?: string }> = [];
-  for (const subscription of subscriptions) {
-    try {
-      await sendPush(
-        subscription,
-        {
-          title: "Seancy 🎬",
-          body: "Ceci est une notification de test — si vous la voyez, tout fonctionne !",
-          url: "/ma-liste",
-        },
-        env
-      );
-      results.push({ id: subscription.id, ok: true });
-    } catch (err) {
-      if (err instanceof ExpiredSubscriptionError) {
-        await deleteSubscriptionById(env.DB, subscription.id);
-      }
-      results.push({
-        id: subscription.id,
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  const subscriptions = await getAllSubscriptions(env.DB);
+  const subscription = subscriptions.find((s) => s.id === subscriptionId);
+  if (!subscription) {
+    return json({ error: "Abonnement introuvable." }, 404);
   }
 
-  return json({ results });
+  try {
+    await sendPush(
+      subscription,
+      {
+        title: "Seancy 🎬",
+        body: "Ceci est une notification de test — si vous la voyez, tout fonctionne !",
+        url: "/ma-liste",
+      },
+      env
+    );
+    return json({ results: [{ id: subscription.id, ok: true }] });
+  } catch (err) {
+    if (err instanceof ExpiredSubscriptionError) {
+      await deleteSubscriptionById(env.DB, subscription.id);
+    }
+    return json({
+      results: [
+        { id: subscription.id, ok: false, error: err instanceof Error ? err.message : String(err) },
+      ],
+    });
+  }
 }
 
 // Compte (lien magique) ---------------------------------------------------
@@ -2261,7 +2287,7 @@ async function routeRequest(
   }
 
   if (url.pathname === "/api/run-check" && request.method === "POST") {
-    return handleManualRun(request, env);
+    return handleManualRun(request, env, ctx);
   }
 
   if (url.pathname === "/api/search-index" && request.method === "GET") {
