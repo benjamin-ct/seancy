@@ -130,6 +130,18 @@ Pour tester la configuration localement sans rien déployer : `npm run build && 
 
 Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.dev.vars` (jamais commité), puis `npx wrangler d1 migrations apply seancy-notifications --local && npx wrangler dev`.
 
+### Environnement `develop` (persistant)
+
+En plus de la prod (`main`) et des previews éphémères par PR (une base D1 chacune, détruite à la fermeture), un environnement persistant `develop` sert de bac à sable d'équipe : une base D1 unique **`seancy-develop`** (créée une fois, jamais supprimée) peuplée d'un jeu de données fictives "full" — trois comptes de démo avec bibliothèque, listes perso, partage de profil et abonnement entre eux (voir `scripts/fixtures/develop-seed.sql`).
+
+Déployé par le job `deploy-develop` de la CI (`.github/workflows/ci.yml`) à chaque push sur la branche `develop`, via `wrangler preview --name develop` — même mécanisme que les previews de PR, pas l'intégration Git Cloudflare Workers Builds qui déploie la vraie prod sur `main`. Le seed est rejoué de façon additive (`INSERT OR IGNORE`) à chaque push : les données de test modifiées à la main entre deux déploiements ne sont jamais écrasées, seules les nouvelles lignes de fixtures (suivant les migrations ajoutées) s'insèrent. Pour repartir d'une base vide : onglet **Actions** → workflow **Reset develop database** → **Run workflow** (`reset-develop-db.yml`, déclenché à la main uniquement, jamais automatique).
+
+**Étape manuelle unique** (pas encore faite, une seule fois nécessaire) : créer et pousser la branche `develop` depuis `main` (`git branch develop main && git push origin develop`) — c'est ce push initial qui déclenche la première exécution de `deploy-develop` et crée `seancy-develop`.
+
+Budget D1 (plan gratuit, 10 bases au total) : prod + `seancy-develop` comptent en permanence, donc au plus 8 previews de PR simultanées sur le reste du quota (voir `scripts/preview-d1.ts`).
+
+Tant que les branches `feature/*` ciblent encore `main` (le pipeline Trello → Claude n'a pas encore été adapté au git flow `main`/`develop`/`feature`/`hotfix` décidé sur le ticket Trello "Avenir du développement"), cet environnement reste à jour uniquement via des merges manuels dans `develop`.
+
 ## Observabilité
 
 - **Erreurs** (client + Worker) : [Sentry](https://sentry.io), via le secret Cloudflare `SENTRY_DSN` ci-dessus. Le

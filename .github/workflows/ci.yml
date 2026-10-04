@@ -1,5 +1,5 @@
-# Intégration continue : bloque toute PR (et tout push sur main) dont le
-# format, le lint, le typecheck, les vérifications de logique pure ou le
+# Intégration continue : bloque toute PR (et tout push sur main/develop) dont
+# le format, le lint, le typecheck, les vérifications de logique pure ou le
 # build échouent.
 #
 # Le lint (oxlint) est l'étape "linter bloquant" : il sort en code non nul
@@ -11,7 +11,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `develop` : environnement persistant (voir ticket Trello "Avenir du
+    # développement"), base D1 `seancy-develop` + déploiement Cloudflare
+    # Preview nommé "develop" (job deploy-develop). Migrations prod
+    # (apply-d1-migrations) restent strictement limitées à `main`, voir le
+    # garde-fou sur ce job.
+    branches: [main, develop]
   pull_request:
     # "closed" (fermeture ou merge) est nécessaire en plus des types par
     # défaut (opened/synchronize/reopened) pour déclencher le nettoyage de la
@@ -271,7 +276,11 @@ jobs:
     needs:
       - verify
       - secrets-scan
-    if: github.event_name == 'push'
+    # Strictement limité à `main` : la base ciblée (seancy-notifications) est
+    # la prod. Sans ce garde-fou, un push sur `develop` rejouerait aussi les
+    # migrations en attente sur la prod avant même la release correspondante
+    # — voir deploy-develop pour l'équivalent sur `seancy-develop`.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -304,3 +313,52 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply seancy-notifications --remote
+
+  # Environnement `develop` persistant (voir ticket Trello "Avenir du
+  # développement") : une base D1 unique (seancy-develop, créée une fois,
+  # jamais supprimée) + un jeu de données fictives "full" (voir
+  # scripts/fixtures/develop-seed.sql), rejoué de façon additive à chaque
+  # push — contrairement aux previews de PR (une base par PR, nettoyée à la
+  # fermeture), pour servir de bac à sable d'équipe entre les previews
+  # éphémères et la prod. Déployé via `wrangler preview` comme les previews
+  # de PR (même mécanisme, nom stable "develop" au lieu du slug de branche),
+  # pas via l'intégration Git Cloudflare Workers Builds qui déploie la vraie
+  # prod sur `main`.
+  deploy-develop:
+    name: Deploy develop environment
+    needs:
+      - verify
+      - secrets-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+
+      # Crée (une fois) ou réutilise seancy-develop, applique les migrations
+      # en attente puis rejoue le seed "full" (additif, voir
+      # scripts/fixtures/develop-seed.sql). Génère
+      # wrangler.develop.generated.jsonc, utilisé par le déploiement
+      # ci-dessous.
+      - name: Provision develop D1 database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/preview-d1.ts provision-develop
+
+      - name: Deploy Worker develop environment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >-
+          npx wrangler preview
+          --config wrangler.develop.generated.jsonc
+          --name develop
+          --message "develop @ ${{ github.sha }}"
