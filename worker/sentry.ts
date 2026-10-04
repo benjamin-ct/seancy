@@ -51,6 +51,12 @@ export function withSentry<Handler extends ExportedHandler<Env>>(handler: Handle
     (env) => ({
       dsn: env.SENTRY_DSN,
       tracesSampleRate: 0,
+      // Tag partagé avec le client (src/core/logger.ts) et le script de
+      // logs infra du NAS (infra/trello-claude/listener/sentry-log.js) :
+      // permet de filtrer un seul projet Sentry ("applicatif" vs "infra"
+      // plutôt que deux projets séparés — décidé sur le ticket Trello
+      // "Avenir du développement").
+      initialScope: { tags: { source: "app" } },
       beforeSend(event) {
         const hostname = event.request?.url ? new URL(event.request.url).hostname : null;
         if (hostname && !isProductionHostname(hostname) && isDeadPreviewD1Error(event)) {

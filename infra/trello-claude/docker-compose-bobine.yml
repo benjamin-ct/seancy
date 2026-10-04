@@ -16,6 +16,11 @@ services:
       - DISCORD_SENTRY_WEBHOOK_URL=${DISCORD_SENTRY_WEBHOOK_URL}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - SENTRY_WEBHOOK_SECRET=${SENTRY_WEBHOOK_SECRET}
+      # Logs infra (ce service) poussés vers Sentry, tagués source:infra —
+      # voir sentry-log.js. Même valeur que le secret SENTRY_DSN déjà posé
+      # côté dashboard Cloudflare pour le Worker. Optionnel : no-op tant
+      # qu'absent.
+      - SENTRY_DSN=${SENTRY_DSN:-}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
       - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
     restart: unless-stopped

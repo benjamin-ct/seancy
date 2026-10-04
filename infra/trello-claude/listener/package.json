@@ -1,0 +1,7 @@
+{
+  "name": "trello-claude-listener",
+  "private": true,
+  "dependencies": {
+    "@sentry/node": "^10.73.0"
+  }
+}

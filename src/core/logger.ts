@@ -21,7 +21,11 @@ export function ensureSentryInit(): Promise<void> {
       .then(async ({ dsn }: { dsn?: string | null }) => {
         if (dsn) {
           const module = await import("@sentry/react");
-          module.init({ dsn, tracesSampleRate: 0 });
+          // Tag partagé avec le Worker (worker/sentry.ts) et le script de
+          // logs infra du NAS : permet de filtrer un seul projet Sentry
+          // plutôt que d'en séparer un par source (voir ticket Trello
+          // "Avenir du développement").
+          module.init({ dsn, tracesSampleRate: 0, initialScope: { tags: { source: "app" } } });
           sentry = module;
         }
       })

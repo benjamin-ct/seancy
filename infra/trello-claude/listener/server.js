@@ -1,6 +1,7 @@
 const http = require("http");
 const { execFile } = require("child_process");
 const fs = require("fs");
+const sentryLog = require("./sentry-log");
 
 const PORT = process.env.PORT || 8080;
 const DOCKER_CONTAINER = process.env.DOCKER_CONTAINER || "bobine-repo";
@@ -134,6 +135,7 @@ async function postDiscordMessage(text, webhookUrl = DISCORD_WEBHOOK_URL) {
 // automatique (0 pour un déclenchement normal).
 function runClaude(label, prompt, notify, relaunch = 0) {
   console.log(`[${ts()}] Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
+  sentryLog.logInfo(`Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
   const onError = (errorMsg) => notifyError(notify, errorMsg);
   const runPrompt = relaunch ? `${prompt} ${relaunchNote(relaunch)}` : prompt;
 
@@ -200,6 +202,7 @@ function runClaude(label, prompt, notify, relaunch = 0) {
 
       if (err && hasStderr) {
         console.error(`[${ts()}] Echec execution : ${stderr.slice(0, 1000)}`);
+        sentryLog.logError(`Echec execution (${label}) : ${stderr.slice(0, 1000)}`);
         const errorMsg = `🤖 [Claude] Echec de l'execution : ${stderr.slice(0, 1000)}`;
         try {
           await onError(errorMsg);
@@ -209,6 +212,7 @@ function runClaude(label, prompt, notify, relaunch = 0) {
 
       if (err) {
         console.error(`[${ts()}] Echec execution : ${err.message || "erreur inconnue"}`);
+        sentryLog.logError(`Echec execution (${label}) : ${err.message || "erreur inconnue"}`);
         const errorMsg = `🤖 [Claude] Echec de l'execution : ${err.message || "erreur inconnue"}`;
         try {
           await onError(errorMsg);
@@ -217,6 +221,7 @@ function runClaude(label, prompt, notify, relaunch = 0) {
       }
 
       console.log(`[${ts()}] Execution terminee avec succes`);
+      sentryLog.logInfo(`Execution terminee avec succes (${label})`);
       if (relaunch) {
         await postDiscordMessage(
           `▶️ Relance automatique ${relaunch}/${MAX_AUTO_RELAUNCHES} terminée (${label}) : le pipeline a repris normalement.`
@@ -446,6 +451,7 @@ async function handleUsageLimit({ label, prompt, notify, relaunch, output }) {
     clearResumeState();
     const msg = `🚨 Limite d'usage Claude toujours atteinte après ${MAX_AUTO_RELAUNCHES} relances automatiques consécutives (${label}). Abandon : relancer à la main (déplacer une carte ou bobine-logs pour le détail).`;
     console.error(`[${ts()}] ${msg}`);
+    sentryLog.logError(msg);
     await discord(msg);
     return;
   }
@@ -468,6 +474,7 @@ async function handleUsageLimit({ label, prompt, notify, relaunch, output }) {
     : "heure de reset illisible";
   const msg = `⏸️ Limite d'usage Claude atteinte (${label}) : ${resetText}. Relance automatique ${state.relaunch}/${MAX_AUTO_RELAUNCHES} prévue à ${formatParis(resumeAt)} ; les webhooks Trello/Sentry sont ignorés d'ici là.`;
   console.log(`[${ts()}] ${msg}`);
+  sentryLog.logWarn(msg);
   await discord(msg);
 }
 
