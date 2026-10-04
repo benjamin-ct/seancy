@@ -785,7 +785,7 @@
     "noOverview": "No synopsis available.",
     "watchedOn": "Watched",
     "watchedOff": "Mark as watched",
-    "watchDateAriaLabel": "Choose a watch date",
+    "watchDateAriaLabel": "Mark as watched on a specific date",
     "watchDateFutureError": "The watch date can't be in the future.",
     "wantToWatchOn": "In your watchlist",
     "wantToWatchOff": "Want to watch",
