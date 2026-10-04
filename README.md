@@ -128,7 +128,11 @@ En parallèle, le job `apply-d1-migrations` de la CI GitHub Actions (`.github/wo
 
 Pour tester la configuration localement sans rien déployer : `npm run build && npx wrangler deploy --dry-run`.
 
-Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.dev.vars` (jamais commité), puis `npx wrangler d1 migrations apply seancy-notifications --local && npx wrangler dev`.
+Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.dev.vars` (jamais commité), puis
+`npx wrangler d1 migrations apply seancy-notifications --local && npx wrangler dev`. Pour avoir un compte déjà
+connecté plutôt qu'une base vide, rejoue aussi le seed de démo utilisé par les previews de PR (voir
+`scripts/fixtures/preview-seed.sql`) : `npx wrangler d1 execute seancy-notifications --local --file scripts/fixtures/preview-seed.sql`,
+puis pose le cookie `seancy_session=seancy-preview-demo` (voir le commentaire en tête du fichier).
 
 ## Observabilité
 
