@@ -26,7 +26,6 @@ import { experimental_readRawConfig } from "wrangler";
 const WRANGLER_BIN = "node_modules/.bin/wrangler";
 const SOURCE_CONFIG_PATH = "wrangler.jsonc";
 const PREVIEW_CONFIG_PATH = "wrangler.preview.generated.jsonc";
-const PREVIEW_SEED_PATH = "scripts/fixtures/preview-seed.sql";
 const PROD_DATABASE_NAME = "seancy-notifications";
 const PREVIEW_DATABASE_PREFIX = "seancy-preview-pr-";
 // Bases créées avant le renommage Seancy, encore nettoyées à la fermeture
@@ -230,10 +229,6 @@ function provision(prNumber: string): void {
   const uuid = ensureDatabase(dbName);
   writeGeneratedConfig(PREVIEW_CONFIG_PATH, dbName, uuid);
   applyMigrations(dbName, PREVIEW_CONFIG_PATH);
-  // Compte de démo (voir scripts/fixtures/preview-seed.sql) : `INSERT OR
-  // IGNORE`, donc sans danger à rejouer sur une base déjà peuplée (PR
-  // réutilisée sur un nouveau push).
-  applySeed(dbName, PREVIEW_CONFIG_PATH, PREVIEW_SEED_PATH);
 }
 
 // Provisionne (une seule fois) puis tient à jour la base persistante de
