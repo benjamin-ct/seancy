@@ -105,9 +105,10 @@
   margin-bottom: 16px;
 }
 
-/* Lien légal toujours accessible (audit M15), quel que soit l'onglet actif :
-   placé juste sous les onglets pour rester à portée sans défiler, y compris
-   sur mobile où la barre flottante LegalLinks est masquée. */
+/* Lien légal accessible sans défiler (audit M15), quel que soit l'onglet
+   actif : seulement sur mobile, là où la barre flottante LegalLinks est
+   masquée (LegalLinks.module.css, même seuil 860px) — sur desktop elle
+   reste visible et ce doublon a été jugé redondant (retour review). */
 .legalLine {
   margin: 14px 0 0;
   color: var(--muted);
@@ -121,4 +122,10 @@
 
 .legalLine a:hover {
   color: var(--fg);
+}
+
+@media (min-width: 861px) {
+  .legalLine {
+    display: none;
+  }
 }
