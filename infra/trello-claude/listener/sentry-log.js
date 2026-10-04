@@ -20,6 +20,12 @@ if (SENTRY_DSN) {
   Sentry.init({
     dsn: SENTRY_DSN,
     tracesSampleRate: 0,
+    // Sans environment explicite, le SDK retombe sur "production" par
+    // défaut : le NAS n'a qu'une seule instance (pas de distinction
+    // prod/preprod/feature comme pour l'app, voir worker/sentry.ts), mais
+    // "infra" évite qu'il se mélange aux vraies erreurs prod de l'app dans
+    // les vues filtrées par environment.
+    environment: "infra",
     initialScope: { tags: { source: "infra" } },
   });
 }
