@@ -194,9 +194,18 @@ jobs:
           --name "${{ steps.branch-slug.outputs.slug }}"
           --message "PR #${{ github.event.pull_request.number }}"
 
-      # Seule l'URL réellement renvoyée par Cloudflare est publiée : sans
-      # URL (Preview Deployments désactivés sur workers.dev...), le job
-      # échoue explicitement plutôt que d'annoncer une preview inutilisable.
+      # L'URL publiée doit être celle du Worker (*.workers.dev), jamais celle
+      # du domaine `preview.dev.seancy.com` : ce dernier est sujet à un cache
+      # d'edge qui sert trop souvent une version obsolète (ticket Trello
+      # "URL de preview"). preview_urls (alias stable, basé sur le nom de la
+      # PR, cf. --name ci-dessus) est préféré à deployment_urls (sous-domaine
+      # différent à chaque déploiement) pour retrouver le même comportement
+      # qu'avant l'introduction de `wrangler preview` : une URL stable sur
+      # toute la durée de la PR. Dans les deux cas, seule l'entrée
+      # *.workers.dev du tableau d'URLs renvoyé par Cloudflare est retenue.
+      # Sans URL correspondante (Preview Deployments désactivés sur
+      # workers.dev...), le job échoue explicitement plutôt que d'annoncer
+      # une preview inutilisable ou de retomber sur le domaine problématique.
       - name: Read preview URL
         id: preview-url
         env:
@@ -205,10 +214,11 @@ jobs:
           URL=$(node -e '
             const lines = require("node:fs").readFileSync(process.env.WRANGLER_OUTPUT_FILE_PATH, "utf8").split("\n");
             const entry = lines.filter(Boolean).map((line) => JSON.parse(line)).findLast((e) => e.type === "preview");
-            console.log(entry?.preview_urls?.[0] ?? entry?.deployment_urls?.[0] ?? "");
+            const urls = [...(entry?.preview_urls ?? []), ...(entry?.deployment_urls ?? [])];
+            console.log(urls.find((u) => u.includes(".workers.dev")) ?? "");
           ')
           if [ -z "$URL" ]; then
-            echo "::error::Cloudflare n'a renvoyé aucune URL pour cette preview (Preview Deployments activés sur workers.dev ?)."
+            echo "::error::Cloudflare n'a renvoyé aucune URL *.workers.dev pour cette preview (Preview Deployments désactivés sur workers.dev ?)."
             exit 1
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
