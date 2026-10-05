@@ -10,6 +10,7 @@ import {
 } from "../../../core/api/tmdb.ts";
 import { useNearViewport } from "../../hooks/useNearViewport.ts";
 import { useLibrary } from "../../../core/context/LibraryContext.tsx";
+import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrarySelectors.ts";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { posterAccentFromGenres } from "../../lib/posterAccent.ts";
@@ -70,7 +71,7 @@ function MediaCard({
   position,
 }: MediaCardProps) {
   const { t } = useTranslation();
-  const { isWatched, isInWatchlist, toggleWatched, toggleWatchlist } = useLibrary();
+  const { toggleWatched, toggleWatchlist } = useLibrary();
   const { getTheatricalStatus, region } = useRegion();
   const { locale } = useLocale();
   const theatricalBadges: Record<string, string> = {
@@ -87,8 +88,8 @@ function MediaCard({
   // enrichDiscoverResultsWithRegionDate). `null` (enrichi, rien trouvé pour
   // cette région) retombe correctement sur item.release_date via `||`.
   const date = item.region_release_date || item.release_date || item.first_air_date;
-  const watched = isWatched(mediaType, item.id);
-  const inWatchlist = isInWatchlist(mediaType, item.id);
+  const watched = useIsWatched(mediaType, item.id);
+  const inWatchlist = useIsInWatchlist(mediaType, item.id);
 
   // Alimente le cache de préview (voir mediaPreviewCache) pour que la fiche
   // (DetailPage) puisse préafficher affiche/titre/date pendant son propre

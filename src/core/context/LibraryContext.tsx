@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +15,11 @@ import { useMembersOnly } from "./MembersOnlyContext.tsx";
 import { getDetails } from "../api/tmdb.ts";
 import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncEvent } from "../sync/liveSync.ts";
+import {
+  LIBRARY_STORAGE_KEY,
+  loadInitialLibraryState,
+  setLibrarySnapshot,
+} from "./libraryStore.ts";
 import {
   storageGet,
   storageGetJSON,
@@ -32,7 +38,6 @@ import type {
 } from "../types/library.ts";
 import type { MediaType } from "../types/tmdb.ts";
 
-const STORAGE_KEY = "seancy.library.v1";
 // Mémorise, par email, si on a déjà fait la fusion initiale local ↔ serveur
 // sur CET appareil (voir l'effet de synchronisation plus bas).
 const SYNCED_FOR_KEY = "seancy.library.syncedFor";
@@ -124,28 +129,6 @@ interface LibraryContextValue {
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
-
-function loadInitialState(): LibraryState {
-  try {
-    const raw = storageGet(STORAGE_KEY);
-    if (!raw) {
-      return { watched: {}, watchlist: {} };
-    }
-    const parsed = JSON.parse(raw);
-    return {
-      watched: parsed.watched || {},
-      watchlist: parsed.watchlist || {},
-    };
-  } catch (err) {
-    // Le contenu stocké n'est pas du JSON valide (écriture interrompue,
-    // corruption...). On repart sur une bibliothèque vide MAIS on se garde
-    // bien d'écraser tout de suite localStorage avec cet état vide (voir
-    // l'effet ci-dessous) : si les vraies données sont encore là sous une
-    // forme récupérable, mieux vaut ne pas les perdre définitivement.
-    logWarn("Seancy : lecture de la bibliothèque locale impossible, on repart à vide.", err);
-    return { watched: {}, watchlist: {} };
-  }
-}
 
 function makeKey(mediaType: MediaType, id: number | string): string {
   return `${mediaType}:${id}`;
@@ -266,7 +249,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { status: authStatus, email } = useAuth();
   const { requireMember } = useMembersOnly();
-  const [state, setState] = useState<LibraryState>(loadInitialState);
+  const [state, setState] = useState<LibraryState>(loadInitialLibraryState);
   // Évite d'écraser le localStorage dès le premier rendu : on ne persiste
   // qu'à partir du moment où l'état change réellement suite à une action de
   // l'utilisateur (toggle, import...).
@@ -298,7 +281,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstRender.current = false;
       return;
     }
-    storageSetJSON(STORAGE_KEY, state);
+    storageSetJSON(LIBRARY_STORAGE_KEY, state);
+  }, [state]);
+
+  // Reflète `state` dans le store externe (voir libraryStore.ts) pour les
+  // sélecteurs fins (useIsWatched...), en layout effect pour rester
+  // synchrone avant peinture — un effet passif classique laisserait un
+  // MediaCard afficher brièvement l'ancien statut après un clic.
+  useLayoutEffect(() => {
+    setLibrarySnapshot(state);
   }, [state]);
 
   useEffect(() => {
