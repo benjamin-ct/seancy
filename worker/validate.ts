@@ -553,3 +553,46 @@ export function sanitizeReminder(raw: unknown): CleanReminder | null {
       : null;
   return { ...item, releaseDate };
 }
+
+// Abonnement push anonyme (POST /api/subscribe, audit F1) : endpoint et
+// clés fournis par le navigateur à l'abonnement, non authentifiés — n'importe
+// quelle URL https:// serait sinon acceptée et contactée chaque jour par le
+// cron (petit relais sortant exploitable), avec un stockage non borné.
+// Liste blanche des services de push connus : seul le sous-domaine WNS varie
+// par datacenter (ex. wns2-par1.notify.windows.com), d'où le suffixe.
+const ALLOWED_PUSH_ENDPOINT_HOSTS = [
+  "fcm.googleapis.com", // Chrome, Edge et autres navigateurs Chromium
+  "web.push.apple.com", // Safari (macOS/iOS)
+  "updates.push.services.mozilla.com", // Firefox
+];
+const ALLOWED_PUSH_ENDPOINT_SUFFIX = ".notify.windows.com"; // WNS (Edge legacy/Windows)
+
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === "https:" &&
+    (ALLOWED_PUSH_ENDPOINT_HOSTS.includes(url.hostname) ||
+      url.hostname.endsWith(ALLOWED_PUSH_ENDPOINT_SUFFIX))
+  );
+}
+
+// Clé publique ECDH P-256 encodée en base64url (~87 caractères en pratique) :
+// large marge. Idem pour le secret d'authentification (~22 caractères).
+const MAX_PUSH_P256DH_LENGTH = 128;
+const MAX_PUSH_AUTH_LENGTH = 64;
+
+export function isValidPushKeys(p256dh: unknown, auth: unknown): boolean {
+  return (
+    typeof p256dh === "string" &&
+    p256dh.length > 0 &&
+    p256dh.length <= MAX_PUSH_P256DH_LENGTH &&
+    typeof auth === "string" &&
+    auth.length > 0 &&
+    auth.length <= MAX_PUSH_AUTH_LENGTH
+  );
+}

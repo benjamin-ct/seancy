@@ -93,6 +93,8 @@ import {
   LANGUAGE_CODE_PATTERN,
   COUNTRY_CODE_PATTERN,
   sanitizeReminder,
+  isAllowedPushEndpoint,
+  isValidPushKeys,
 } from "./validate.ts";
 import { verifyRecaptcha } from "./recaptcha.ts";
 import { getTheatricalIndex } from "./tmdb.ts";
@@ -312,9 +314,8 @@ async function handleSubscribe(request: Request, env: Env): Promise<Response> {
   };
   if (
     typeof endpoint !== "string" ||
-    !endpoint.startsWith("https://") ||
-    !keys?.p256dh ||
-    !keys?.auth
+    !isAllowedPushEndpoint(endpoint) ||
+    !isValidPushKeys(keys?.p256dh, keys?.auth)
   ) {
     return json({ error: "Abonnement push incomplet ou invalide (endpoint/keys manquants)." }, 400);
   }
