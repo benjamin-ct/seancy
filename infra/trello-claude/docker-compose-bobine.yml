@@ -16,7 +16,8 @@ services:
       - DISCORD_SENTRY_WEBHOOK_URL=${DISCORD_SENTRY_WEBHOOK_URL}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - SENTRY_WEBHOOK_SECRET=${SENTRY_WEBHOOK_SECRET}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-opus-5-5}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
+      - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
     restart: unless-stopped
 
   bobine-repo:
@@ -55,7 +56,8 @@ services:
       - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET:-}
       # Clé TMDB pour `wrangler dev` en local (sinon les pages restent vides). Optionnelle.
       - TMDB_API_KEY=${TMDB_API_KEY:-}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-opus-5-5}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
+      - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
     restart: unless-stopped
 
 volumes:

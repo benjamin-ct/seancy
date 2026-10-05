@@ -29,12 +29,14 @@
     "src/core/api/retryAfter.ts",
     "src/core/api/globalProviders.ts",
     "src/core/types/tmdb.ts",
+    "src/core/validation/mediaType.ts",
     "src/shared/lib/numericRangeFilter.ts",
     "src/core/botDetection.ts",
     "worker/bots.ts",
     "worker/rate-limit-memory.ts",
     "worker/tmdb-proxy-policy.ts",
     "worker/tmdb-edge-cache.ts",
-    "worker/security-headers.ts"
+    "worker/security-headers.ts",
+    "worker/validate.ts"
   ]
 }

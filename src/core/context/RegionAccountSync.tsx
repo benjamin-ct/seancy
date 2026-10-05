@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext.tsx";
 import { isValidRegionCode, useRegion } from "./RegionContext.tsx";
 import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncRevision } from "../sync/liveSync.ts";
+import { storageSet } from "../../shared/lib/storage.ts";
 
 // Synchronise la région choisie manuellement avec le compte, sur le même
 // principe que LocaleAccountSync (voir ce fichier pour le détail général) :
@@ -42,13 +43,13 @@ export function RegionAccountSync({ children }: { children: ReactNode }): ReactN
         if (remote.region && isValidRegionCode(remote.region)) {
           lastSyncedRef.current = remote.region;
           setRegion(remote.region);
-          localStorage.setItem(SYNCED_FOR_KEY, email);
+          storageSet(SYNCED_FOR_KEY, email);
           return;
         }
         // Aucune région enregistrée côté compte pour l'instant : cet
         // appareil pousse sa valeur actuelle (choix manuel ou géolocalisation
         // déjà résolue) comme valeur initiale.
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/profile/region", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },

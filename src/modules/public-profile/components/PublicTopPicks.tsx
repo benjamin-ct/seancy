@@ -29,6 +29,10 @@ function Pastilles({ item }: { item: LibraryItem }) {
   const { isWatched, isInWatchlist, toggleWatched, toggleWatchlist } = useLibrary();
   const watched = isWatched(item.mediaType, item.id);
   const inWatchlist = isInWatchlist(item.mediaType, item.id);
+  // Pas encore sorti (ciné ou plateforme) : le bouton "Vu" porterait à
+  // confusion, donc masqué tant que rien n'a déjà été marqué vu (voir
+  // MediaCard.tsx, même logique sur les cartes).
+  const isUpcoming = Boolean(item.date && new Date(item.date) > new Date());
   const libItem = {
     id: item.id,
     mediaType: item.mediaType,
@@ -49,16 +53,18 @@ function Pastilles({ item }: { item: LibraryItem }) {
       >
         <Icon name="star" size={16} strokeWidth={inWatchlist ? 2 : 1.5} filled={inWatchlist} />
       </button>
-      <button
-        type="button"
-        className={`${cardStyles.pastille} ${watched ? cardStyles.pastilleWatched : ""}`}
-        onClick={() => toggleWatched(libItem)}
-        aria-pressed={watched}
-        aria-label={t("mediaCard.markAsWatched")}
-        title={t("mediaCard.markAsWatched")}
-      >
-        <Icon name="check" size={16} strokeWidth={watched ? 3 : 1.5} />
-      </button>
+      {(watched || !isUpcoming) && (
+        <button
+          type="button"
+          className={`${cardStyles.pastille} ${watched ? cardStyles.pastilleWatched : ""}`}
+          onClick={() => toggleWatched(libItem)}
+          aria-pressed={watched}
+          aria-label={t("mediaCard.markAsWatched")}
+          title={t("mediaCard.markAsWatched")}
+        >
+          <Icon name="check" size={16} strokeWidth={watched ? 3 : 1.5} />
+        </button>
+      )}
     </div>
   );
 }

@@ -331,6 +331,49 @@
   flex: none;
 }
 
+/* Bouton "choisir une date de visionnage" : icône seule, carrée, à côté du
+   bouton "Vu". L'icône est purement visuelle (pointer-events: none) ; le
+   vrai contrôle interactif est l'<input type="date"> invisible superposé
+   par-dessus, pour que le tap ouvre le sélecteur natif sur mobile — un
+   bouton qui appelle showPicker() ne fonctionne pas sur Safari iOS, qui ne
+   supporte pas cette méthode. `overflow: hidden` sur le wrapper :
+   Firefox/Safari refusent de rendre un <input type="date"> plus étroit
+   qu'environ 110-140px et débordent visuellement de la largeur CSS demandée
+   au lieu de la respecter comme Chrome — sans ce clip, le bouton apparaît
+   comme une pilule allongée au lieu d'une icône carrée (même bug trouvé et
+   corrigé sur le bouton équivalent d'EpisodeTracker, retour Trello carte
+   "date de visionnage"). Largeur fixe (contrainte du clip ci-dessus) mais
+   hauteur par `align-self: stretch` plutôt qu'une valeur figée, pour rester
+   pile à la hauteur réelle des pilules voisines (retour Trello carte
+   "Bouton calendrier pas de la même taille" : un 40px fixe ne correspondait
+   plus à leur hauteur, ~45,7px avec --pill-padding). */
+.watchDateWrap {
+  position: relative;
+  display: inline-flex;
+  align-self: stretch;
+  width: 40px;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.watchDateBtn {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.watchDateInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0;
+  cursor: pointer;
+}
+
 /* Libellés tronqués (…) plutôt que débordant sur le bouton voisin quand la
    place manque (mobile). */
 .btnLabel {

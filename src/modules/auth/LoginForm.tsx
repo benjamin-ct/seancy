@@ -1,9 +1,26 @@
 import { useId, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import OAuthButtons from "./OAuthButtons.tsx";
 import styles from "./AuthPages.module.css";
+
+// Audit M15 : sur mobile, la barre légale flottante (LegalLinks) est masquée
+// et le pied de page global n'est jamais atteint sur les pages à défilement
+// infini. La connexion est un autre point de passage quasi obligé — ce lien
+// y reste donc accessible, que le formulaire soit affiché sur /connexion ou
+// dans la modale "réservé aux membres" (voir MembersOnlyDialog).
+function LegalLine() {
+  const { t } = useTranslation();
+  return (
+    <p className={styles.legalLine}>
+      <Link to="/conditions-utilisation">{t("legalLinks.terms")}</Link>
+      <span aria-hidden="true"> · </span>
+      <Link to="/confidentialite">{t("legalLinks.privacy")}</Link>
+    </p>
+  );
+}
 
 // Formulaire de connexion par lien magique (email, puis code de repli),
 // précédé des boutons Google / Apple quand ils sont configurés,
@@ -60,7 +77,7 @@ export default function LoginForm() {
     setVerifying(true);
     setCodeError(null);
     try {
-      await verifyCode(code.trim());
+      await verifyCode(email.trim(), code.trim());
     } catch (err) {
       setCodeError(err instanceof Error ? err.message : t("loginPage.unknownError"));
     } finally {
@@ -115,6 +132,7 @@ export default function LoginForm() {
             {verifying ? t("loginPage.verifying") : t("loginPage.submitCode")}
           </button>
         </form>
+        <LegalLine />
       </>
     );
   }
@@ -143,6 +161,7 @@ export default function LoginForm() {
         <button className={styles.primaryBtn} type="submit" disabled={sending}>
           {sending ? t("loginPage.sending") : t("loginPage.submitEmail")}
         </button>
+        <LegalLine />
       </form>
     </>
   );

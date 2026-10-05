@@ -31,7 +31,8 @@ RUN useradd -m -s /bin/bash claudeuser
 # création du propriétaire de ce dossier) et script de lancement des exécutions.
 RUN mkdir -p /workspace && chown claudeuser:claudeuser /workspace
 COPY bobine-claude-run.sh /usr/local/bin/bobine-claude-run
-RUN chmod 755 /usr/local/bin/bobine-claude-run
+COPY bobine-claude-dev.sh /usr/local/bin/bobine-claude-dev
+RUN chmod 755 /usr/local/bin/bobine-claude-run /usr/local/bin/bobine-claude-dev
 
 RUN (type -p wget >/dev/null || (apt-get update && apt-get install -y wget)) \
     && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg > /tmp/keyring.gpg \

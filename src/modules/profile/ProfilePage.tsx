@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import { Icon, Loading } from "../../shared/components/index.ts";
@@ -11,6 +11,8 @@ import PublicProfileSettings from "./components/PublicProfileSettings.tsx";
 import CommunityPanel from "./components/CommunityPanel.tsx";
 import NotificationSettings from "./components/NotificationSettings.tsx";
 import FavoriteProvidersSettings from "./components/FavoriteProvidersSettings.tsx";
+import FavoriteLanguagesSettings from "./components/FavoriteLanguagesSettings.tsx";
+import FavoriteCountriesSettings from "./components/FavoriteCountriesSettings.tsx";
 import ExcludedGenresSettings from "./components/ExcludedGenresSettings.tsx";
 import ExcludedTitlesSettings from "./components/ExcludedTitlesSettings.tsx";
 import RegionSettings from "./components/RegionSettings.tsx";
@@ -107,6 +109,8 @@ export default function ProfilePage() {
               description={t("profile.recommendationsLead")}
             >
               <FavoriteProvidersSettings />
+              <FavoriteLanguagesSettings />
+              <FavoriteCountriesSettings />
               <ExcludedGenresSettings />
               <ExcludedTitlesSettings />
             </SettingsGroup>
@@ -183,6 +187,17 @@ export default function ProfilePage() {
           </button>
         ))}
       </div>
+
+      {/* Audit M15 : sur mobile, la barre légale flottante (LegalLinks) est
+          masquée et le pied de page global n'est jamais atteint sur les
+          pages à défilement infini — ce lien, lui, reste à portée de main
+          dès l'arrivée sur le Profil (juste sous les onglets), sans avoir à
+          dérouler tout le contenu des réglages pour l'atteindre. */}
+      <p className={styles.legalLine}>
+        <Link to="/conditions-utilisation">{t("legalLinks.terms")}</Link>
+        <span aria-hidden="true"> · </span>
+        <Link to="/confidentialite">{t("legalLinks.privacy")}</Link>
+      </p>
 
       {TABS.filter(({ id }) => visited.has(id)).map(({ id }) => (
         <div

@@ -152,6 +152,7 @@
   "ratingStars": {
     "yourRating": "Votre note :",
     "notRatedYet": "Pas encore noté",
+    "groupAriaLabel": "Note sur 10",
     "starAriaLabel": "{{n}}/10 — {{label}}",
     "clear": "Effacer"
   },
@@ -277,7 +278,19 @@
         "rate-limited": "Trop de tentatives. Réessayez dans quelques minutes.",
         "failed": "L'association n'a pas abouti. Réessayez."
       }
-    }
+    },
+    "exportData": "Exporter mes données",
+    "exportDataHint": "Téléchargez une copie de toutes les données de votre compte au format JSON (droit à la portabilité).",
+    "exportDataButton": "Télécharger mes données",
+    "deleteAccount": "Supprimer le compte",
+    "deleteAccountHint": "Supprime définitivement votre compte et toutes les données associées : bibliothèque, listes, préférences, rappels, abonnements aux notifications et photo de profil. Action irréversible.",
+    "deleteAccountButton": "Supprimer mon compte",
+    "deleteAccountConfirmTitle": "Cette action est définitive.",
+    "deleteAccountConfirmText": "Toutes vos données seront supprimées immédiatement et ne pourront pas être récupérées. Pour confirmer, saisissez votre adresse e-mail ({{email}}) ci-dessous.",
+    "deleteAccountConfirmPlaceholder": "Votre adresse e-mail",
+    "deleteAccountConfirmButton": "Supprimer définitivement",
+    "deleteAccountError": "Impossible de supprimer le compte pour le moment. Réessayez.",
+    "deleting": "Suppression…"
   },
   "excludedGenres": {
     "summary": "Genres à exclure",
@@ -475,6 +488,7 @@
     "seriesCount_other": "{{count}} séries",
     "watchTime": "Temps de visionnage",
     "hours": "heures",
+    "hoursShort": "h",
     "daysUnit": "jours",
     "episodesCount_one": "{{count}} épisode de série",
     "episodesCount_other": "{{count}} épisodes de série",
@@ -484,8 +498,12 @@
     "ratedCount_other": "sur {{count}} titres notés",
     "watchedByYear": "Vus par année",
     "noDataYet": "Aucune donnée pour l'instant.",
-    "topGenres": "Genres préférés",
+    "topGenres": "Genres préférés (temps de visionnage)",
     "noGenreYet": "Aucun genre pour l'instant.",
+    "titlesCount_one": "{{count}} titre",
+    "titlesCount_other": "{{count}} titres",
+    "watchTimeByDecade": "Temps de visionnage par décennie",
+    "decadeLabel": "Années {{decade}}",
     "recentlyWatched": "Vus récemment"
   },
   "customListPanel": {
@@ -543,6 +561,22 @@
     "description": "Cochez vos services pour filtrer « disponible chez moi » en un clic.",
     "loadError": "Impossible de charger la liste des plateformes.",
     "searchPlaceholder": "Rechercher une plateforme…"
+  },
+  "favoriteLanguagesSettings": {
+    "title": "Mes langues",
+    "activeCount_one": "{{count}} active",
+    "activeCount_other": "{{count}} actives",
+    "description": "Cochez vos langues préférées pour pré-remplir le filtre « Langue » de Nouveautés et Prochainement.",
+    "loadError": "Impossible de charger la liste des langues.",
+    "searchPlaceholder": "Rechercher une langue…"
+  },
+  "favoriteCountriesSettings": {
+    "title": "Mes pays",
+    "activeCount_one": "{{count}} actif",
+    "activeCount_other": "{{count}} actifs",
+    "description": "Cochez vos pays préférés pour pré-remplir le filtre « Pays » de Nouveautés et Prochainement.",
+    "loadError": "Impossible de charger la liste des pays.",
+    "searchPlaceholder": "Rechercher un pays…"
   },
   "excludedTitlesSettings": {
     "title": "Titres exclus",
@@ -652,7 +686,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "2 octobre 2026",
+    "lastUpdatedValue": "3 octobre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -751,12 +785,12 @@
     },
     "retention": {
       "title": "Durée de conservation",
-      "textBefore": "Vos données sont conservées tant que votre compte existe. La suppression de compte à la demande n'est pas encore automatisée dans l'application : en attendant, vous pouvez demander la suppression de votre compte et de vos données ",
+      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Compte (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
       "textAfter": "."
     },
     "rights": {
       "title": "Vos droits",
-      "textBefore": "Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition sur vos données. Vous pouvez exercer ces droits ",
+      "textBefore": "Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition sur vos données. Vous pouvez exporter une copie de vos données à tout moment depuis Profil → Compte (bouton « Exporter mes données »), ou exercer l'ensemble de ces droits ",
       "textAfter": ", et introduire une réclamation auprès de la CNIL si vous estimez que vos droits ne sont pas respectés."
     },
     "changes": {
@@ -797,8 +831,13 @@
     "noOverview": "Pas de synopsis disponible.",
     "watchedOn": "Déjà vu",
     "watchedOff": "Marquer comme vu",
+    "watchDateAriaLabel": "Marquer comme vu à une date précise",
+    "watchDateFutureError": "La date de visionnage ne peut pas être dans le futur.",
     "wantToWatchOn": "Dans vos envies",
     "wantToWatchOff": "Envie de voir",
+    "notifyTitle": "Être prévenu·e le jour de la sortie et à l'arrivée sur une plateforme",
+    "notified": "Prévenu·e",
+    "notifyMe": "Me prévenir",
     "addToListHeading": "Ajouter à une liste",
     "noListsYet": "Aucune liste pour l'instant.",
     "createListPlaceholder": "Créer une liste…",
@@ -941,7 +980,8 @@
     "unmarkEpisode": "Retirer {{episode}} des épisodes vus",
     "watchedUpToHere": "Vu jusqu'ici",
     "markSeason": "Marquer la saison {{number}} comme vue",
-    "unmarkSeason": "Retirer la saison"
+    "unmarkSeason": "Retirer la saison",
+    "watchDateAriaLabel": "Choisir une date de visionnage pour la saison {{number}}"
   },
   "profileShare": {
     "title": "Lien public",
@@ -1179,6 +1219,16 @@
     "minutes": "min",
     "country": "Pays",
     "language": "Langue",
+    "countriesCount_one": "{{count}} pays",
+    "countriesCount_other": "{{count}} pays",
+    "languagesCount_one": "{{count}} langue",
+    "languagesCount_other": "{{count}} langues",
+    "myCountries": "Mes pays",
+    "onlyMyCountries": "Seulement mes pays favoris",
+    "noFavoriteCountries": "Choisissez vos pays dans votre profil",
+    "myLanguages": "Mes langues",
+    "onlyMyLanguages": "Seulement mes langues favorites",
+    "noFavoriteLanguages": "Choisissez vos langues dans votre profil",
     "chip": "{{label}} : {{value}}"
   },
   "readOnlyBanner": {

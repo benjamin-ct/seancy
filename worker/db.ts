@@ -1,7 +1,15 @@
 // Petites fonctions d'accès à D1. Pas d'ORM : le schéma est simple (voir
 // migrations/) et les requêtes préparées suffisent largement.
 import { decodeHtmlEntities } from "./validate.ts";
-import { getFollowCounts, getFollowedByViewerFollowing, isFollowing } from "./follows.ts";
+import {
+  getFollowCounts,
+  getFollowedByViewerFollowing,
+  getFollowers,
+  getFollowing,
+  isFollowing,
+} from "./follows.ts";
+import { getAvatar } from "./avatars.ts";
+import { getRemindersForUser, type ReminderSummary } from "./reminders.ts";
 import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
 import type {
   CleanCustomListMap,
@@ -913,6 +921,64 @@ export async function replaceFavoriteProvidersForUser(
   ]);
 }
 
+export async function getFavoriteLanguagesForUser(
+  db: D1Database,
+  userId: number
+): Promise<string[]> {
+  const { results } = await db
+    .prepare("SELECT language_code FROM favorite_language_prefs WHERE user_id = ?")
+    .bind(userId)
+    .all<{ language_code: string }>();
+  return results.map((row) => row.language_code);
+}
+
+export async function replaceFavoriteLanguagesForUser(
+  db: D1Database,
+  userId: number,
+  languageCodes: string[],
+  merge = false
+): Promise<void> {
+  const finalLanguageCodes = merge
+    ? [...new Set([...(await getFavoriteLanguagesForUser(db, userId)), ...languageCodes])]
+    : languageCodes;
+  const stmt = db.prepare(
+    "INSERT INTO favorite_language_prefs (user_id, language_code) VALUES (?, ?)"
+  );
+  await db.batch([
+    db.prepare("DELETE FROM favorite_language_prefs WHERE user_id = ?").bind(userId),
+    ...finalLanguageCodes.map((code) => stmt.bind(userId, code)),
+  ]);
+}
+
+export async function getFavoriteCountriesForUser(
+  db: D1Database,
+  userId: number
+): Promise<string[]> {
+  const { results } = await db
+    .prepare("SELECT country_code FROM favorite_country_prefs WHERE user_id = ?")
+    .bind(userId)
+    .all<{ country_code: string }>();
+  return results.map((row) => row.country_code);
+}
+
+export async function replaceFavoriteCountriesForUser(
+  db: D1Database,
+  userId: number,
+  countryCodes: string[],
+  merge = false
+): Promise<void> {
+  const finalCountryCodes = merge
+    ? [...new Set([...(await getFavoriteCountriesForUser(db, userId)), ...countryCodes])]
+    : countryCodes;
+  const stmt = db.prepare(
+    "INSERT INTO favorite_country_prefs (user_id, country_code) VALUES (?, ?)"
+  );
+  await db.batch([
+    db.prepare("DELETE FROM favorite_country_prefs WHERE user_id = ?").bind(userId),
+    ...finalCountryCodes.map((code) => stmt.bind(userId, code)),
+  ]);
+}
+
 export async function getLocaleForUser(db: D1Database, userId: number): Promise<string | null> {
   const row = await db
     .prepare("SELECT locale FROM users WHERE id = ?")
@@ -1060,4 +1126,201 @@ export function knownProvidersUpdate(
       "UPDATE watchlist_items SET known_providers = ? WHERE subscription_id = ? AND media_type = ? AND tmdb_id = ?"
     )
     .bind(JSON.stringify(providerIds), subscriptionId, mediaType, tmdbId);
+}
+
+// Parmi `keys` ("movie:123"…), celles que le compte a marquées vues : une
+// requête ciblée plutôt que toute la bibliothèque (validation du top 5,
+// audit M6).
+export async function getWatchedKeys(
+  db: D1Database,
+  userId: number,
+  keys: string[]
+): Promise<Set<string>> {
+  const pairs = keys
+    .map((key) => key.split(":"))
+    .filter(([mediaType, id]) => mediaType && Number.isInteger(Number(id)));
+  if (pairs.length === 0) {
+    return new Set();
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT media_type, tmdb_id FROM library_items
+       WHERE user_id = ? AND status = 'watched'
+         AND (media_type, tmdb_id) IN (VALUES ${pairs.map(() => "(?, ?)").join(", ")})`
+    )
+    .bind(userId, ...pairs.flatMap(([mediaType, id]) => [mediaType, Number(id)]))
+    .all<{ media_type: string; tmdb_id: number }>();
+  return new Set(results.map((row) => `${row.media_type}:${row.tmdb_id}`));
+}
+
+// Suppression et export de compte en libre-service (audit M14). ----------
+
+// Supprime définitivement le compte et tout ce qui lui est rattaché. Comme
+// le reste de ce fichier (voir replaceLibraryForUser, replaceCustomListsForUser…),
+// chaque table est vidée explicitement plutôt que de compter sur les `ON
+// DELETE CASCADE` déclarés dans les migrations : un seul batch atomique,
+// dans un ordre compatible avec les clés étrangères (tables filles d'abord).
+// Les abonnements push du compte sont supprimés avec leurs lignes associées
+// (watchlist_items/genre_preferences/notified_releases) plutôt que
+// seulement détachés (user_id -> NULL) : contrairement à une déconnexion,
+// la suppression de compte ne doit laisser aucune trace exploitable.
+export async function deleteUserAccount(db: D1Database, userId: number): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        "DELETE FROM watchlist_items WHERE subscription_id IN (SELECT id FROM subscriptions WHERE user_id = ?)"
+      )
+      .bind(userId),
+    db
+      .prepare(
+        "DELETE FROM genre_preferences WHERE subscription_id IN (SELECT id FROM subscriptions WHERE user_id = ?)"
+      )
+      .bind(userId),
+    db
+      .prepare(
+        "DELETE FROM notified_releases WHERE subscription_id IN (SELECT id FROM subscriptions WHERE user_id = ?)"
+      )
+      .bind(userId),
+    db.prepare("DELETE FROM subscriptions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM user_notified_releases WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM reminders WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM user_avatars WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM email_changes WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM list_shares WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM follows WHERE follower_id = ? OR followed_id = ?").bind(userId, userId),
+    db.prepare("DELETE FROM custom_list_items WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM custom_lists WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM library_items WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM excluded_genre_prefs WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM favorite_provider_prefs WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM favorite_language_prefs WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM favorite_country_prefs WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
+    // magic_links est indexé par email, pas par user_id : la sous-requête
+    // doit s'exécuter avant la suppression de la ligne users ci-dessous.
+    db
+      .prepare("DELETE FROM magic_links WHERE email = (SELECT email FROM users WHERE id = ?)")
+      .bind(userId),
+    db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+  ]);
+}
+
+export interface AccountExport {
+  account: {
+    email: string;
+    displayName: string | null;
+    username: string | null;
+    shareSlug: string | null;
+    locale: string | null;
+    region: string | null;
+    topPicks: string[];
+    createdAt: number;
+  };
+  library: LibraryState;
+  customLists: CustomListMap;
+  listShares: Record<string, string>;
+  reminders: ReminderSummary[];
+  excludedGenres: number[];
+  favoriteProviders: number[];
+  favoriteLanguages: string[];
+  favoriteCountries: string[];
+  following: { slug: string | null; displayName: string | null }[];
+  followers: { slug: string | null; displayName: string | null }[];
+  avatar: { contentType: string; dataBase64: string } | null;
+}
+
+// Encode un ArrayBuffer en base64 par blocs (une photo de profil fait au
+// plus 300 Ko, voir AVATAR_MAX_BYTES, mais `String.fromCharCode(...bytes)`
+// sur un tableau de cette taille risquerait de dépasser la limite d'arguments
+// de la pile sur certains moteurs).
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+// Export complet des données du compte (RGPD, droit à la portabilité) : un
+// seul objet JSON regroupant tout ce que les autres fonctions de ce fichier
+// (et de follows.ts/avatars.ts/reminders.ts) savent lire pour ce compte.
+export async function exportUserAccountData(
+  db: D1Database,
+  userId: number
+): Promise<AccountExport | null> {
+  const userRow = await db
+    .prepare(
+      "SELECT email, display_name, username, share_slug, locale, region, top_picks, created_at FROM users WHERE id = ?"
+    )
+    .bind(userId)
+    .first<{
+      email: string;
+      display_name: string | null;
+      username: string | null;
+      share_slug: string | null;
+      locale: string | null;
+      region: string | null;
+      top_picks: string | null;
+      created_at: number;
+    }>();
+  if (!userRow) {
+    return null;
+  }
+  const [
+    library,
+    customLists,
+    listShares,
+    reminders,
+    excludedGenres,
+    favoriteProviders,
+    favoriteLanguages,
+    favoriteCountries,
+    followers,
+    following,
+    topPicks,
+    avatar,
+  ] = await Promise.all([
+    getLibraryForUser(db, userId),
+    getCustomListsForUser(db, userId),
+    getListSharesForUser(db, userId),
+    getRemindersForUser(db, userId),
+    getExcludedGenresForUser(db, userId),
+    getFavoriteProvidersForUser(db, userId),
+    getFavoriteLanguagesForUser(db, userId),
+    getFavoriteCountriesForUser(db, userId),
+    // Soi-même comme visiteur : les compteurs "en commun"/"suit déjà" n'ont
+    // pas de sens pour son propre export, mais les champs utiles (slug, nom
+    // affiché) restent corrects.
+    getFollowers(db, userId, userId),
+    getFollowing(db, userId, userId),
+    getTopPicks(db, userId),
+    getAvatar(db, userId),
+  ]);
+  return {
+    account: {
+      email: userRow.email,
+      displayName: userRow.display_name,
+      username: userRow.username,
+      shareSlug: userRow.share_slug,
+      locale: userRow.locale,
+      region: userRow.region,
+      topPicks,
+      createdAt: userRow.created_at,
+    },
+    library,
+    customLists,
+    listShares,
+    reminders,
+    excludedGenres,
+    favoriteProviders,
+    favoriteLanguages,
+    favoriteCountries,
+    following: following.map((p) => ({ slug: p.slug, displayName: p.displayName })),
+    followers: followers.map((p) => ({ slug: p.slug, displayName: p.displayName })),
+    avatar: avatar
+      ? { contentType: avatar.contentType, dataBase64: arrayBufferToBase64(avatar.data) }
+      : null,
+  };
 }

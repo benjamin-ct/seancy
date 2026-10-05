@@ -52,6 +52,12 @@ const MAX_ATTEMPTS = 6;
 // avec « réduire les animations » (voir useReelPoster).
 const REEL_INTERVAL_MS = 350;
 const REEL_MAX = 16;
+// Réserve d'affiches du catalogue dans laquelle le défilement pioche (voir
+// collectCatalogPosters) : plus large que REEL_MAX pour que chaque tirage
+// (nouveau genre, nouveau type) ait une chance d'apporter de la variété
+// fraîche plutôt que de se faire immédiatement écarter par un plafond déjà
+// atteint dès le tout premier lot chargé au montage.
+const CATALOG_POOL_MAX = 64;
 // Attente maximale de l'affiche du titre tiré avant de le révéler : le
 // défilement continue en attendant, et la révélation montre la bonne affiche.
 const POSTER_WAIT_MS = 2500;
@@ -140,8 +146,20 @@ function useReelPoster(rolling: boolean, posterPaths: string[]): string | null {
     }
     for (const path of posterPaths) {
       const src = posterUrl(path, "w92");
-      if (!src || images.current.has(src) || images.current.size >= REEL_MAX) {
+      if (!src || images.current.has(src)) {
         continue;
+      }
+      // Fenêtre glissante plutôt que plafond définitif : sans ça, les
+      // REEL_MAX premières miniatures croisées (souvent le tout premier lot,
+      // avant même le premier filtre) restaient les seules à jamais défiler,
+      // même quand `posterPaths` s'enrichissait ensuite (nouveau genre,
+      // nouveau tirage) — d'où le manque de variété remonté sur le ticket.
+      if (images.current.size >= REEL_MAX) {
+        const oldestSrc = images.current.keys().next().value;
+        if (oldestSrc) {
+          images.current.delete(oldestSrc);
+          setLoaded((prev) => prev.filter((s) => s !== oldestSrc));
+        }
       }
       const image = new Image();
       image.onload = () => setLoaded((prev) => [...prev, src]);
@@ -256,9 +274,18 @@ export default function RandomPage() {
 
   function collectCatalogPosters(items: { poster_path?: string | null }[]) {
     const paths = items.map((item) => item.poster_path).filter((p): p is string => !!p);
-    setCatalogPosters((prev) =>
-      prev.length >= REEL_MAX ? prev : [...new Set([...prev, ...paths])].slice(0, REEL_MAX)
-    );
+    if (paths.length === 0) {
+      return;
+    }
+    // Fenêtre glissante (les plus récentes en dernier) : un plafond qui
+    // arrête définitivement d'accepter de nouvelles affiches dès qu'il est
+    // atteint une première fois (souvent au tout premier chargement, avant
+    // même le premier filtre) figeait le défilement sur toujours les mêmes
+    // affiches, quels que soient les tirages suivants (cause du ticket).
+    setCatalogPosters((prev) => {
+      const merged = [...new Set([...prev, ...paths])];
+      return merged.length > CATALOG_POOL_MAX ? merged.slice(-CATALOG_POOL_MAX) : merged;
+    });
   }
 
   // Affiches populaires du type choisi, pour que le défilement pioche aussi
@@ -430,6 +457,13 @@ export default function RandomPage() {
           }
         }
       }
+      // Plusieurs `await` séparent ce point du déclenchement : la page peut
+      // avoir été démontée entre-temps (navigation pendant le tirage, audit
+      // M16) — poser le résultat sur un composant démonté ne crashe pas mais
+      // fuit du travail (sessionStorage, re-renders) pour rien.
+      if (!mountedRef.current) {
+        return;
+      }
       if (!drawn) {
         clearPick();
         setStatus("empty");
@@ -439,6 +473,9 @@ export default function RandomPage() {
       if (poster) {
         await preloadImage(poster, POSTER_WAIT_MS);
       }
+      if (!mountedRef.current) {
+        return;
+      }
       setPick(drawn.item);
       setPickDetails(drawn.details);
       setProvidersResult(watchProvidersFromDetails(drawn.details, region));
@@ -446,6 +483,9 @@ export default function RandomPage() {
       setDrawCount((count) => count + 1);
       setStatus("success");
     } catch (err) {
+      if (!mountedRef.current) {
+        return;
+      }
       clearPick();
       setError(err as Error);
       setStatus("error");
@@ -465,6 +505,10 @@ export default function RandomPage() {
   const pickType = pick?.mediaType ?? drawTypes[0];
   const watched = pick ? isWatched(pickType, pick.id) : false;
   const inWatchlist = pick ? isInWatchlist(pickType, pick.id) : false;
+  // Pas encore sorti (ciné ou plateforme) : le bouton "Vu" porterait à
+  // confusion, donc masqué tant que rien n'a déjà été marqué vu (voir
+  // MediaCard.tsx, même logique sur les cartes).
+  const isUpcoming = Boolean(date && new Date(date) > new Date());
   const accentKey = pick
     ? posterAccentFromGenres(pick.genre_ids, `${pickType}:${pick.id}`)
     : "drama";
@@ -484,6 +528,15 @@ export default function RandomPage() {
     return [...new Set([...mixed, ...personal])];
   }, [catalogPosters, history, watchlist]);
   const reelPoster = useReelPoster(rolling, reelPosters);
+
+  // Garde de démontage pour `drawRandom` (audit M16) : ses `await` peuvent se
+  // résoudre après que la page a été quittée en plein tirage.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Un titre est déjà tiré à l'arrivée sur la page, avec la source et les
   // filtres par défaut (même tirage que le bouton « Tirer un titre »). La
@@ -706,20 +759,22 @@ export default function RandomPage() {
                 <Icon name="star" filled={inWatchlist} />
                 {inWatchlist ? t("randomPage.wantToWatchOn") : t("randomPage.wantToWatchOff")}
               </button>
-              <button
-                type="button"
-                className={`${styles.secondaryBtn} ${watched ? styles.onWatched : ""}`}
-                aria-pressed={watched}
-                onClick={() => {
-                  const item = buildLibItem();
-                  if (item) {
-                    toggleWatched(item);
-                  }
-                }}
-              >
-                <Icon name="check" strokeWidth={watched ? 3 : 2} />
-                {watched ? t("randomPage.watchedOn") : t("randomPage.watchedOff")}
-              </button>
+              {(watched || !isUpcoming) && (
+                <button
+                  type="button"
+                  className={`${styles.secondaryBtn} ${watched ? styles.onWatched : ""}`}
+                  aria-pressed={watched}
+                  onClick={() => {
+                    const item = buildLibItem();
+                    if (item) {
+                      toggleWatched(item);
+                    }
+                  }}
+                >
+                  <Icon name="check" strokeWidth={watched ? 3 : 2} />
+                  {watched ? t("randomPage.watchedOn") : t("randomPage.watchedOff")}
+                </button>
+              )}
               <TrailerButton videos={pickDetails?.videos?.results} />
               <Link
                 to={`/media/${pickType}/${pick.id}#recommendations`}

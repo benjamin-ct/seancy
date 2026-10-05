@@ -3,8 +3,11 @@ import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import { discover, getGenres, getWatchProvidersList } from "../../core/api/tmdb.ts";
 import { useScrollRestoration } from "../../shared/hooks/useScrollRestoration.ts";
+import { usePrefillFromFavorites } from "../../shared/hooks/usePrefillFromFavorites.ts";
 import { useRegion } from "../../core/context/RegionContext.tsx";
 import { useFavoriteProviders } from "../../core/context/FavoriteProvidersContext.tsx";
+import { useFavoriteCountries } from "../../core/context/FavoriteCountriesContext.tsx";
+import { useFavoriteLanguages } from "../../core/context/FavoriteLanguagesContext.tsx";
 import { useExcludedGenres } from "../../core/context/ExcludedGenresContext.tsx";
 import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx";
 import {
@@ -15,6 +18,7 @@ import {
   EmptyState,
   PageHeader,
 } from "../../shared/components/index.ts";
+import type { DiscoverParams } from "../../core/api/tmdb.ts";
 import type { Genre, MediaItem, MediaType } from "../../core/types/tmdb.ts";
 import type { WatchProviderOption } from "../../core/api/tmdb.ts";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
@@ -27,6 +31,27 @@ const WINDOWS = [
 ];
 
 const GRID_SKELETON_COUNT = 12;
+
+// Nombre de cartes révélées par "page" de scroll infini, et nombre de pages
+// TMDB regroupées par lot de fetch : récupérer plusieurs pages TMDB d'un
+// coup (même snapshot de popularité) évite qu'un titre de la page suivante
+// se retrouve mieux classé qu'un titre de la page précédente simplement
+// parce que le classement TMDB a légèrement bougé entre deux appels
+// successifs pendant le scroll (cause du ticket "pas dans le bon ordre").
+const REVEAL_SIZE = 20;
+const TMDB_PAGES_PER_BATCH = 5;
+
+async function fetchPages(
+  mediaType: MediaType,
+  params: DiscoverParams,
+  fromPage: number,
+  count: number
+) {
+  const pages = await Promise.all(
+    Array.from({ length: count }, (_, i) => discover(mediaType, { ...params, page: fromPage + i }))
+  );
+  return pages.flatMap((p) => p.results || []) as MediaItem[];
+}
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -83,14 +108,26 @@ export default function NewReleasesPage() {
   const [genreIds, setGenreIds] = useState<number[]>([]);
   const [providerIds, setProviderIds] = useState<string[]>([]);
   const [useMyPlatforms, setUseMyPlatforms] = useState(false);
-  const [country, setCountry] = useState("");
-  const [language, setLanguage] = useState("");
+  const { favoriteCountryCodes } = useFavoriteCountries();
+  const { favoriteLanguageCodes } = useFavoriteLanguages();
+  // Pré-rempli depuis les pays/langues favoris du compte (réglage du
+  // profil), modifiable ensuite pour cette page sans toucher à la
+  // préférence enregistrée — même principe que `useMyPlatforms`, qui ne
+  // modifie jamais `favoriteProviderIds` (voir usePrefillFromFavorites pour
+  // la synchronisation asynchrone de ce pré-réglage).
+  const [countries, setCountries] = usePrefillFromFavorites(favoriteCountryCodes);
+  const [languages, setLanguages] = usePrefillFromFavorites(favoriteLanguageCodes);
+  const [useMyCountries, setUseMyCountries] = useState(false);
+  const [useMyLanguages, setUseMyLanguages] = useState(false);
+  const activeCountries = useMyCountries ? favoriteCountryCodes : countries;
+  const activeLanguages = useMyLanguages ? favoriteLanguageCodes : languages;
   const [windowDays, setWindowDays] = useState(30);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [providers, setProviders] = useState<WatchProviderOption[]>([]);
-  const [page, setPage] = useState(1);
-  const [results, setResults] = useState<MediaItem[]>([]);
-  const [totalPages, setTotalPages] = useState(1);
+  const [allResults, setAllResults] = useState<MediaItem[]>([]);
+  const [revealCount, setRevealCount] = useState(REVEAL_SIZE);
+  const [fetchedPages, setFetchedPages] = useState(0);
+  const [tmdbTotalPages, setTmdbTotalPages] = useState(1);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -122,10 +159,6 @@ export default function NewReleasesPage() {
   }, []);
 
   useEffect(() => {
-    setPage(1);
-  }, [mediaType, genreIds, providerIds, useMyPlatforms, country, language, windowDays]);
-
-  useEffect(() => {
     let cancelled = false;
     getGenres(mediaType)
       .then((data) => !cancelled && setGenres(data.genres || []))
@@ -138,6 +171,42 @@ export default function NewReleasesPage() {
     };
   }, [mediaType, region]);
 
+  const discoverParams: DiscoverParams = {
+    genreId: genreIds,
+    excludeGenreIds: excludedGenreIds,
+    providerIds: activeProviderIds,
+    region,
+    originCountry: activeCountries[0] || undefined,
+    originalLanguage: activeLanguages[0] || undefined,
+    sortField: "popularity",
+    sortDirection: "desc",
+    includeProviderBadge: true,
+    ...dateRangeFor(windowDays),
+  };
+  const discoverParamsKey = JSON.stringify(discoverParams);
+
+  // Récupère un lot de TMDB_PAGES_PER_BATCH pages TMDB d'un coup (voir
+  // REVEAL_SIZE/TMDB_PAGES_PER_BATCH ci-dessus) : l'ordre de popularité au
+  // sein d'un même lot est donc cohérent, contrairement à un fetch page par
+  // page étalé sur plusieurs dizaines de secondes de scroll.
+  const fetchBatch = useCallback(
+    async (fromPage: number, signal?: AbortSignal) => {
+      const first = await discover(mediaType, { ...discoverParams, page: fromPage, signal });
+      const totalPages = Math.min(first.total_pages || 1, 500);
+      const pagesToFetch = Math.min(TMDB_PAGES_PER_BATCH, totalPages - fromPage + 1);
+      const rest =
+        pagesToFetch > 1
+          ? await fetchPages(mediaType, discoverParams, fromPage + 1, pagesToFetch - 1)
+          : [];
+      const batch = filterExcluded([...(first.results as MediaItem[]), ...rest], mediaType).map(
+        (r) => ({ ...r, mediaType })
+      );
+      return { batch, totalPages, newFetchedPages: fromPage - 1 + pagesToFetch };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mediaType, discoverParamsKey]
+  );
+
   useEffect(() => {
     let cancelled = false;
     // Filtre changé ou page quittée : la requête en cours est annulée et
@@ -145,26 +214,15 @@ export default function NewReleasesPage() {
     const controller = new AbortController();
     setStatus("loading");
     setLoadMoreError(null);
-    discover(mediaType, {
-      signal: controller.signal,
-      page: 1,
-      genreId: genreIds,
-      excludeGenreIds: excludedGenreIds,
-      providerIds: activeProviderIds,
-      region,
-      originCountry: country || undefined,
-      originalLanguage: language || undefined,
-      sortField: "popularity",
-      sortDirection: "desc",
-      includeProviderBadge: true,
-      ...dateRangeFor(windowDays),
-    })
-      .then((data) => {
+    fetchBatch(1, controller.signal)
+      .then(({ batch, totalPages, newFetchedPages }) => {
         if (cancelled) {
           return;
         }
-        setResults(filterExcluded(data.results, mediaType).map((r) => ({ ...r, mediaType })));
-        setTotalPages(Math.min(data.total_pages || 1, 500));
+        setRevealCount(REVEAL_SIZE);
+        setAllResults(batch);
+        setTmdbTotalPages(totalPages);
+        setFetchedPages(newFetchedPages);
         setStatus("success");
       })
       .catch((err) => {
@@ -183,69 +241,40 @@ export default function NewReleasesPage() {
     // redéclenche pas l'appel et les résultats restent dans l'ancienne
     // langue jusqu'au prochain changement de filtre ou remontage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    mediaType,
-    genreIds,
-    excludedGenreIds,
-    providerIds,
-    useMyPlatforms,
-    favoriteProviderIds,
-    region,
-    country,
-    language,
-    windowDays,
-    i18n.language,
-    reloadKey,
-  ]);
+  }, [fetchBatch, i18n.language, reloadKey]);
 
   const loadMore = useCallback(() => {
-    if (loadingMore || page >= totalPages || loadMoreError) {
+    if (loadingMore || loadMoreError) {
       return;
     }
-    const nextPage = page + 1;
+    if (revealCount < allResults.length) {
+      setRevealCount((c) => Math.min(c + REVEAL_SIZE, allResults.length));
+      return;
+    }
+    if (fetchedPages >= tmdbTotalPages) {
+      return;
+    }
     setLoadingMore(true);
-    discover(mediaType, {
-      page: nextPage,
-      genreId: genreIds,
-      excludeGenreIds: excludedGenreIds,
-      providerIds: activeProviderIds,
-      region,
-      originCountry: country || undefined,
-      originalLanguage: language || undefined,
-      sortField: "popularity",
-      sortDirection: "desc",
-      includeProviderBadge: true,
-      ...dateRangeFor(windowDays),
-    })
-      .then((data) => {
-        setResults((prev) => {
-          const seenIds = new Set(prev.map((item) => item.id));
-          const fresh = filterExcluded(data.results, mediaType)
-            .filter((item) => !seenIds.has(item.id))
-            .map((r) => ({ ...r, mediaType }));
-          return [...prev, ...fresh];
-        });
-        setPage(nextPage);
+    fetchBatch(fetchedPages + 1)
+      .then(({ batch, totalPages, newFetchedPages }) => {
+        const seenIds = new Set(allResults.map((item) => item.id));
+        const fresh = batch.filter((item) => !seenIds.has(item.id));
+        const merged = [...allResults, ...fresh];
+        setAllResults(merged);
+        setTmdbTotalPages(totalPages);
+        setFetchedPages(newFetchedPages);
+        setRevealCount((c) => Math.min(c + REVEAL_SIZE, merged.length));
       })
       .catch((err) => setLoadMoreError(err))
       .finally(() => setLoadingMore(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     loadingMore,
     loadMoreError,
-    page,
-    totalPages,
-    mediaType,
-    genreIds,
-    excludedGenreIds,
-    providerIds,
-    useMyPlatforms,
-    favoriteProviderIds,
-    region,
-    country,
-    language,
-    windowDays,
-    i18n.language,
+    revealCount,
+    allResults,
+    fetchedPages,
+    tmdbTotalPages,
+    fetchBatch,
   ]);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -269,13 +298,19 @@ export default function NewReleasesPage() {
     return () => observer.disconnect();
   }, [status, loadMore]);
 
-  useScrollRestoration(status === "success", results.length);
+  const visibleResults = useMemo(() => allResults.slice(0, revealCount), [allResults, revealCount]);
+  const hasMore = revealCount < allResults.length || fetchedPages < tmdbTotalPages;
 
-  const groups = useMemo(() => groupByPeriod(results, windowDays), [results, windowDays]);
+  useScrollRestoration(status === "success", visibleResults.length);
+
+  const groups = useMemo(
+    () => groupByPeriod(visibleResults, windowDays),
+    [visibleResults, windowDays]
+  );
   // Rechargement après un changement de filtre : on garde les résultats
   // précédents à l'écran (atténués) plutôt que de les remplacer par le
   // squelette, qui fait sauter toute la page le temps de la requête.
-  const refreshing = status === "loading" && results.length > 0;
+  const refreshing = status === "loading" && visibleResults.length > 0;
 
   return (
     <div className={styles.page}>
@@ -298,7 +333,18 @@ export default function NewReleasesPage() {
         favoriteProviderIds={favoriteProviderIds}
         useMyPlatforms={useMyPlatforms}
         setUseMyPlatforms={setUseMyPlatforms}
-        countryLanguage={{ country, setCountry, language, setLanguage }}
+        countryLanguage={{
+          countries,
+          setCountries,
+          languages,
+          setLanguages,
+          favoriteCountryCodes,
+          useMyCountries,
+          setUseMyCountries,
+          favoriteLanguageCodes,
+          useMyLanguages,
+          setUseMyLanguages,
+        }}
         periods={{
           label: t("newReleasesPage.windowsLabel"),
           options: WINDOWS.map((w) => ({
@@ -320,11 +366,11 @@ export default function NewReleasesPage() {
       {status === "error" && (
         <ErrorMessage error={error} onRetry={() => setReloadKey((key) => key + 1)} />
       )}
-      {status === "success" && results.length === 0 && (
+      {status === "success" && visibleResults.length === 0 && (
         <EmptyState label={t("newReleasesPage.emptyState")} />
       )}
 
-      {(status === "success" || refreshing) && results.length > 0 && (
+      {(status === "success" || refreshing) && visibleResults.length > 0 && (
         <div className={refreshing ? gridStyles.refreshing : undefined} aria-busy={refreshing}>
           {groups.map(([key, items]) => (
             <section key={key} className={styles.period} aria-labelledby={`period-${key}`}>
@@ -341,7 +387,7 @@ export default function NewReleasesPage() {
               </div>
             </section>
           ))}
-          {page < totalPages && (
+          {hasMore && (
             <div ref={sentinelRef} className={gridStyles.loadMore}>
               {loadingMore && <span>{t("common.loading")}</span>}
             </div>

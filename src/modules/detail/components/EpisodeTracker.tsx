@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { dateLocaleTag, formatFullDate, type SeriesEpisodeBadge } from "../../../core/api/tmdb.ts";
 import { isStrictlyFutureDate } from "../../../core/api/releaseBadge.ts";
@@ -148,6 +148,25 @@ export default function EpisodeTracker({
     }
     const refs = await airedEpisodesUpTo(seasons, loadSeason, { seasonNumber, episodeNumber });
     setEpisodesWatched(item, refs, true);
+  }
+
+  // Même mécanisme que le bouton calendrier de la fiche détail (« Vu » du
+  // film/de la série) : marquer une saison comme vue à une date passée
+  // plutôt que toujours "aujourd'hui", pour des stats/un fil social fiables
+  // même en regardant une saison plus tard que sa diffusion.
+  function handleSeasonWatchDateChange(e: ChangeEvent<HTMLInputElement>, episodes: EpisodeRef[]) {
+    const value = e.target.value;
+    // Repart d'un champ vide : un <input type="date"> ne redéclenche pas
+    // onChange si on resélectionne la même date plus tard.
+    e.target.value = "";
+    if (!value || !requireMember()) {
+      return;
+    }
+    const watchedAt = new Date(`${value}T12:00:00`).getTime();
+    if (Number.isNaN(watchedAt) || watchedAt > Date.now()) {
+      return;
+    }
+    setEpisodesWatched(item, episodes, true, watchedAt);
   }
 
   function shortDate(iso: string | undefined | null): string | null {
@@ -466,6 +485,36 @@ export default function EpisodeTracker({
                           ? t("episodeTracker.markAllWatched")
                           : t("episodeTracker.markSeason", { number: shown.season_number })}
                     </button>
+                  )}
+                  {!shownComplete && shownAired.length > 0 && (
+                    <span className={styles.watchDateWrap}>
+                      <span
+                        className={`${styles.seasonBtn} ${styles.watchDateBtn}`}
+                        aria-hidden="true"
+                      >
+                        <Icon name="calendar" />
+                      </span>
+                      <input
+                        type="date"
+                        className={styles.watchDateInput}
+                        max={today}
+                        aria-label={t("episodeTracker.watchDateAriaLabel", {
+                          number: shown.season_number,
+                        })}
+                        title={t("episodeTracker.watchDateAriaLabel", {
+                          number: shown.season_number,
+                        })}
+                        onChange={(e) =>
+                          handleSeasonWatchDateChange(
+                            e,
+                            shownAired.map((ep) => ({
+                              seasonNumber: shown.season_number,
+                              episodeNumber: ep.episode_number,
+                            }))
+                          )
+                        }
+                      />
+                    </span>
                   )}
                 </div>
               )}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "scripts/*.ts",
+    "infra/trello-claude/listener/server.js",
+    "infra/trello-claude/bobine-repo/*.cjs",
+    "public/theme-init.js"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "worker/**/*.ts", "scripts/**/*.ts"]
+}

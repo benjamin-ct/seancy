@@ -152,6 +152,7 @@
   "ratingStars": {
     "yourRating": "Your rating:",
     "notRatedYet": "Not rated yet",
+    "groupAriaLabel": "Rating out of 10",
     "starAriaLabel": "{{n}}/10 — {{label}}",
     "clear": "Clear"
   },
@@ -277,7 +278,19 @@
         "rate-limited": "Too many attempts. Try again in a few minutes.",
         "failed": "Linking didn't go through. Please try again."
       }
-    }
+    },
+    "exportData": "Export my data",
+    "exportDataHint": "Download a copy of all your account data in JSON format (right to data portability).",
+    "exportDataButton": "Download my data",
+    "deleteAccount": "Delete account",
+    "deleteAccountHint": "Permanently deletes your account and all associated data: library, lists, preferences, reminders, notification subscriptions, and profile photo. This action cannot be undone.",
+    "deleteAccountButton": "Delete my account",
+    "deleteAccountConfirmTitle": "This action is permanent.",
+    "deleteAccountConfirmText": "All your data will be deleted immediately and cannot be recovered. To confirm, type your email address ({{email}}) below.",
+    "deleteAccountConfirmPlaceholder": "Your email address",
+    "deleteAccountConfirmButton": "Delete permanently",
+    "deleteAccountError": "Couldn't delete the account right now. Try again.",
+    "deleting": "Deleting…"
   },
   "excludedGenres": {
     "summary": "Genres to exclude",
@@ -475,6 +488,7 @@
     "seriesCount_other": "{{count}} series",
     "watchTime": "Watch time",
     "hours": "hours",
+    "hoursShort": "h",
     "daysUnit": "days",
     "episodesCount_one": "{{count}} series episode",
     "episodesCount_other": "{{count}} series episodes",
@@ -484,8 +498,12 @@
     "ratedCount_other": "out of {{count}} rated titles",
     "watchedByYear": "Watched by year",
     "noDataYet": "No data yet.",
-    "topGenres": "Favorite genres",
+    "topGenres": "Favorite genres (watch time)",
     "noGenreYet": "No genre yet.",
+    "titlesCount_one": "{{count}} title",
+    "titlesCount_other": "{{count}} titles",
+    "watchTimeByDecade": "Watch time by decade",
+    "decadeLabel": "{{decade}}s",
     "recentlyWatched": "Recently watched"
   },
   "customListPanel": {
@@ -535,6 +553,22 @@
     "automatic": "Automatic · {{country}}",
     "automaticHint": "Detected from your connection. Pick a country to keep it even when travelling or on a VPN.",
     "manualHint": "This country stays active even when travelling or on a VPN."
+  },
+  "favoriteLanguagesSettings": {
+    "title": "My languages",
+    "activeCount_one": "{{count}} active",
+    "activeCount_other": "{{count}} active",
+    "description": "Check your favorite languages to pre-fill the \"Language\" filter on New Releases and Coming Soon.",
+    "loadError": "Could not load the list of languages.",
+    "searchPlaceholder": "Search a language…"
+  },
+  "favoriteCountriesSettings": {
+    "title": "My countries",
+    "activeCount_one": "{{count}} active",
+    "activeCount_other": "{{count}} active",
+    "description": "Check your favorite countries to pre-fill the \"Country\" filter on New Releases and Coming Soon.",
+    "loadError": "Could not load the list of countries.",
+    "searchPlaceholder": "Search a country…"
   },
   "favoriteProvidersSettings": {
     "title": "My platforms",
@@ -652,7 +686,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "October 2, 2026",
+    "lastUpdatedValue": "October 3, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -751,12 +785,12 @@
     },
     "retention": {
       "title": "Retention period",
-      "textBefore": "Your data is kept for as long as your account exists. On-request account deletion is not yet automated in the app: in the meantime, you can request the deletion of your account and your data ",
+      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Account (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
       "textAfter": "."
     },
     "rights": {
       "title": "Your rights",
-      "textBefore": "Under the GDPR, you have the right to access, rectify, erase, restrict, port, and object with regard to your data. You can exercise these rights ",
+      "textBefore": "Under the GDPR, you have the right to access, rectify, erase, restrict, port, and object with regard to your data. You can export a copy of your data at any time from Profile → Account (\"Export my data\" button), or exercise all of these rights ",
       "textAfter": ", and lodge a complaint with the CNIL if you believe your rights are not being respected."
     },
     "changes": {
@@ -797,8 +831,13 @@
     "noOverview": "No synopsis available.",
     "watchedOn": "Watched",
     "watchedOff": "Mark as watched",
+    "watchDateAriaLabel": "Mark as watched on a specific date",
+    "watchDateFutureError": "The watch date can't be in the future.",
     "wantToWatchOn": "In your watchlist",
     "wantToWatchOff": "Want to watch",
+    "notifyTitle": "Get notified on release day and when it arrives on a streaming service",
+    "notified": "Notified",
+    "notifyMe": "Notify me",
     "addToListHeading": "Add to a list",
     "noListsYet": "No lists yet.",
     "createListPlaceholder": "Create a list…",
@@ -941,7 +980,8 @@
     "unmarkEpisode": "Remove {{episode}} from watched episodes",
     "watchedUpToHere": "Watched up to here",
     "markSeason": "Mark season {{number}} as watched",
-    "unmarkSeason": "Unmark season"
+    "unmarkSeason": "Unmark season",
+    "watchDateAriaLabel": "Choose a watch date for season {{number}}"
   },
   "profileShare": {
     "title": "Public link",
@@ -1179,6 +1219,16 @@
     "minutes": "min",
     "country": "Country",
     "language": "Language",
+    "countriesCount_one": "{{count}} country",
+    "countriesCount_other": "{{count}} countries",
+    "languagesCount_one": "{{count}} language",
+    "languagesCount_other": "{{count}} languages",
+    "myCountries": "My countries",
+    "onlyMyCountries": "Only my favorite countries",
+    "noFavoriteCountries": "Choose your countries in your profile",
+    "myLanguages": "My languages",
+    "onlyMyLanguages": "Only my favorite languages",
+    "noFavoriteLanguages": "Choose your languages in your profile",
     "chip": "{{label}}: {{value}}"
   },
   "readOnlyBanner": {

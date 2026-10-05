@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,8 +13,19 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "./AuthContext.tsx";
 import { useMembersOnly } from "./MembersOnlyContext.tsx";
 import { getDetails } from "../api/tmdb.ts";
-import { logError, logWarn } from "../logger.ts";
+import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncEvent } from "../sync/liveSync.ts";
+import {
+  LIBRARY_STORAGE_KEY,
+  loadInitialLibraryState,
+  setLibrarySnapshot,
+} from "./libraryStore.ts";
+import {
+  storageGet,
+  storageGetJSON,
+  storageSet,
+  storageSetJSON,
+} from "../../shared/lib/storage.ts";
 import type {
   CustomList,
   CustomListMap,
@@ -26,7 +38,6 @@ import type {
 } from "../types/library.ts";
 import type { MediaType } from "../types/tmdb.ts";
 
-const STORAGE_KEY = "seancy.library.v1";
 // Mémorise, par email, si on a déjà fait la fusion initiale local ↔ serveur
 // sur CET appareil (voir l'effet de synchronisation plus bas).
 const SYNCED_FOR_KEY = "seancy.library.syncedFor";
@@ -73,7 +84,9 @@ interface LibraryContextValue {
   watched: LibraryItem[];
   watchlist: LibraryItem[];
   watchedIds: Set<string>;
-  toggleWatched: (item: LibraryItemInput) => void;
+  /** `watchedAt` optionnel (ms epoch) : date réelle de visionnage si différente
+   * d'aujourd'hui — voir DetailPage, sélecteur de date de visionnage. */
+  toggleWatched: (item: LibraryItemInput, watchedAt?: number) => void;
   toggleWatchlist: (item: LibraryItemInput) => void;
   isWatched: (mediaType: MediaType, id: number | string) => boolean;
   isInWatchlist: (mediaType: MediaType, id: number | string) => boolean;
@@ -89,10 +102,18 @@ interface LibraryContextValue {
     episode: number
   ) => boolean;
   toggleEpisodeWatched: (item: LibraryItemInput, season: number, episode: number) => void;
-  /** Coche/décoche plusieurs épisodes d'un coup (saison entière, « Vu jusqu'ici »). */
-  setEpisodesWatched: (item: LibraryItemInput, episodes: EpisodeRef[], watched: boolean) => void;
-  /** « Marquer la série comme vue » : passe la série en "vu" et coche `episodes`. */
-  markSeriesWatched: (item: LibraryItemInput, episodes: EpisodeRef[]) => void;
+  /** Coche/décoche plusieurs épisodes d'un coup (saison entière, « Vu jusqu'ici »).
+   * `watchedAt` optionnel (ms epoch, uniquement pris en compte quand `watched`
+   * est vrai) : voir `toggleWatched`. */
+  setEpisodesWatched: (
+    item: LibraryItemInput,
+    episodes: EpisodeRef[],
+    watched: boolean,
+    watchedAt?: number
+  ) => void;
+  /** « Marquer la série comme vue » : passe la série en "vu" et coche `episodes`.
+   * `watchedAt` optionnel : voir `toggleWatched`. */
+  markSeriesWatched: (item: LibraryItemInput, episodes: EpisodeRef[], watchedAt?: number) => void;
   /** Glisser-déposer dans "Envie de voir" (tri manuel) — voir modules/my-list. */
   reorderWatchlist: (fromKey: string, toKey: string, insertAfter: boolean) => void;
   customLists: CustomList[];
@@ -108,28 +129,6 @@ interface LibraryContextValue {
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
-
-function loadInitialState(): LibraryState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { watched: {}, watchlist: {} };
-    }
-    const parsed = JSON.parse(raw);
-    return {
-      watched: parsed.watched || {},
-      watchlist: parsed.watchlist || {},
-    };
-  } catch (err) {
-    // Le contenu stocké n'est pas du JSON valide (écriture interrompue,
-    // corruption...). On repart sur une bibliothèque vide MAIS on se garde
-    // bien d'écraser tout de suite localStorage avec cet état vide (voir
-    // l'effet ci-dessous) : si les vraies données sont encore là sous une
-    // forme récupérable, mieux vaut ne pas les perdre définitivement.
-    logWarn("Seancy : lecture de la bibliothèque locale impossible, on repart à vide.", err);
-    return { watched: {}, watchlist: {} };
-  }
-}
 
 function makeKey(mediaType: MediaType, id: number | string): string {
   return `${mediaType}:${id}`;
@@ -150,7 +149,7 @@ interface LegacyCustomListShape {
 
 function loadInitialCustomLists(): CustomListMap {
   try {
-    const raw = localStorage.getItem(CUSTOM_LISTS_STORAGE_KEY);
+    const raw = storageGet(CUSTOM_LISTS_STORAGE_KEY);
     if (!raw) {
       return {};
     }
@@ -180,13 +179,8 @@ function loadInitialCustomLists(): CustomListMap {
 }
 
 function loadInitialWatchlistOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(WATCHLIST_ORDER_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(WATCHLIST_ORDER_STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
 }
 
 function makeListId(): string {
@@ -255,7 +249,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { status: authStatus, email } = useAuth();
   const { requireMember } = useMembersOnly();
-  const [state, setState] = useState<LibraryState>(loadInitialState);
+  const [state, setState] = useState<LibraryState>(loadInitialLibraryState);
   // Évite d'écraser le localStorage dès le premier rendu : on ne persiste
   // qu'à partir du moment où l'état change réellement suite à une action de
   // l'utilisateur (toggle, import...).
@@ -287,11 +281,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder la bibliothèque locale.", err);
-    }
+    storageSetJSON(LIBRARY_STORAGE_KEY, state);
+  }, [state]);
+
+  // Reflète `state` dans le store externe (voir libraryStore.ts) pour les
+  // sélecteurs fins (useIsWatched...), en layout effect pour rester
+  // synchrone avant peinture — un effet passif classique laisserait un
+  // MediaCard afficher brièvement l'ancien statut après un clic.
+  useLayoutEffect(() => {
+    setLibrarySnapshot(state);
   }, [state]);
 
   useEffect(() => {
@@ -299,11 +297,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstCustomListsRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(CUSTOM_LISTS_STORAGE_KEY, JSON.stringify(customLists));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les listes personnalisées.", err);
-    }
+    storageSetJSON(CUSTOM_LISTS_STORAGE_KEY, customLists);
   }, [customLists]);
 
   useEffect(() => {
@@ -311,11 +305,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstWatchlistOrderRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(WATCHLIST_ORDER_STORAGE_KEY, JSON.stringify(watchlistOrder));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder l'ordre de la liste d'envies.", err);
-    }
+    storageSetJSON(WATCHLIST_ORDER_STORAGE_KEY, watchlistOrder);
   }, [watchlistOrder]);
 
   // Migration one-shot des listes perso créées avant la correction du bug
@@ -421,7 +411,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         if (cancelled) {
           return;
         }
-        const alreadySyncedFor = localStorage.getItem(SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           setState({ watched: remote.watched || {}, watchlist: remote.watchlist || {} });
           pendingOpsRef.current.clear();
@@ -434,7 +424,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         };
         setState(merged);
         pendingOpsRef.current.clear(); // le PUT complet ci-dessous couvre déjà tout `merged`
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/library", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },
@@ -530,7 +520,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         if (cancelled) {
           return;
         }
-        const alreadySyncedFor = localStorage.getItem(CUSTOM_LISTS_SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(CUSTOM_LISTS_SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           // Le serveur fait autorité : on remplace l'état local. Mémorisé
           // AVANT setCustomLists pour que l'effet de push ci-dessous (qui
@@ -544,7 +534,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         const merged = mergeCustomLists(customLists, remote || {});
         lastSyncedCustomListsJsonRef.current = JSON.stringify(merged);
         setCustomLists(merged);
-        localStorage.setItem(CUSTOM_LISTS_SYNCED_FOR_KEY, email);
+        storageSet(CUSTOM_LISTS_SYNCED_FOR_KEY, email);
         return fetch("/api/custom-lists", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },
@@ -635,7 +625,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   useLiveSyncEvent("library", (event) => {
     // Tant que la fusion initiale de cet appareil n'a pas eu lieu, le pull
     // d'authentification ci-dessus s'en charge déjà.
-    if (!email || localStorage.getItem(SYNCED_FOR_KEY) !== email || syncingRef.current) {
+    if (!email || storageGet(SYNCED_FOR_KEY) !== email || syncingRef.current) {
       return;
     }
     const delta = event?.payload as RemoteLibraryDelta | undefined;
@@ -698,7 +688,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       .catch((err) => logWarn("Seancy : actualisation des listes personnalisées impossible.", err));
   });
 
-  const toggleWatched = useCallback((item: LibraryItemInput) => {
+  const toggleWatched = useCallback((item: LibraryItemInput, watchedAt?: number) => {
     const key = makeKey(item.mediaType, item.id);
     setState((prev) => {
       const next = { ...prev, watched: { ...prev.watched } };
@@ -720,6 +710,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           ...item,
           addedAt: existing?.addedAt ?? Date.now(),
           updatedAt: Date.now(),
+          // Par défaut "vu aujourd'hui" (comportement inchangé) ; l'appelant peut
+          // préciser une date passée (cf. DetailPage, sélecteur de date de visionnage).
+          watchedAt: watchedAt ?? Date.now(),
         };
         next.watched[key] = newItem;
         // Un film vu n'a plus besoin d'être dans la liste à voir.
@@ -933,7 +926,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   // Coche/décoche plusieurs épisodes d'un coup (saison entière, « Vu
   // jusqu'ici »), sans changer le statut de la série.
   const setEpisodesWatched = useCallback(
-    (item: LibraryItemInput, episodes: EpisodeRef[], watched: boolean) => {
+    (item: LibraryItemInput, episodes: EpisodeRef[], watched: boolean, watchedAt?: number) => {
       const key = makeKey(item.mediaType, item.id);
       setState((prev) => {
         const listName: "watched" | "watchlist" = prev.watched[key] ? "watched" : "watchlist";
@@ -955,6 +948,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           ...existing,
           watchedEpisodes: Array.from(nextEpisodes),
           updatedAt: Date.now(),
+          // Comme toggleWatched/markSeriesWatched : par défaut "maintenant",
+          // sauf date de visionnage passée choisie via le sélecteur (bouton
+          // calendrier de la saison). Inchangé quand on décoche.
+          ...(watched ? { watchedAt: watchedAt ?? Date.now() } : {}),
         };
         pendingOpsRef.current.set(key, {
           action: "upsert",
@@ -972,37 +969,41 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   // « Marquer la série comme vue » : comme toggleWatched (passage en "vu",
   // retrait de la liste à voir), en cochant en plus tous les épisodes
   // diffusés — la série disparaît ainsi aussi de « Séries en cours ».
-  const markSeriesWatched = useCallback((item: LibraryItemInput, episodes: EpisodeRef[]) => {
-    const key = makeKey(item.mediaType, item.id);
-    setState((prev) => {
-      const existing = prev.watched[key] || prev.watchlist[key];
-      const nextEpisodes = new Set(existing?.watchedEpisodes || []);
-      for (const { seasonNumber, episodeNumber } of episodes) {
-        nextEpisodes.add(makeEpisodeKey(seasonNumber, episodeNumber));
-      }
-      const newItem: LibraryItem = {
-        ...existing,
-        ...item,
-        watchedEpisodes: Array.from(nextEpisodes),
-        addedAt: existing?.addedAt ?? Date.now(),
-        updatedAt: Date.now(),
-      };
-      const next = { ...prev, watched: { ...prev.watched, [key]: newItem } };
-      if (next.watchlist[key]) {
-        next.watchlist = { ...next.watchlist };
-        delete next.watchlist[key];
-      }
-      pendingOpsRef.current.set(key, {
-        action: "upsert",
-        mediaType: item.mediaType,
-        id: item.id,
-        status: "watched",
-        item: newItem,
+  const markSeriesWatched = useCallback(
+    (item: LibraryItemInput, episodes: EpisodeRef[], watchedAt?: number) => {
+      const key = makeKey(item.mediaType, item.id);
+      setState((prev) => {
+        const existing = prev.watched[key] || prev.watchlist[key];
+        const nextEpisodes = new Set(existing?.watchedEpisodes || []);
+        for (const { seasonNumber, episodeNumber } of episodes) {
+          nextEpisodes.add(makeEpisodeKey(seasonNumber, episodeNumber));
+        }
+        const newItem: LibraryItem = {
+          ...existing,
+          ...item,
+          watchedEpisodes: Array.from(nextEpisodes),
+          addedAt: existing?.addedAt ?? Date.now(),
+          updatedAt: Date.now(),
+          watchedAt: watchedAt ?? Date.now(),
+        };
+        const next = { ...prev, watched: { ...prev.watched, [key]: newItem } };
+        if (next.watchlist[key]) {
+          next.watchlist = { ...next.watchlist };
+          delete next.watchlist[key];
+        }
+        pendingOpsRef.current.set(key, {
+          action: "upsert",
+          mediaType: item.mediaType,
+          id: item.id,
+          status: "watched",
+          item: newItem,
+        });
+        return next;
       });
-      return next;
-    });
-    setWatchlistOrder((prev) => prev.filter((k) => k !== key));
-  }, []);
+      setWatchlistOrder((prev) => prev.filter((k) => k !== key));
+    },
+    []
+  );
 
   // Glisser-déposer dans "Envie de voir" : déplace `fromKey` juste avant ou
   // après `toKey` dans l'ordre manuel affiché.

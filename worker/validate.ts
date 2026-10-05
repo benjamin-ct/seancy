@@ -4,9 +4,10 @@
 // silencieusement supprimée (whitelist), tout item structurellement invalide
 // est écarté plutôt que de faire échouer toute la requête.
 
+import { isMediaType } from "../src/core/validation/mediaType.ts";
+
 const MAX_STRING_LENGTH = 300;
 const MAX_ITEMS_PER_LIST = 5000; // large marge au-dessus d'un usage réel, évite un abus qui gonflerait la base indéfiniment
-const VALID_MEDIA_TYPES = new Set(["movie", "tv"]);
 // "saison-épisode" (ex. "1-5") : suivi épisode par épisode pour les séries.
 // Aucune série connue ne dépasse quelques centaines d'épisodes, 5000 laisse
 // une large marge sans permettre un payload disproportionné.
@@ -45,6 +46,7 @@ export interface CleanLibraryItem {
   genreIds: number[];
   addedAt: number;
   updatedAt: number;
+  watchedAt?: number;
   rating?: number;
   runtimeMinutes?: number;
   watchedEpisodes: string[];
@@ -113,7 +115,7 @@ function cleanDirector(raw: unknown): CleanDirector | null {
 // ou null si l'item n'est pas exploitable (id/mediaType manquants ou
 // invalides — le reste a des valeurs de repli raisonnables).
 function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLibraryItem | null {
-  if (!VALID_MEDIA_TYPES.has(mediaType)) {
+  if (!isMediaType(mediaType)) {
     return null;
   }
   const id = cleanNumber(tmdbId);
@@ -139,6 +141,12 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
     : [];
   const addedAt = cleanNumber(r.addedAt) ?? Date.now();
   const updatedAt = cleanNumber(r.updatedAt) ?? addedAt;
+  // Date de visionnage choisie par l'utilisateur (peut être passée) — distincte
+  // d'updatedAt (date de l'action de cocher, toujours "maintenant"). Clampée pour
+  // qu'un client malveillant ne puisse pas injecter une date future lointaine.
+  const rawWatchedAt = cleanNumber(r.watchedAt);
+  const watchedAt =
+    rawWatchedAt === null ? undefined : Math.min(rawWatchedAt, Date.now() + 86400000);
   const rating =
     r.rating == null ? undefined : Math.min(10, Math.max(0, cleanNumber(r.rating) ?? 0));
   const runtimeMinutes =
@@ -172,6 +180,7 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
     genreIds,
     addedAt,
     updatedAt,
+    watchedAt,
     rating,
     runtimeMinutes,
     watchedEpisodes,
@@ -243,7 +252,7 @@ function sanitizeSyncUpsert(raw: unknown): SyncUpsert | null {
     return null;
   }
   const r = raw as Record<string, unknown>;
-  if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+  if (!isMediaType(r.mediaType)) {
     return null;
   }
   if (r.status !== "watched" && r.status !== "watchlist") {
@@ -261,7 +270,7 @@ function sanitizeSyncDelete(raw: unknown): SyncDelete | null {
     return null;
   }
   const r = raw as Record<string, unknown>;
-  if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+  if (!isMediaType(r.mediaType)) {
     return null;
   }
   const id = cleanNumber(r.id);
@@ -313,7 +322,7 @@ export function sanitizeWatchlistItems(rawItems: unknown, maxItems: number): Cle
         return null;
       }
       const r = item as Record<string, unknown>;
-      if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+      if (!isMediaType(r.mediaType)) {
         return null;
       }
       const tmdbId = cleanNumber(r.tmdbId);
@@ -343,7 +352,7 @@ export function sanitizeGenrePrefs(rawGenres: unknown, maxItems: number): CleanG
         return null;
       }
       const r = g as Record<string, unknown>;
-      if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+      if (!isMediaType(r.mediaType)) {
         return null;
       }
       const genreId = cleanNumber(r.genreId);
@@ -378,6 +387,30 @@ export function sanitizeIdList(rawIds: unknown): number[] {
   }
   return [...out];
 }
+
+// Langues/pays favoris : mêmes limites qu'excluded_genre_prefs/
+// favorite_provider_prefs ci-dessus, pour des codes ISO (chaînes) plutôt que
+// des ids numériques TMDB. `pattern` distingue iso_639_1 ("fr", minuscules)
+// de iso_3166_1 ("FR", majuscules) — voir isValidRegionCode côté client pour
+// le même format de code pays.
+export function sanitizeIsoCodeList(rawCodes: unknown, pattern: RegExp): string[] {
+  if (!Array.isArray(rawCodes)) {
+    return [];
+  }
+  const out = new Set<string>();
+  for (const raw of rawCodes) {
+    if (out.size >= MAX_ID_LIST) {
+      break;
+    }
+    if (typeof raw === "string" && pattern.test(raw)) {
+      out.add(raw);
+    }
+  }
+  return [...out];
+}
+
+export const LANGUAGE_CODE_PATTERN = /^[a-z]{2}$/;
+export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
 
 const MAX_CUSTOM_LISTS = 200; // large marge au-dessus d'un usage réel
 
@@ -481,7 +514,7 @@ export function sanitizeKeyList(rawKeys: unknown, maxItems: number): CleanKey[] 
     .slice(0, maxItems)
     .map((key): CleanKey | null => {
       const [mediaType, idStr] = String(key).split(":");
-      if (!VALID_MEDIA_TYPES.has(mediaType)) {
+      if (!isMediaType(mediaType)) {
         return null;
       }
       const id = cleanNumber(idStr);

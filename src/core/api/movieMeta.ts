@@ -13,12 +13,25 @@ import { DEFAULT_REGION } from "./releaseBadge.ts";
  * incomplètes), voir les appels de MediaCard/Detail/Random. */
 type RuntimeSource = Pick<
   MediaDetails,
-  "runtime" | "episode_run_time" | "number_of_episodes"
+  | "runtime"
+  | "episode_run_time"
+  | "number_of_episodes"
+  | "last_episode_to_air"
+  | "next_episode_to_air"
 > | null;
 
 // Durée totale estimée en minutes. Film : `runtime` tel quel. Série : pas
 // de durée globale chez TMDB, on l'estime en durée d'un épisode ×
 // nombre d'épisodes. `null` si l'information manque (repli côté appelant).
+//
+// `episode_run_time` (durée globale série) est de plus en plus souvent un
+// tableau vide chez TMDB (constaté sur Breaking Bad par ex., alors que la
+// série a bien une durée par épisode) : sans repli, toute série concernée
+// ressort avec une durée de 0 dans les statistiques, y compris pour un
+// titre marqué vu (voir ticket Trello "Amélioration statistiques", retour
+// "le bouton vu d'une série ne la compte pas dans les statistiques"). On se
+// rabat sur la durée du dernier épisode diffusé, puis du prochain à venir,
+// toutes deux bien renseignées par TMDB même quand episode_run_time est vide.
 export function estimateRuntimeMinutes(
   details: RuntimeSource,
   mediaType: MediaType
@@ -26,7 +39,10 @@ export function estimateRuntimeMinutes(
   if (mediaType === "movie") {
     return details?.runtime || null;
   }
-  const perEpisode = details?.episode_run_time?.[0];
+  const perEpisode =
+    details?.episode_run_time?.[0] ||
+    details?.last_episode_to_air?.runtime ||
+    details?.next_episode_to_air?.runtime;
   const episodeCount = details?.number_of_episodes;
   if (!perEpisode || !episodeCount) {
     return null;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
@@ -33,6 +33,7 @@ import WhereToWatch from "./components/WhereToWatch.tsx";
 import FollowingActivity from "./components/FollowingActivity.tsx";
 import { airedEpisodesUpTo, useSeasonEpisodes } from "./useSeasonEpisodes.ts";
 import { useLibrary } from "../../core/context/LibraryContext.tsx";
+import { useReminders } from "../../core/context/RemindersContext.tsx";
 import { regionName as countryDisplayName, useRegion } from "../../core/context/RegionContext.tsx";
 import { useLocale } from "../../core/context/LocaleContext.tsx";
 import { useExcludedGenres } from "../../core/context/ExcludedGenresContext.tsx";
@@ -45,7 +46,8 @@ import { getMediaPreview, type MediaPreview } from "../../shared/lib/mediaPrevie
 import posterStyles from "../../shared/styles/posterAccents.module.css";
 import dropdownStyles from "../../shared/components/Dropdown/Dropdown.module.css";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
-import type { CastMember, MediaDetails, MediaType } from "../../core/types/tmdb.ts";
+import type { CastMember, MediaDetails } from "../../core/types/tmdb.ts";
+import { isMediaType } from "../../core/validation/mediaType.ts";
 import styles from "./DetailPage.module.css";
 import { TmdbHttpError } from "../../core/api/tmdbClient.ts";
 import NotFoundPage from "../not-found/NotFoundPage.tsx";
@@ -115,7 +117,12 @@ export default function DetailPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { mediaType, id } = useParams<{ mediaType: MediaType; id: string }>();
+  // `useParams` ne garantit rien sur la forme de `mediaType` : une URL
+  // `/media/foo/1` le laisserait passer tel quel vers TMDB sans ce garde
+  // (audit F6). `isMediaType` restreint ensuite le type du reste du
+  // composant à `MediaType | undefined`, comme avant ce correctif.
+  const { mediaType: rawMediaType, id } = useParams<{ mediaType: string; id: string }>();
+  const mediaType = isMediaType(rawMediaType) ? rawMediaType : undefined;
   // Fiche déjà chargée pendant la session (déjà vue) : affichée dès le
   // premier rendu, sans passer par le squelette.
   const [details, setDetails] = useState<MediaDetails | null>(() =>
@@ -155,6 +162,7 @@ export default function DetailPage() {
     removeFromList,
     createList,
   } = useLibrary();
+  const { hasReminder, toggleReminder } = useReminders();
   const { region, regionName } = useRegion();
   const { locale } = useLocale();
   const { excludedGenreIds } = useExcludedGenres();
@@ -219,7 +227,7 @@ export default function DetailPage() {
   }, [linkCopied]);
 
   if (!mediaType || !id) {
-    return null;
+    return <NotFoundPage />;
   }
 
   function backLink(className: string) {
@@ -281,6 +289,7 @@ export default function DetailPage() {
   const watched = isWatched(mediaType, id);
   const inWatchlist = isInWatchlist(mediaType, id);
   const excluded = isExcludedTitle(mediaType, id);
+  const notifying = hasReminder(mediaType, Number(id));
   const accentKey = posterAccentFromGenres(
     details.genres?.map((g) => g.id),
     `${mediaType}:${id}`
@@ -294,6 +303,11 @@ export default function DetailPage() {
   // globale TMDB indépendante de la région, alors que `theatricalDate` est
   // la sortie ciné réelle dans la région active.
   const displayDate = theatricalDate || date;
+  // Pas de sens de proposer un rappel de sortie, ni de marquer "vu", pour un
+  // titre déjà sorti : `displayDate` (et non `date`) pour rester cohérent
+  // avec la date affichée à l'écran (ciné régional prioritaire sur la date
+  // primaire TMDB, qui peut déjà être passée dans un autre pays).
+  const isUpcoming = Boolean(displayDate && new Date(displayDate) > new Date());
   const theatricalStatus = theatricalStatusFromDate(theatricalDate);
   const theatricalDateFormatted = theatricalDate ? formatFullDate(theatricalDate, locale) : null;
   const theatricalMessage = theatricalStatus
@@ -361,7 +375,11 @@ export default function DetailPage() {
     mediaType,
     title,
     posterPath: details.poster_path ?? null,
-    date,
+    // displayDate (sortie ciné régionale si connue) et pas `date` (date TMDB
+    // globale) : sinon un ajout aux favoris/listes/rappels depuis cette fiche
+    // stocke une date différente de celle affichée à l'écran juste au-dessus
+    // (cause du ticket Trello sur les dates erronées en Prochainement/Ma liste).
+    date: displayDate,
     genreIds: details.genres?.map((g) => g.id) || [],
     runtimeMinutes: estimateRuntimeMinutes(details, mediaType),
   };
@@ -387,7 +405,9 @@ export default function DetailPage() {
 
   // « Marquer la série comme vue » coche tous les épisodes diffusés (listes
   // chargées saison par saison) ; « Série vue » la retire comme un film.
-  async function toggleSeriesWatched() {
+  // `watchedAt` optionnel : date de visionnage choisie via le sélecteur de
+  // date plutôt que "maintenant" (voir le bouton calendrier dans .actions).
+  async function toggleSeriesWatched(watchedAt?: number) {
     if (watched || !details?.seasons) {
       toggleWatched(libItem);
       return;
@@ -397,9 +417,31 @@ export default function DetailPage() {
     }
     setMarkingSeries(true);
     try {
-      markSeriesWatched(libItem, await airedEpisodesUpTo(details.seasons, loadSeason));
+      markSeriesWatched(libItem, await airedEpisodesUpTo(details.seasons, loadSeason), watchedAt);
     } finally {
       setMarkingSeries(false);
+    }
+  }
+
+  // Déclenché par le sélecteur de date natif (bouton calendrier à côté de
+  // "Vu") : marque directement le titre comme vu à la date choisie, plutôt
+  // que de nécessiter un clic "Vu" séparé puis un changement de date.
+  function handleWatchDateChange(e: ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    // Repart d'un champ vide : permet de resélectionner la même date plus
+    // tard (un <input type="date"> ne redéclenche pas onChange sinon).
+    e.target.value = "";
+    if (!value) {
+      return;
+    }
+    const watchedAt = new Date(`${value}T12:00:00`).getTime();
+    if (Number.isNaN(watchedAt) || watchedAt > Date.now()) {
+      return;
+    }
+    if (mediaType === "tv") {
+      toggleSeriesWatched(watchedAt);
+    } else {
+      toggleWatched(libItem, watchedAt);
     }
   }
 
@@ -598,6 +640,20 @@ export default function DetailPage() {
             <p className={styles.overview}>{details.overview || t("detailPage.noOverview")}</p>
 
             <div className={styles.actions}>
+              {isUpcoming && (
+                <button
+                  type="button"
+                  className={`${styles.actionBtn} ${notifying ? styles.wantOn : ""}`}
+                  onClick={() => toggleReminder(libItem)}
+                  aria-pressed={notifying}
+                  title={t("detailPage.notifyTitle")}
+                >
+                  <Icon name="bell" />
+                  <span className={styles.btnLabel}>
+                    {notifying ? t("detailPage.notified") : t("detailPage.notifyMe")}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 className={`${styles.actionBtn} ${inWatchlist ? styles.wantOn : ""}`}
@@ -614,33 +670,53 @@ export default function DetailPage() {
                   {inWatchlist ? t("detailPage.wantToWatchOn") : t("detailPage.wantToWatchOff")}
                 </span>
               </button>
-              <button
-                type="button"
-                className={`${styles.actionBtn} ${styles.watchedBtn} ${watched ? styles.watchedOn : ""}`}
-                onClick={(e) => {
-                  if (!watched) {
-                    pop(e.currentTarget.firstElementChild);
-                  }
-                  if (mediaType === "tv") {
-                    toggleSeriesWatched();
-                  } else {
-                    toggleWatched(libItem);
-                  }
-                }}
-                aria-pressed={watched}
-                disabled={markingSeries}
-              >
-                <Icon name="check" strokeWidth={watched ? 3 : 2} />
-                <span className={styles.btnLabel}>
-                  {mediaType === "tv"
-                    ? watched
-                      ? t("detailPage.seriesWatchedOn")
-                      : t("detailPage.seriesWatchedOff")
-                    : watched
-                      ? t("detailPage.watchedOn")
-                      : t("detailPage.watchedOff")}
+              {/* Pas encore sorti (ciné ou plateforme) : le bouton "Vu" porterait à
+                  confusion, donc masqué tant que rien n'a déjà été marqué vu. */}
+              {(watched || !isUpcoming) && (
+                <button
+                  type="button"
+                  className={`${styles.actionBtn} ${styles.watchedBtn} ${watched ? styles.watchedOn : ""}`}
+                  onClick={(e) => {
+                    if (!watched) {
+                      pop(e.currentTarget.firstElementChild);
+                    }
+                    if (mediaType === "tv") {
+                      toggleSeriesWatched();
+                    } else {
+                      toggleWatched(libItem);
+                    }
+                  }}
+                  aria-pressed={watched}
+                  disabled={markingSeries}
+                >
+                  <Icon name="check" strokeWidth={watched ? 3 : 2} />
+                  <span className={styles.btnLabel}>
+                    {mediaType === "tv"
+                      ? watched
+                        ? t("detailPage.seriesWatchedOn")
+                        : t("detailPage.seriesWatchedOff")
+                      : watched
+                        ? t("detailPage.watchedOn")
+                        : t("detailPage.watchedOff")}
+                  </span>
+                </button>
+              )}
+              {!watched && !isUpcoming && (
+                <span className={styles.watchDateWrap}>
+                  <span className={`${styles.actionBtn} ${styles.watchDateBtn}`} aria-hidden="true">
+                    <Icon name="calendar" />
+                  </span>
+                  <input
+                    type="date"
+                    className={styles.watchDateInput}
+                    max={new Date().toISOString().slice(0, 10)}
+                    aria-label={t("detailPage.watchDateAriaLabel")}
+                    title={t("detailPage.watchDateAriaLabel")}
+                    disabled={markingSeries}
+                    onChange={handleWatchDateChange}
+                  />
                 </span>
-              </button>
+              )}
               <Dropdown
                 label={
                   <>

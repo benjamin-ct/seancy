@@ -24,6 +24,7 @@
     "src/core/types/tmdb.ts",
     "src/core/types/social.ts",
     "src/core/api/movieMeta.ts",
-    "src/core/api/releaseBadge.ts"
+    "src/core/api/releaseBadge.ts",
+    "src/core/validation/mediaType.ts"
   ]
 }

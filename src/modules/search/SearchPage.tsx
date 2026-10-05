@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
-import { searchMulti } from "../../core/api/tmdb.ts";
+import { searchMultiRanked } from "../../core/api/tmdb.ts";
 import {
   MediaCard,
   PersonCard,
@@ -12,7 +12,7 @@ import {
 } from "../../shared/components/index.ts";
 import { useRegion } from "../../core/context/RegionContext.tsx";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
-import type { MediaItem, PersonSummary, SearchMultiResult } from "../../core/types/tmdb.ts";
+import type { MediaItem, PersonSummary } from "../../core/types/tmdb.ts";
 import styles from "./SearchPage.module.css";
 
 export default function SearchPage() {
@@ -35,12 +35,11 @@ export default function SearchPage() {
     }
     let cancelled = false;
     setStatus("loading");
-    searchMulti(query, 1, region)
-      .then((data) => {
+    searchMultiRanked(query, region)
+      .then((results) => {
         if (cancelled) {
           return;
         }
-        const results: SearchMultiResult[] = data.results || [];
         setTitles(
           results
             .filter((item) => item.media_type === "movie" || item.media_type === "tv")

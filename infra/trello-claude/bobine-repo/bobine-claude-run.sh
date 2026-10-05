@@ -13,7 +13,9 @@ set -euo pipefail
 WORKSPACE="${BOBINE_WORKSPACE:-/workspace}"
 STACK_REPO="${BOBINE_STACK_REPO:-/srv/bobine}"
 LOCK_FILE="${BOBINE_CLAUDE_LOCK:-/tmp/bobine-claude-run.lock}"
-CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5-5}"
+CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-5}"
+CLAUDE_EFFORT="${CLAUDE_EFFORT:-medium}"
+TOKEN_FILE="${BOBINE_CLAUDE_TOKEN_FILE:-$HOME/.bobine-claude-token}"
 
 if [ $# -ne 1 ] || [ -z "$1" ]; then
   echo "Usage : bobine-claude-run \"<prompt>\"" >&2
@@ -61,6 +63,15 @@ if [ -n "$branch" ] && [ "$branch" != main ]; then
   fi
 fi
 
+# Jeton OAuth pour le développeur délégué (bobine-claude-dev) : Claude Code le retire de
+# l'environnement des commandes qu'il lance. Réécrit à chaque exécution (suit le .env).
+if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  (umask 077 && printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" >"$TOKEN_FILE.tmp")
+  mv -f "$TOKEN_FILE.tmp" "$TOKEN_FILE"
+else
+  rm -f "$TOKEN_FILE"
+fi
+
 # Chaque exécution part de main à jour (skills compris) ; les branches locales restent intactes.
 git switch --quiet --force-create main origin/main
 
@@ -90,7 +101,7 @@ fi
 # Pas d'`exec` et `9>&-` : le verrou reste tenu par ce script seul, pas par les processus que
 # Claude laisserait tourner (ex. un `wrangler dev` orphelin), qui le bloqueraient indéfiniment.
 status=0
-claude --model "$CLAUDE_MODEL" -p "$prompt" \
+claude --model "$CLAUDE_MODEL" --effort "$CLAUDE_EFFORT" -p "$prompt" \
   --dangerously-skip-permissions \
   --allowedTools 'Bash(git *)' 'Bash(curl *)' Read Write \
   9>&- || status=$?

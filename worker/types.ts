@@ -3,6 +3,10 @@
 export interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  // Binding natif Rate Limiting (audit F4, voir wrangler.jsonc) : slugs
+  // publics (profil, abonnés, avatar partagé, liste) et upload d'avatar.
+  PUBLIC_SLUG_RATE_LIMITER: RateLimit;
+  AVATAR_RATE_LIMITER: RateLimit;
   // Événements d'usage (recherche, activation notifs, watchlist...) —
   // consommés côté Grafana Cloud via la datasource Cloudflare Analytics.
   // Voir worker/analytics.ts. Optionnel : le binding n'est déclaré dans

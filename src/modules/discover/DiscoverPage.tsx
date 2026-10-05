@@ -16,9 +16,6 @@ import {
   MediaCard,
   MediaCardSkeleton,
   FilterPanel,
-  DEFAULT_SORT_FIELD,
-  DEFAULT_SORT_DIRECTION,
-  EMPTY_ADVANCED_FILTERS,
   getAdvancedFiltersRangeError,
   ErrorMessage,
   EmptyState,
@@ -27,29 +24,14 @@ import {
   Icon,
 } from "../../shared/components/index.ts";
 import type { AdvancedFiltersState } from "../../shared/components/index.ts";
-import type { Genre, MediaItem, MediaType } from "../../core/types/tmdb.ts";
-import type { DiscoverSortField, SortDirection, WatchProviderOption } from "../../core/api/tmdb.ts";
+import type { Genre, MediaItem } from "../../core/types/tmdb.ts";
+import type { WatchProviderOption } from "../../core/api/tmdb.ts";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
 import TonightPick from "./TonightPick.tsx";
+import { useDiscoverFilters } from "./discoverFilters.ts";
 import styles from "./DiscoverPage.module.css";
 
 const GRID_SKELETON_COUNT = 12;
-
-interface FiltersSnapshot {
-  mediaType: MediaType;
-  genreIds: number[];
-  providerIds: string[];
-  useMyPlatforms: boolean;
-  sortField: DiscoverSortField;
-  sortDirection: SortDirection;
-  advanced: AdvancedFiltersState;
-}
-
-// Derniers filtres appliqués, mémorisés par entrée d'historique (même
-// principe que scrollPositions dans useScrollRestoration) : comme DiscoverPage
-// est démonté/remonté à chaque retour arrière, seul un état hors du cycle de
-// vie du composant peut survivre pour être réappliqué au remontage.
-const filtersMemory = new Map<string, FiltersSnapshot>();
 
 // Résultats déjà chargés, par entrée d'historique : au retour arrière, la
 // grille réapparaît tout de suite (sans squelette ni nouvel appel), prête à
@@ -83,25 +65,29 @@ export default function DiscoverPage() {
   useDocumentTitle(null);
   const location = useLocation();
   const navigationType = useNavigationType();
-  const restoredFilters = navigationType === "POP" ? filtersMemory.get(location.key) : undefined;
   const restoredResults = navigationType === "POP" ? resultsMemory.get(location.key) : undefined;
   // Vrai jusqu'au premier passage des effets ci-dessous : ils ne doivent ni
   // remettre la page à 1 ni recharger la grille restaurée.
   const keepRestoredResultsRef = useRef(restoredResults !== undefined);
 
-  const [mediaType, setMediaType] = useState<MediaType>(restoredFilters?.mediaType ?? "movie");
-  const [genreIds, setGenreIds] = useState<number[]>(restoredFilters?.genreIds ?? []);
-  const [providerIds, setProviderIds] = useState<string[]>(restoredFilters?.providerIds ?? []);
-  const [useMyPlatforms, setUseMyPlatforms] = useState(restoredFilters?.useMyPlatforms ?? false);
-  const [sortField, setSortField] = useState<DiscoverSortField>(
-    restoredFilters?.sortField ?? DEFAULT_SORT_FIELD
-  );
-  const [sortDirection, setSortDirection] = useState<SortDirection>(
-    restoredFilters?.sortDirection ?? DEFAULT_SORT_DIRECTION
-  );
-  const [advanced, setAdvanced] = useState<AdvancedFiltersState>(
-    restoredFilters?.advanced ?? EMPTY_ADVANCED_FILTERS
-  );
+  // Filtres lus depuis l'URL (audit M13) : un retour arrière remonte la page
+  // sur l'URL de l'entrée d'historique, donc avec ses filtres.
+  const {
+    mediaType,
+    setMediaType,
+    genreIds,
+    setGenreIds,
+    providerIds,
+    setProviderIds,
+    useMyPlatforms,
+    setUseMyPlatforms,
+    sortField,
+    setSortField,
+    sortDirection,
+    setSortDirection,
+    advanced,
+    setAdvanced,
+  } = useDiscoverFilters();
   const [genres, setGenres] = useState<Genre[]>([]);
   const [providers, setProviders] = useState<WatchProviderOption[]>([]);
   const [page, setPage] = useState(restoredResults?.page ?? 1);
@@ -159,51 +145,12 @@ export default function DiscoverPage() {
       : a.badge.date.localeCompare(b.badge.date);
   });
 
-  // Ignore le premier passage : au montage, mediaType "change" (de rien à sa
-  // valeur initiale, éventuellement restaurée après un retour arrière) sans
-  // que ce soit une action de l'utilisateur — réinitialiser genreIds à ce
-  // moment-là écraserait les genres restaurés.
-  const skipGenreResetRef = useRef(true);
-  useEffect(() => {
-    if (skipGenreResetRef.current) {
-      skipGenreResetRef.current = false;
-      return;
-    }
-    setGenreIds([]);
-    setPage(1);
-  }, [mediaType]);
-
   useEffect(() => {
     if (keepRestoredResultsRef.current) {
       return;
     }
     setPage(1);
-  }, [genreIds, providerIds, useMyPlatforms, sortField, sortDirection, advancedKey]);
-
-  // Mémorise les filtres actifs pour cette entrée d'historique, afin de les
-  // réappliquer si l'utilisateur revient sur cette page via un retour arrière
-  // (bouton navigateur ou bouton "Retour" de la fiche détail, qui déclenche
-  // aussi un vrai POP).
-  useEffect(() => {
-    filtersMemory.set(location.key, {
-      mediaType,
-      genreIds,
-      providerIds,
-      useMyPlatforms,
-      sortField,
-      sortDirection,
-      advanced,
-    });
-  }, [
-    location.key,
-    mediaType,
-    genreIds,
-    providerIds,
-    useMyPlatforms,
-    sortField,
-    sortDirection,
-    advanced,
-  ]);
+  }, [mediaType, genreIds, providerIds, useMyPlatforms, sortField, sortDirection, advancedKey]);
 
   useEffect(() => {
     let cancelled = false;

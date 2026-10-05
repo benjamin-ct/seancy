@@ -99,44 +99,46 @@ export async function createMagicLink(
 // le jeton est invalide, expiré, ou déjà utilisé.
 // Liens émis avant le hachage (valables 15 min) : encore acceptés en clair
 // le temps qu'ils expirent, d'où le `IN (haché, clair)`.
+// Consommation atomique (un seul UPDATE … RETURNING, audit M2) : deux
+// requêtes simultanées avec le même jeton ne peuvent plus l'utiliser toutes
+// les deux, contrairement à l'ancien SELECT puis UPDATE.
 export async function consumeMagicLink(db: D1Database, token: string): Promise<string | null> {
-  const hashed = await hashToken(token);
+  const now = Date.now();
   const row = await db
-    .prepare("SELECT token, email, expires_at, used_at FROM magic_links WHERE token IN (?, ?)")
-    .bind(hashed, token)
-    .first<{ token: string; email: string; expires_at: number; used_at: number | null }>();
-  if (!row || row.used_at || row.expires_at < Date.now()) {
-    return null;
-  }
-  await db
-    .prepare("UPDATE magic_links SET used_at = ? WHERE token = ?")
-    .bind(Date.now(), row.token)
-    .run();
-  return row.email;
+    .prepare(
+      `UPDATE magic_links SET used_at = ?
+       WHERE token IN (?, ?) AND used_at IS NULL AND expires_at > ?
+       RETURNING email`
+    )
+    .bind(now, await hashToken(token), token, now)
+    .first<{ email: string }>();
+  return row?.email ?? null;
 }
 
 // Même chose que consumeMagicLink, mais par le code court plutôt que le
-// jeton — consomme la même ligne (donc invalide aussi le lien).
+// jeton — consomme la même ligne (donc invalide aussi le lien). Le code ne
+// vaut que pour l'adresse à laquelle il a été envoyé (audit M2) : un
+// bruteforce ne peut plus viser « n'importe quel compte ayant un code actif »,
+// et la limite de tentatives par adresse (voir handleVerify) le borne.
 export async function consumeMagicLinkByCode(
   db: D1Database,
+  email: string,
   code: string | undefined | null
 ): Promise<string | null> {
   const normalized = (code || "").trim().toUpperCase();
-  if (!normalized) {
+  if (!normalized || !email) {
     return null;
   }
+  const now = Date.now();
   const row = await db
-    .prepare("SELECT code, email, expires_at, used_at FROM magic_links WHERE code IN (?, ?)")
-    .bind(await hashToken(normalized), normalized)
-    .first<{ code: string; email: string; expires_at: number; used_at: number | null }>();
-  if (!row || row.used_at || row.expires_at < Date.now()) {
-    return null;
-  }
-  await db
-    .prepare("UPDATE magic_links SET used_at = ? WHERE code = ?")
-    .bind(Date.now(), row.code)
-    .run();
-  return row.email;
+    .prepare(
+      `UPDATE magic_links SET used_at = ?
+       WHERE code IN (?, ?) AND email = ? AND used_at IS NULL AND expires_at > ?
+       RETURNING email`
+    )
+    .bind(now, await hashToken(normalized), normalized, email, now)
+    .first<{ email: string }>();
+  return row?.email ?? null;
 }
 
 // Renvoie aussi le nom affiché et le lien de partage : le client les applique

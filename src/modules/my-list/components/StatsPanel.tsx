@@ -19,6 +19,7 @@ import styles from "./StatsPanel.module.css";
 const RECENT_COUNT = 8;
 const TOP_GENRES_COUNT = 6;
 const TOP_YEARS_COUNT = 5;
+const TOP_DECADES_COUNT = 6;
 const MAX_BACKFILL_PER_VISIT = 20;
 
 // Palette catégorielle validée (skill dataviz, slots 1 & 2 — colorblind-safe).
@@ -131,7 +132,9 @@ export default function StatsPanel({ watched }: { watched: LibraryItem[] }) {
 
   const yearCounts = new Map<string, number>();
   for (const item of watched) {
-    const year = new Date(item.addedAt).getFullYear().toString();
+    // watchedAt (date réelle de visionnage, choisie par l'utilisateur) prime sur
+    // addedAt (date d'ajout à la bibliothèque) quand elle est connue.
+    const year = new Date(item.watchedAt ?? item.addedAt).getFullYear().toString();
     yearCounts.set(year, (yearCounts.get(year) || 0) + 1);
   }
   const years = [...yearCounts.entries()]
@@ -139,10 +142,17 @@ export default function StatsPanel({ watched }: { watched: LibraryItem[] }) {
     .slice(0, TOP_YEARS_COUNT);
   const maxYearCount = Math.max(1, ...years.map(([, n]) => n));
 
+  // Classés par temps de visionnage plutôt que par nombre de titres (un film
+  // de 3h compte plus qu'un épisode de 20 min) — le nombre de titres reste
+  // affiché en complément, mais n'est plus le critère de tri.
   const genreCounts = new Map<number, number>();
+  const genreMinutes = new Map<number, number>();
   for (const item of watched) {
     for (const gId of item.genreIds || []) {
       genreCounts.set(gId, (genreCounts.get(gId) || 0) + 1);
+      if (item.runtimeMinutes != null) {
+        genreMinutes.set(gId, (genreMinutes.get(gId) || 0) + item.runtimeMinutes);
+      }
     }
   }
   // Filtre plutôt que de retomber sur un texte de repli : un id absent de
@@ -150,9 +160,31 @@ export default function StatsPanel({ watched }: { watched: LibraryItem[] }) {
   // jamais s'afficher comme un genre à part entière.
   const topGenres = [...genreCounts.entries()]
     .filter(([id]) => genreMap[id])
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => (genreMinutes.get(b[0]) || 0) - (genreMinutes.get(a[0]) || 0))
     .slice(0, TOP_GENRES_COUNT)
-    .map(([id, n]) => ({ id, name: genreMap[id], n }));
+    .map(([id, n]) => ({
+      id,
+      name: genreMap[id],
+      n,
+      hours: Math.round((genreMinutes.get(id) || 0) / 60),
+    }));
+
+  // Décennie de sortie des titres vus (pas la décennie à laquelle ils ont été
+  // vus) — pondérée en temps de visionnage, comme topGenres ci-dessus.
+  const decadeMinutes = new Map<string, number>();
+  for (const item of watched) {
+    const year = item.date ? parseInt(item.date.slice(0, 4), 10) : NaN;
+    if (!Number.isFinite(year) || item.runtimeMinutes == null) {
+      continue;
+    }
+    const decade = `${Math.floor(year / 10) * 10}`;
+    decadeMinutes.set(decade, (decadeMinutes.get(decade) || 0) + item.runtimeMinutes);
+  }
+  const decades = [...decadeMinutes.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, TOP_DECADES_COUNT)
+    .map(([decade, minutes]) => ({ decade, hours: Math.round(minutes / 60) }));
+  const maxDecadeHours = Math.max(1, ...decades.map((d) => d.hours));
 
   const recent = watched.slice(0, RECENT_COUNT);
 
@@ -226,12 +258,43 @@ export default function StatsPanel({ watched }: { watched: LibraryItem[] }) {
             <p className={styles.hint}>{t("common.loading")}</p>
           ) : topGenres.length ? (
             topGenres.map((g) => (
-              <span key={g.id} className={styles.gtag}>
-                {g.name} <span className={styles.gtagN}>{g.n}</span>
+              <span
+                key={g.id}
+                className={styles.gtag}
+                title={t("statsPanel.titlesCount", { count: g.n })}
+              >
+                {g.name}{" "}
+                <span className={styles.gtagN}>
+                  {g.hours} {t("statsPanel.hoursShort")}
+                </span>
               </span>
             ))
           ) : (
             <p className={styles.hint}>{t("statsPanel.noGenreYet")}</p>
+          )}
+        </div>
+      </div>
+
+      <div className={`${styles.ticket} ${styles.span12}`}>
+        <span className={styles.k}>{t("statsPanel.watchTimeByDecade")}</span>
+        <div className={styles.bars}>
+          {decades.length ? (
+            decades.map(({ decade, hours }) => (
+              <div key={decade} className={styles.barRow}>
+                <span>{t("statsPanel.decadeLabel", { decade })}</span>
+                <div className={styles.barTrack}>
+                  <div
+                    className={styles.barFill}
+                    style={{ width: `${Math.round((hours / maxDecadeHours) * 100)}%` }}
+                  />
+                </div>
+                <span className={styles.barValue}>
+                  {hours} {t("statsPanel.hoursShort")}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className={styles.hint}>{t("statsPanel.noDataYet")}</p>
           )}
         </div>
       </div>

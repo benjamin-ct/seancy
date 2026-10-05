@@ -25,6 +25,11 @@ export interface LibraryItemInput {
 export interface LibraryItem extends LibraryItemInput {
   addedAt: number;
   updatedAt: number;
+  /** Date réelle de visionnage, choisie par l'utilisateur (sinon vu "aujourd'hui" :
+   * absent, les stats/recommandations retombent alors sur `addedAt`). Sert aussi à
+   * ne pas faire apparaître comme "récent" dans le fil social un film vu il y a
+   * longtemps mais coché aujourd'hui. */
+  watchedAt?: number;
   rating?: number | null;
   /** Uniquement pour les séries — clés "saison-épisode", ex. "1-5". */
   watchedEpisodes?: string[];

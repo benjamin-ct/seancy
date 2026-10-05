@@ -22,6 +22,8 @@ import { RegionProvider, fetchRegion, loadStoredRegion } from "./core/context/Re
 import { RegionAccountSync } from "./core/context/RegionAccountSync.tsx";
 import { DEFAULT_REGION } from "./core/api/releaseBadge.ts";
 import { FavoriteProvidersProvider } from "./core/context/FavoriteProvidersContext.tsx";
+import { FavoriteLanguagesProvider } from "./core/context/FavoriteLanguagesContext.tsx";
+import { FavoriteCountriesProvider } from "./core/context/FavoriteCountriesContext.tsx";
 import { ExcludedGenresProvider } from "./core/context/ExcludedGenresContext.tsx";
 import { ExcludedTitlesProvider } from "./core/context/ExcludedTitlesContext.tsx";
 import { ThemeProvider } from "./core/context/ThemeContext.tsx";
@@ -168,19 +170,23 @@ createRoot(rootElement, {
               <LocaleAccountSync>
                 <RegionAccountSync>
                   <FavoriteProvidersProvider>
-                    <ExcludedGenresProvider>
-                      <ExcludedTitlesProvider>
-                        <MembersOnlyProvider>
-                          <LibraryProvider>
-                            <RemindersProvider>
-                              <ErrorBoundary>
-                                <App />
-                              </ErrorBoundary>
-                            </RemindersProvider>
-                          </LibraryProvider>
-                        </MembersOnlyProvider>
-                      </ExcludedTitlesProvider>
-                    </ExcludedGenresProvider>
+                    <FavoriteLanguagesProvider>
+                      <FavoriteCountriesProvider>
+                        <ExcludedGenresProvider>
+                          <ExcludedTitlesProvider>
+                            <MembersOnlyProvider>
+                              <LibraryProvider>
+                                <RemindersProvider>
+                                  <ErrorBoundary>
+                                    <App />
+                                  </ErrorBoundary>
+                                </RemindersProvider>
+                              </LibraryProvider>
+                            </MembersOnlyProvider>
+                          </ExcludedTitlesProvider>
+                        </ExcludedGenresProvider>
+                      </FavoriteCountriesProvider>
+                    </FavoriteLanguagesProvider>
                   </FavoriteProvidersProvider>
                 </RegionAccountSync>
               </LocaleAccountSync>

@@ -9,7 +9,8 @@ conteneur qui a le repo `bobine` monté, puis notifie Discord.
 - `docker-compose-bobine.yml` — les deux services (`webhook-listener`, `bobine-repo`).
 - `listener/` — le serveur Node qui reçoit les webhooks Trello et lance Claude Code.
 - `bobine-repo/` — l'image dans laquelle tourne Claude Code (avec `git`, `gh`, accès SSH) et
-  `bobine-claude-run.sh`, le script qui lance chaque exécution (voir « Clone de travail de Claude »).
+  `bobine-claude-run.sh`, le script qui lance chaque exécution (voir « Clone de travail de Claude »),
+  et `bobine-claude-dev.sh`, le wrapper du développeur délégué.
 - `ssh-keys/` — uniquement `config` (pas de secret) ; voir `ssh-keys/README.md` pour générer la
   clé privée directement sur le serveur.
 - `.env.example` — modèle des variables d'environnement à fournir via un `.env` local.
@@ -41,7 +42,11 @@ la stack sans attendre qu'il ait fini, ni le retrouver sur une branche de ticket
   4. fait le ménage : supprime les worktrees de validation locale restés dans `/tmp` (et leurs
      `node_modules`), les branches locales dont la branche distante a disparu (PR mergée ou
      fermée), les stashes de plus de 30 jours, puis `git gc --auto` ;
-  5. lance `claude -p`, en ajoutant au prompt une note « REPRISE » si l'exécution précédente
+  5. écrit `CLAUDE_CODE_OAUTH_TOKEN` dans `~/.bobine-claude-token` (`chmod 600`, réécrit à chaque
+     exécution) pour `bobine-claude-dev`, le wrapper qui lance le développeur délégué
+     (« Modèle et effort par ticket » du skill) : Claude Code retire ce jeton de l'environnement
+     des commandes qu'il lance. Le jeton devient donc lisible par ces commandes (choix assumé) ;
+  6. lance `claude -p`, en ajoutant au prompt une note « REPRISE » si l'exécution précédente
      s'est interrompue (modifications mises de côté, commits locaux non poussés sur une branche
      de ticket), pour que Claude reparte de ce travail plutôt que de zéro.
 - Reprise après coupure (courant, crédits épuisés, `bobine-rebuild --force`…) : la carte reste en

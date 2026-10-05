@@ -44,6 +44,8 @@ export type SyncResource =
   | "custom-lists"
   | "excluded-genres"
   | "favorite-providers"
+  | "favorite-languages"
+  | "favorite-countries"
   | "locale"
   | "region"
   | "display-name"

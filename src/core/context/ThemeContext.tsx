@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { storageGet, storageSet } from "../../shared/lib/storage.ts";
 
 // NOUVEAU (repris de la maquette HTML, le Projet A n'avait qu'un thème
 // sombre fixe avant migration) : choix clair/sombre/auto, persisté et
@@ -36,13 +37,9 @@ function systemPreference(): Theme {
 }
 
 function loadInitialPreference(): ThemePreference {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "auto") {
-      return stored;
-    }
-  } catch {
-    // localStorage indisponible (mode privé strict...) : repli silencieux.
+  const stored = storageGet(STORAGE_KEY);
+  if (stored === "light" || stored === "dark" || stored === "auto") {
+    return stored;
   }
   return "auto";
 }
@@ -85,12 +82,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, preference);
-    } catch {
-      // Repli silencieux : la préférence reste appliquée pour cette session,
-      // simplement pas mémorisée pour la prochaine visite.
-    }
+    storageSet(STORAGE_KEY, preference);
   }, [preference]);
 
   const value = useMemo(() => ({ theme, preference, setPreference }), [theme, preference]);

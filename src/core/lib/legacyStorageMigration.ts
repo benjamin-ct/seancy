@@ -9,6 +9,8 @@
 // (plus aucune clé « bobine. » à parcourir). Si la nouvelle clé existe déjà
 // (écrite entre-temps par la nouvelle version), elle fait foi et l'ancienne
 // est simplement supprimée.
+import { storageGet, storageRemove, storageSet } from "../../shared/lib/storage.ts";
+
 const LEGACY_PREFIX = "bobine.";
 const PREFIX = "seancy.";
 
@@ -20,13 +22,15 @@ try {
       legacyKeys.push(key);
     }
   }
+  // Clé par clé via le helper sûr : une clé qui échoue (quota dépassé...) ne
+  // doit pas empêcher la migration des suivantes.
   for (const key of legacyKeys) {
     const newKey = PREFIX + key.slice(LEGACY_PREFIX.length);
-    const value = localStorage.getItem(key);
-    if (value !== null && localStorage.getItem(newKey) === null) {
-      localStorage.setItem(newKey, value);
+    const value = storageGet(key);
+    if (value !== null && storageGet(newKey) === null) {
+      storageSet(newKey, value);
     }
-    localStorage.removeItem(key);
+    storageRemove(key);
   }
 } catch {
   // localStorage indisponible (navigation privée stricte…) : rien à migrer.

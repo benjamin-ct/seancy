@@ -129,6 +129,8 @@ const VIEWER_FOLLOWS = `EXISTS (SELECT 1 FROM follows v WHERE v.follower_id = ?2
 
 // « N vus · N en commun avec vous » (modale « Réseau de X ») : titres vus du
 // profil, et ceux que le visiteur (id -1 s'il n'est pas connecté) a vus aussi.
+// Comptés sur l'index library_items(user_id, status, media_type, tmdb_id)
+// (migration 0017) sans lire les lignes elles-mêmes (audit M6).
 const WATCHED_COUNTS = `(SELECT COUNT(*) FROM library_items w
     WHERE w.user_id = users.id AND w.status = 'watched') AS watched_count,
   (SELECT COUNT(*) FROM library_items w
@@ -198,6 +200,10 @@ export async function searchProfiles(
 // Fil d'activité : dernières entrées "vu" / "envie de voir" des profils
 // suivis encore partagés, du plus récent au plus ancien. `updated_at` bouge
 // aussi quand un titre est noté : une note récente remonte donc le titre.
+// Les FEED_LIMIT plus récentes du fil sont forcément parmi les FEED_LIMIT
+// plus récentes de chaque profil : seules celles-là sont lues, via l'index
+// (user_id, updated_at), au lieu de toute la bibliothèque de chaque profil
+// suivi (audit M6). Aucune entrée ne peut donc manquer au fil.
 export async function getFeed(db: D1Database, userId: number): Promise<FeedEntry[]> {
   const { results } = await db
     .prepare(
@@ -205,9 +211,16 @@ export async function getFeed(db: D1Database, userId: number): Promise<FeedEntry
               library_items.data, library_items.updated_at
        FROM follows
        JOIN users ON users.id = follows.followed_id AND users.share_slug IS NOT NULL
-       JOIN library_items ON library_items.user_id = users.id
+       JOIN library_items ON library_items.rowid IN (
+         SELECT recent.rowid FROM library_items recent
+         WHERE recent.user_id = users.id
+         ORDER BY recent.updated_at DESC LIMIT ${FEED_LIMIT}
+       )
        WHERE follows.follower_id = ?
-       ORDER BY library_items.updated_at DESC LIMIT ${FEED_LIMIT}`
+       ORDER BY CASE WHEN library_items.status = 'watched'
+                  THEN COALESCE(json_extract(library_items.data, '$.watchedAt'), library_items.updated_at)
+                  ELSE library_items.updated_at END DESC
+       LIMIT ${FEED_LIMIT}`
     )
     .bind(userId)
     .all<{
@@ -219,13 +232,21 @@ export async function getFeed(db: D1Database, userId: number): Promise<FeedEntry
     }>();
   return results.map((row) => {
     const { watchedEpisodes: _watchedEpisodes, ...item } = JSON.parse(row.data) as LibraryItem;
+    // Un titre "vu" daté dans le passé (voir LibraryContext, toggleWatched) doit
+    // apparaître comme tel dans le fil — pas comme "à l'instant" sous prétexte
+    // que c'est maintenant qu'il a été coché (cf. ticket "ne pas spammer mes
+    // contacts de récemment vu par").
+    const effectiveDate =
+      row.status === "watched" && typeof item.watchedAt === "number"
+        ? item.watchedAt
+        : row.updated_at;
     return {
       profile: { slug: row.share_slug, displayName: row.display_name },
       status: row.status,
       item: {
         ...item,
         title: typeof item.title === "string" ? decodeHtmlEntities(item.title) : item.title,
-        updatedAt: row.updated_at,
+        updatedAt: effectiveDate,
       },
     };
   });
@@ -272,7 +293,10 @@ export async function getTitleActivity(
          JOIN library_items ON library_items.user_id = users.id
            AND library_items.media_type = ? AND library_items.tmdb_id = ?
          WHERE follows.follower_id = ?
-         ORDER BY library_items.status = 'watched' DESC, library_items.updated_at DESC
+         ORDER BY library_items.status = 'watched' DESC,
+                  CASE WHEN library_items.status = 'watched'
+                    THEN COALESCE(json_extract(library_items.data, '$.watchedAt'), library_items.updated_at)
+                    ELSE library_items.updated_at END DESC
          LIMIT ${LIST_LIMIT}`
       )
       .bind(mediaType, tmdbId, userId)
@@ -287,12 +311,14 @@ export async function getTitleActivity(
   return {
     following: counts.following,
     entries: results.map((row) => {
-      const { rating, watchedEpisodes } = JSON.parse(row.data) as LibraryItem;
+      const { rating, watchedEpisodes, watchedAt } = JSON.parse(row.data) as LibraryItem;
+      const effectiveDate =
+        row.status === "watched" && typeof watchedAt === "number" ? watchedAt : row.updated_at;
       return {
         profile: { slug: row.share_slug, displayName: row.display_name },
         status: row.status,
         rating: row.status === "watched" && typeof rating === "number" ? rating : null,
-        updatedAt: row.updated_at,
+        updatedAt: effectiveDate,
         progress: row.status === "watchlist" ? lastWatchedEpisode(watchedEpisodes) : null,
       };
     }),

@@ -55,6 +55,40 @@ check(
   estimateRuntimeMinutes({ episode_run_time: [42] }, "tv"),
   null
 );
+check(
+  "Série : episode_run_time vide -> repli sur last_episode_to_air.runtime (Breaking Bad)",
+  estimateRuntimeMinutes(
+    {
+      episode_run_time: [],
+      number_of_episodes: 62,
+      last_episode_to_air: { runtime: 56, season_number: 5, episode_number: 16 },
+    },
+    "tv"
+  ),
+  3472
+);
+check(
+  "Série : episode_run_time et last_episode_to_air absents -> repli sur next_episode_to_air.runtime",
+  estimateRuntimeMinutes(
+    {
+      number_of_episodes: 10,
+      next_episode_to_air: { runtime: 45, season_number: 1, episode_number: 3 },
+    },
+    "tv"
+  ),
+  450
+);
+check(
+  "Série : aucune source de durée -> null",
+  estimateRuntimeMinutes(
+    {
+      number_of_episodes: 10,
+      last_episode_to_air: { runtime: null, season_number: 1, episode_number: 9 },
+    },
+    "tv"
+  ),
+  null
+);
 check("Détails null -> null (pas de crash)", estimateRuntimeMinutes(null, "movie"), null);
 
 // --- getTheatricalDateFromDetails ---------------------------------------
