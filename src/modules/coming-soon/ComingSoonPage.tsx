@@ -22,7 +22,8 @@ import { useFavoriteCountries } from "../../core/context/FavoriteCountriesContex
 import { useFavoriteLanguages } from "../../core/context/FavoriteLanguagesContext.tsx";
 import { useExcludedGenres } from "../../core/context/ExcludedGenresContext.tsx";
 import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx";
-import { useLibrary } from "../../core/context/LibraryContext.tsx";
+import { useLibraryActions } from "../../core/context/LibraryContext.tsx";
+import { useIsInWatchlist } from "../../core/context/useLibrarySelectors.ts";
 import { useReminders } from "../../core/context/RemindersContext.tsx";
 import {
   FilterPanel,
@@ -94,7 +95,10 @@ const THEATRICAL_LABEL = "Cinéma";
 
 function TimelineItem({ item }: { item: MediaItem }) {
   const { t } = useTranslation();
-  const { isInWatchlist, toggleWatchlist } = useLibrary();
+  // Sélecteur fin plutôt que useLibrary() : une action sur la bibliothèque
+  // ne re-rend que la ligne concernée, pas toute la frise.
+  const { toggleWatchlist } = useLibraryActions();
+  const wanted = useIsInWatchlist(item.mediaType, item.id);
   const { hasReminder, toggleReminder } = useReminders();
   const { locale } = useLocale();
   const { region, getTheatricalStatus } = useRegion();
@@ -120,7 +124,6 @@ function TimelineItem({ item }: { item: MediaItem }) {
   const date = releaseDateOf(item);
   // Rappel et envie de voir sont indépendants : l'un n'implique pas l'autre.
   const notifying = hasReminder(item.mediaType, item.id);
-  const wanted = isInWatchlist(item.mediaType, item.id);
   const posterPath = item.poster_path ?? null;
   const accentKey = posterAccentFromGenres(item.genre_ids, `${item.mediaType}:${item.id}`);
 
