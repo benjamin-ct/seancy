@@ -322,8 +322,8 @@ async function handleSubscribe(request: Request, env: Env): Promise<Response> {
 
   const subscriptionId = await upsertSubscription(env.DB, {
     endpoint,
-    p256dh: String(keys.p256dh),
-    auth: String(keys.auth),
+    p256dh: String(keys?.p256dh),
+    auth: String(keys?.auth),
     locale: sanitizeSubscriptionLocale(locale),
     account: await subscriptionAccountOf(request, env),
   });
