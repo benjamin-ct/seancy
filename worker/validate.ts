@@ -412,7 +412,12 @@ export function sanitizeIsoCodeList(rawCodes: unknown, pattern: RegExp): string[
 export const LANGUAGE_CODE_PATTERN = /^[a-z]{2}$/;
 export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
 
-const MAX_CUSTOM_LISTS = 200; // large marge au-dessus d'un usage réel
+// Audit M4 : abaissé de 200/5000 à 50/1000 — une liste perso n'a jamais eu
+// besoin de la même marge que watched/watchlist (MAX_ITEMS_PER_LIST), et ces
+// plafonds bornent surtout l'amplification d'écritures D1 d'un remplacement
+// complet (voir replaceCustomListsForUser et upsertCustomListForUser).
+export const MAX_CUSTOM_LISTS = 50;
+const MAX_CUSTOM_LIST_ITEMS = 1000;
 
 export interface CleanCustomList {
   id: string;
@@ -462,8 +467,15 @@ function sanitizeCustomList(id: string, raw: unknown): CleanCustomList | null {
       seenKeys.add(key);
       return true;
     })
-    .slice(0, MAX_ITEMS_PER_LIST);
+    .slice(0, MAX_CUSTOM_LIST_ITEMS);
   return { id, name, createdAt, items };
+}
+
+// Une seule liste (voir PUT /api/custom-lists/:listId) : même validation que
+// sanitizeCustomList ci-dessus, `id` venant de l'URL plutôt que de la clé du
+// payload.
+export function sanitizeSingleCustomList(id: string, body: unknown): CleanCustomList | null {
+  return sanitizeCustomList(id, body);
 }
 
 // Listes perso complètes (voir PUT /api/custom-lists) : { "list-...": { name,

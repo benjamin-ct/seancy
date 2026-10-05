@@ -12,6 +12,7 @@ import { getAvatar } from "./avatars.ts";
 import { getRemindersForUser, type ReminderSummary } from "./reminders.ts";
 import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
 import type {
+  CleanCustomList,
   CleanCustomListMap,
   CleanGenrePref,
   CleanKey,
@@ -699,10 +700,13 @@ export async function getCustomListsForUser(
 }
 
 // Remplacement complet volontaire, comme replaceLibraryForUser ci-dessus :
-// contrairement à library_items (un toggle par item), une liste perso change
-// par opérations qui touchent plusieurs lignes à la fois (création,
-// renommage, glisser-déposer) — un vrai diff incrémental côté serveur
-// n'apporterait rien ici vu l'échelle (usage personnel).
+// réservé depuis l'audit M4 à la fusion initiale d'un nouvel appareil (voir
+// handlePutCustomLists) — un vrai remplacement complet y est correct et
+// rare. Toute modification normale d'une liste perso passe désormais par
+// upsertCustomListForUser/deleteCustomListForUser ci-dessus, qui ne
+// touchent que CETTE liste : avant, modifier un item dans une liste
+// réécrivait aussi toutes les autres listes du compte (amplification
+// d'écritures D1 déjà observée, voir ticket "Milliers de calls workers").
 export async function replaceCustomListsForUser(
   db: D1Database,
   userId: number,
@@ -728,6 +732,75 @@ export async function replaceCustomListsForUser(
     });
   }
   await db.batch(statements);
+}
+
+// Nombre de listes perso déjà enregistrées pour ce compte (voir
+// MAX_CUSTOM_LISTS côté validate.ts) : vérifié avant d'accepter la création
+// d'une nouvelle liste via upsertCustomListForUser, qui ne voit qu'UNE
+// liste à la fois et ne peut donc pas plafonner lui-même le total.
+export async function countCustomListsForUser(db: D1Database, userId: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) as count FROM custom_lists WHERE user_id = ?")
+    .bind(userId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+// Existence seule (pas les items) : utilisé pour distinguer une édition
+// (liste déjà connue) d'une création, sans le coût de getCustomListsForUser
+// (qui relit tous les items de toutes les listes) juste pour cette question.
+export async function customListExistsForUser(
+  db: D1Database,
+  userId: number,
+  listId: string
+): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 FROM custom_lists WHERE user_id = ? AND id = ?")
+    .bind(userId, listId)
+    .first();
+  return row !== null;
+}
+
+// Remplacement d'UNE SEULE liste perso (voir PUT /api/custom-lists/:listId,
+// audit M4) : contrairement à replaceCustomListsForUser ci-dessus, ne touche
+// que les lignes de cette liste — modifier une liste de 100 items n'amplifie
+// plus en écritures D1 les 49 autres listes du compte restées inchangées.
+export async function upsertCustomListForUser(
+  db: D1Database,
+  userId: number,
+  list: CleanCustomList
+): Promise<void> {
+  const itemStmt = db.prepare(
+    "INSERT INTO custom_list_items (user_id, list_id, media_type, tmdb_id, data, position) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `INSERT INTO custom_lists (id, user_id, name, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, id) DO UPDATE SET name = excluded.name`
+      )
+      .bind(list.id, userId, list.name, list.createdAt),
+    db
+      .prepare("DELETE FROM custom_list_items WHERE user_id = ? AND list_id = ?")
+      .bind(userId, list.id),
+    ...list.items.map((item: CleanLibraryItem, index: number) =>
+      itemStmt.bind(userId, list.id, item.mediaType, item.id, JSON.stringify(item), index)
+    ),
+  ];
+  await db.batch(statements);
+}
+
+export async function deleteCustomListForUser(
+  db: D1Database,
+  userId: number,
+  listId: string
+): Promise<void> {
+  await db.batch([
+    db
+      .prepare("DELETE FROM custom_list_items WHERE user_id = ? AND list_id = ?")
+      .bind(userId, listId),
+    db.prepare("DELETE FROM custom_lists WHERE user_id = ? AND id = ?").bind(userId, listId),
+  ]);
 }
 
 // Partage des listes perso en lecture seule (migration 0010). -------------
