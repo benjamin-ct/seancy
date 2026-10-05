@@ -14,6 +14,10 @@ import {
   applyLibraryChanges,
   getCustomListsForUser,
   replaceCustomListsForUser,
+  upsertCustomListForUser,
+  deleteCustomListForUser,
+  countCustomListsForUser,
+  customListExistsForUser,
   getListSharesForUser,
   shareListForUser,
   unshareListForUser,
@@ -87,6 +91,8 @@ import {
   sanitizeGenrePrefs,
   sanitizeKeyList,
   sanitizeCustomListsPayload,
+  sanitizeSingleCustomList,
+  MAX_CUSTOM_LISTS,
   sanitizeDisplayName,
   sanitizeIdList,
   sanitizeIsoCodeList,
@@ -252,6 +258,19 @@ const SEARCH_INDEX_SYNC_CRON = "30 7 * * *";
 
 const RATE_LIMIT_RESPONSE = (): Response =>
   json({ error: "Trop de requêtes. Réessayez dans quelques minutes." }, 429);
+
+// Audit M4 : plafond de taille de corps pour les écritures authentifiées à
+// fort volume potentiel (library, library/sync, custom-lists, excluded-genres,
+// favorite-providers) — large marge au-dessus d'un payload légitime (ex.
+// 1000 items de liste perso, voir MAX_CUSTOM_LIST_ITEMS), mais qui écarte
+// avant même `request.json()` un corps disproportionné.
+const MAX_WRITE_BODY_BYTES = 1_000_000;
+
+function writeBodyTooLarge(request: Request): boolean {
+  return Number(request.headers.get("content-length") ?? 0) > MAX_WRITE_BODY_BYTES;
+}
+
+const BODY_TOO_LARGE_RESPONSE = (): Response => json({ error: "Requête trop volumineuse." }, 413);
 
 // Variante du proxy TMDB : `retry-after` (fin de la fenêtre d'une minute de
 // ses plafonds) permet à tmdbFetch de réessayer tout seul au bon moment
@@ -1536,6 +1555,12 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
+  if (!(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library:user:${user.id}` })).success) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -1567,6 +1592,14 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library-sync:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1601,15 +1634,26 @@ async function handleGetCustomLists(request: Request, env: Env): Promise<Respons
   return json(customLists);
 }
 
-// Remplacement complet à chaque appel (voir LibraryContext : anti-rebond côté
-// client, un PUT par salve de changements) — pas de synchronisation
-// incrémentale ici, contrairement à /api/library/sync : une liste perso
-// change par opérations multi-lignes (création, renommage, glisser-déposer)
-// qu'un diff incrémental compliquerait pour un gain nul à cette échelle.
+// Remplacement complet de TOUTES les listes perso — réservé depuis l'audit
+// M4 à la fusion initiale d'un nouvel appareil (voir LibraryContext,
+// CUSTOM_LISTS_SYNCED_FOR_KEY), un vrai remplacement complet y est correct
+// et rare. Toute modification normale passe désormais par
+// handlePutCustomList/handleDeleteCustomList ci-dessous (une seule liste à
+// la fois) : avant, éditer un item d'une liste réécrivait aussi toutes les
+// autres listes du compte en D1 (amplification déjà observée, voir ticket
+// "Milliers de calls workers").
 async function handlePutCustomLists(request: Request, env: Env): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-lists:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1618,6 +1662,68 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
     return json({ error: "JSON invalide." }, 400);
   }
   await replaceCustomListsForUser(env.DB, user.id, sanitizeCustomListsPayload(body));
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+// Remplacement d'UNE SEULE liste perso (audit M4, « synchro incrémentale ») :
+// chemin normal pour toute création/modification (création, renommage,
+// ajout/retrait d'item, glisser-déposer) une fois la fusion initiale faite.
+// Toujours un remplacement complet DE CETTE LISTE (pas de diff item par
+// item) : une liste change par opérations multi-lignes, comme documenté sur
+// replaceCustomListsForUser — seule la granularité change, pas la stratégie.
+async function handlePutCustomList(request: Request, env: Env, listId: string): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const list = sanitizeSingleCustomList(listId, body);
+  if (!list) {
+    return json({ error: "Liste invalide." }, 400);
+  }
+  // Le plafond total (MAX_CUSTOM_LISTS) ne peut être vérifié qu'ici, pas dans
+  // le sanitizer : celui-ci ne voit qu'une liste à la fois, pas le total déjà
+  // en base. Un ré-envoi d'une liste déjà existante (simple édition) reste
+  // toujours accepté, seule la création d'une liste EN PLUS du plafond est
+  // refusée.
+  const alreadyExists = await customListExistsForUser(env.DB, user.id, list.id);
+  if (!alreadyExists && (await countCustomListsForUser(env.DB, user.id)) >= MAX_CUSTOM_LISTS) {
+    return json({ error: "Nombre maximal de listes atteint.", reason: "too-many-lists" }, 400);
+  }
+  await upsertCustomListForUser(env.DB, user.id, list);
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+async function handleDeleteCustomList(
+  request: Request,
+  env: Env,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await deleteCustomListForUser(env.DB, user.id, listId);
   publishToUser(request, user.id, { type: "custom-lists" });
   return json({ ok: true });
 }
@@ -1702,6 +1808,15 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   if (user instanceof Response) {
     return user;
   }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `excluded-genres:user:${user.id}` }))
+      .success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -1732,6 +1847,15 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `favorite-providers:user:${user.id}` }))
+      .success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -2496,6 +2620,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/custom-lists" && request.method === "PUT") {
     return handlePutCustomLists(request, env);
+  }
+
+  const singleCustomListMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)$/);
+  if (singleCustomListMatch && request.method === "PUT") {
+    return handlePutCustomList(request, env, singleCustomListMatch[1]);
+  }
+  if (singleCustomListMatch && request.method === "DELETE") {
+    return handleDeleteCustomList(request, env, singleCustomListMatch[1]);
   }
 
   if (url.pathname === "/api/list-shares" && request.method === "GET") {
