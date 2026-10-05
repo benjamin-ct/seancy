@@ -785,7 +785,7 @@
     "noOverview": "Pas de synopsis disponible.",
     "watchedOn": "Déjà vu",
     "watchedOff": "Marquer comme vu",
-    "watchDateAriaLabel": "Choisir une date de visionnage",
+    "watchDateAriaLabel": "Marquer comme vu à une date précise",
     "watchDateFutureError": "La date de visionnage ne peut pas être dans le futur.",
     "wantToWatchOn": "Dans vos envies",
     "wantToWatchOff": "Envie de voir",
