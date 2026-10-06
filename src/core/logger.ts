@@ -14,6 +14,25 @@ type SentryModule = typeof import("@sentry/react");
 let sentryInitPromise: Promise<void> | null = null;
 let sentry: SentryModule | null = null;
 
+// Mêmes hostnames que worker/sentry.ts (dupliqués plutôt qu'importés : ce
+// fichier est bundlé côté client, worker/sentry.ts dépend de
+// @sentry/cloudflare). Sans environment explicite, le SDK retombe sur
+// "production" par défaut — voir ticket Trello "Dashboard de suivis de
+// Claude".
+const PRODUCTION_HOSTNAME = "seancy.com";
+const LEGACY_PRODUCTION_HOSTNAME = "bobine.creusatbenjamin.workers.dev";
+const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+
+function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
+  if (hostname === PRODUCTION_HOSTNAME || hostname === LEGACY_PRODUCTION_HOSTNAME) {
+    return "production";
+  }
+  if (hostname === PREPROD_HOSTNAME) {
+    return "preprod";
+  }
+  return "preview";
+}
+
 export function ensureSentryInit(): Promise<void> {
   if (!sentryInitPromise) {
     sentryInitPromise = fetch("/api/sentry-dsn")
@@ -21,7 +40,16 @@ export function ensureSentryInit(): Promise<void> {
       .then(async ({ dsn }: { dsn?: string | null }) => {
         if (dsn) {
           const module = await import("@sentry/react");
-          module.init({ dsn, tracesSampleRate: 0 });
+          // Tag partagé avec le Worker (worker/sentry.ts) et le script de
+          // logs infra du NAS : permet de filtrer un seul projet Sentry
+          // plutôt que d'en séparer un par source (voir ticket Trello
+          // "Avenir du développement").
+          module.init({
+            dsn,
+            tracesSampleRate: 0,
+            environment: getEnvironmentName(window.location.hostname),
+            initialScope: { tags: { source: "app" } },
+          });
           sentry = module;
         }
       })
