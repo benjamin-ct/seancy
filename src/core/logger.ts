@@ -9,7 +9,7 @@
 // Le SDK est chargé à la demande (`import()`), une fois le DSN connu : il
 // n'alourdit plus le bundle initial, et n'est jamais téléchargé sans DSN
 // (audit H6).
-type SentryModule = typeof import("@sentry/react");
+type SentryModule = typeof import("./sentryClient.ts");
 
 let sentryInitPromise: Promise<void> | null = null;
 let sentry: SentryModule | null = null;
@@ -39,7 +39,7 @@ export function ensureSentryInit(): Promise<void> {
       .then((res) => res.json())
       .then(async ({ dsn }: { dsn?: string | null }) => {
         if (dsn) {
-          const module = await import("@sentry/react");
+          const module = await import("./sentryClient.ts");
           // Tag partagé avec le Worker (worker/sentry.ts) et le script de
           // logs infra du NAS : permet de filtrer un seul projet Sentry
           // plutôt que d'en séparer un par source (voir ticket Trello

@@ -128,6 +128,18 @@ interface LibraryContextValue {
   reorderList: (listId: string, fromKey: string, toKey: string, insertAfter: boolean) => void;
 }
 
+// Actions des cartes (MediaCard, rangées de listes) séparées du reste :
+// leur valeur ne dépend pas de l'état de la bibliothèque, donc une carte
+// qui ne lit que ça (plus les sélecteurs fins de useLibrarySelectors.ts)
+// ne se re-rend plus à chaque action sur la bibliothèque — useLibrary(),
+// recalculé à chaque changement d'état, re-rendait toute la grille.
+interface LibraryActionsContextValue {
+  toggleWatched: LibraryContextValue["toggleWatched"];
+  toggleWatchlist: LibraryContextValue["toggleWatchlist"];
+}
+
+const LibraryActionsContext = createContext<LibraryActionsContextValue | null>(null);
+
 const LibraryContext = createContext<LibraryContextValue | null>(null);
 
 function makeKey(mediaType: MediaType, id: number | string): string {
@@ -1202,22 +1214,34 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     });
   }, [state.watchlist, watchlistOrder]);
 
+  // Toute action utilisateur qui écrit dans la bibliothèque est réservée
+  // aux membres connectés : pour un visiteur anonyme, elle ouvre la modale
+  // de connexion au lieu de s'exécuter (voir MembersOnlyContext). Gardé ici
+  // plutôt qu'à chaque bouton pour ne jamais oublier un point d'entrée.
+  // setRuntime/setDirectors restent libres : ce sont des compléments de
+  // métadonnées déclenchés automatiquement, pas des actions de l'utilisateur.
+  const gated = useCallback(
+    <A extends unknown[], R>(fn: (...args: A) => R, blocked: R) =>
+      (...args: A): R =>
+        requireMember() ? fn(...args) : blocked,
+    [requireMember]
+  );
+
+  const actions = useMemo<LibraryActionsContextValue>(
+    () => ({
+      toggleWatched: gated(toggleWatched, undefined),
+      toggleWatchlist: gated(toggleWatchlist, undefined),
+    }),
+    [gated, toggleWatched, toggleWatchlist]
+  );
+
   const value = useMemo<LibraryContextValue>(() => {
-    // Toute action utilisateur qui écrit dans la bibliothèque est réservée
-    // aux membres connectés : pour un visiteur anonyme, elle ouvre la modale
-    // de connexion au lieu de s'exécuter (voir MembersOnlyContext). Gardé ici
-    // plutôt qu'à chaque bouton pour ne jamais oublier un point d'entrée.
-    // setRuntime/setDirectors restent libres : ce sont des compléments de
-    // métadonnées déclenchés automatiquement, pas des actions de l'utilisateur.
-    function gated<A extends unknown[], R>(fn: (...args: A) => R, blocked: R) {
-      return (...args: A): R => (requireMember() ? fn(...args) : blocked);
-    }
     return {
       watched: Object.values(state.watched).sort((a, b) => b.addedAt - a.addedAt),
       watchlist: orderedWatchlist,
       watchedIds: new Set(Object.keys(state.watched)),
-      toggleWatched: gated(toggleWatched, undefined),
-      toggleWatchlist: gated(toggleWatchlist, undefined),
+      toggleWatched: actions.toggleWatched,
+      toggleWatchlist: actions.toggleWatchlist,
       isWatched,
       isInWatchlist,
       getRating,
@@ -1241,11 +1265,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       reorderList: gated(reorderList, undefined),
     };
   }, [
-    requireMember,
+    gated,
+    actions,
     state,
     orderedWatchlist,
-    toggleWatched,
-    toggleWatchlist,
     isWatched,
     isInWatchlist,
     getRating,
@@ -1269,7 +1292,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     reorderList,
   ]);
 
-  return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
+  return (
+    <LibraryActionsContext.Provider value={actions}>
+      <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
+    </LibraryActionsContext.Provider>
+  );
+}
+
+export function useLibraryActions(): LibraryActionsContextValue {
+  const ctx = useContext(LibraryActionsContext);
+  if (!ctx) {
+    throw new Error("useLibraryActions doit être utilisé dans un LibraryProvider");
+  }
+  return ctx;
 }
 
 export function useLibrary(): LibraryContextValue {

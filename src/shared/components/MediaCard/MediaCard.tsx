@@ -9,7 +9,7 @@ import {
   formatFullDate,
 } from "../../../core/api/tmdb.ts";
 import { useNearViewport } from "../../hooks/useNearViewport.ts";
-import { useLibrary } from "../../../core/context/LibraryContext.tsx";
+import { useLibraryActions } from "../../../core/context/LibraryContext.tsx";
 import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrarySelectors.ts";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
@@ -71,7 +71,7 @@ function MediaCard({
   position,
 }: MediaCardProps) {
   const { t } = useTranslation();
-  const { toggleWatched, toggleWatchlist } = useLibrary();
+  const { toggleWatched, toggleWatchlist } = useLibraryActions();
   const { getTheatricalStatus, region } = useRegion();
   const { locale } = useLocale();
   const theatricalBadges: Record<string, string> = {
