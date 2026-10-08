@@ -33,6 +33,8 @@ import {
   TOP_PICKS_MAX,
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
+  getNotInterestedForUser,
+  addNotInterested,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -53,6 +55,13 @@ import {
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
+import {
+  buildTasteProfile,
+  getRecommendationCandidates,
+  rankRecommendations,
+  type RecommendationMediaType,
+} from "./recommendations.ts";
+import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
   isValidEmail,
@@ -1830,6 +1839,88 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   return json({ ok: true });
 }
 
+// Recommandations personnalisées "Pour toi" ------------------------------
+// Tout le calcul (profil de goûts, scoring, diversité) vit dans
+// recommendations.ts ; ce handler ne fait que rassembler les signaux
+// stockés (bibliothèque, genres exclus, "pas intéressé") et renvoyer le
+// résultat. Réservé aux comptes connectés : un visiteur anonyme reste sur
+// le comportement existant (discover() classique) côté client, voir
+// DiscoverPage.tsx.
+const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
+
+async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (!checkRateLimitInMemory(`recommendations:user:${user.id}`, RECOMMENDATIONS_RATE_LIMIT)) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  const url = new URL(request.url);
+  const typeParam = url.searchParams.get("type") || "all";
+  const mediaTypes: RecommendationMediaType[] =
+    typeParam === "movie" || typeParam === "tv" ? [typeParam] : ["movie", "tv"];
+  const limitParam = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 40) : 20;
+
+  const [library, excludedGenreIds, notInterested] = await Promise.all([
+    getLibraryForUser(env.DB, user.id),
+    getExcludedGenresForUser(env.DB, user.id),
+    getNotInterestedForUser(env.DB, user.id),
+  ]);
+  const watched = Object.values(library.watched);
+  const watchlist = Object.values(library.watchlist);
+  const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
+
+  const candidateLists = await Promise.all(
+    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+  );
+  const candidates = candidateLists.flat();
+  const items = rankRecommendations(candidates, profile, { limit });
+  return json({ items, coldStart: profile.isColdStart });
+}
+
+async function handlePostNotInterested(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `not-interested:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const r = body as {
+    mediaType?: unknown;
+    tmdbId?: unknown;
+    genreIds?: unknown;
+    releaseDate?: unknown;
+  };
+  if (!isMediaType(r.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(r.tmdbId);
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  const genreIds = sanitizeIdList(r.genreIds);
+  const releaseDate =
+    typeof r.releaseDate === "string" && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(r.releaseDate)
+      ? r.releaseDate.slice(0, 10)
+      : null;
+  await addNotInterested(env.DB, user.id, r.mediaType, tmdbId, genreIds, releaseDate);
+  return json({ ok: true });
+}
+
 // Plateformes favorites synchronisées -------------------------------------
 //
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
@@ -2645,6 +2736,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/excluded-genres" && request.method === "PUT") {
     return handlePutExcludedGenres(request, env);
+  }
+
+  if (url.pathname === "/api/recommendations" && request.method === "GET") {
+    return handleGetRecommendations(request, env);
+  }
+
+  if (url.pathname === "/api/not-interested" && request.method === "POST") {
+    return handlePostNotInterested(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

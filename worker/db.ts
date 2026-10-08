@@ -965,6 +965,53 @@ export async function replaceExcludedGenresForUser(
   ]);
 }
 
+// Signal négatif "pas intéressé" pour les recommandations personnalisées
+// (voir worker/recommendations.ts). Pas de merge/remplacement complet comme
+// excluded_genre_prefs : chaque clic ajoute un titre, jamais de retrait
+// depuis le client (voir migration 0019).
+export interface NotInterestedRow {
+  mediaType: string;
+  tmdbId: number;
+  genreIds: number[];
+  releaseDate: string | null;
+}
+
+export async function getNotInterestedForUser(
+  db: D1Database,
+  userId: number
+): Promise<NotInterestedRow[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT media_type, tmdb_id, genre_ids, release_date FROM not_interested WHERE user_id = ?"
+    )
+    .bind(userId)
+    .all<{ media_type: string; tmdb_id: number; genre_ids: string; release_date: string | null }>();
+  return results.map((row) => ({
+    mediaType: row.media_type,
+    tmdbId: row.tmdb_id,
+    genreIds: JSON.parse(row.genre_ids || "[]"),
+    releaseDate: row.release_date,
+  }));
+}
+
+export async function addNotInterested(
+  db: D1Database,
+  userId: number,
+  mediaType: string,
+  tmdbId: number,
+  genreIds: number[],
+  releaseDate: string | null
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO not_interested (user_id, media_type, tmdb_id, genre_ids, release_date, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, media_type, tmdb_id) DO NOTHING`
+    )
+    .bind(userId, mediaType, tmdbId, JSON.stringify(genreIds), releaseDate, Date.now())
+    .run();
+}
+
 export async function getFavoriteProvidersForUser(
   db: D1Database,
   userId: number
