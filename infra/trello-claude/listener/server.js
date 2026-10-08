@@ -134,8 +134,16 @@ async function postDiscordMessage(text, webhookUrl = DISCORD_WEBHOOK_URL) {
 // sérialisable pour être rejoué par une relance automatique. relaunch : numéro de la relance
 // automatique (0 pour un déclenchement normal).
 function runClaude(label, prompt, notify, relaunch = 0) {
+  // Les executions declenchees pour traiter une alerte Sentry ne doivent jamais reloguer vers
+  // Sentry (debut, succes ou echec) : le projet seancy-logs alerte sur toute nouvelle issue, y
+  // compris ces logs infra "Declenchement"/"Execution terminee" — sans ce garde-fou, traiter une
+  // alerte Sentry cree une nouvelle issue Sentry qui redeclenche une execution, indefiniment
+  // (observe sur SEANCY-LOGS-1Z : titre imbrique sur 4 niveaux).
+  const isSentryTriggered = notify?.type === "sentry";
   console.log(`[${ts()}] Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
-  sentryLog.logInfo(`Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
+  if (!isSentryTriggered) {
+    sentryLog.logInfo(`Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
+  }
   const onError = (errorMsg) => notifyError(notify, errorMsg);
   const runPrompt = relaunch ? `${prompt} ${relaunchNote(relaunch)}` : prompt;
 
@@ -202,7 +210,9 @@ function runClaude(label, prompt, notify, relaunch = 0) {
 
       if (err && hasStderr) {
         console.error(`[${ts()}] Echec execution : ${stderr.slice(0, 1000)}`);
-        sentryLog.logError(`Echec execution (${label}) : ${stderr.slice(0, 1000)}`);
+        if (!isSentryTriggered) {
+          sentryLog.logError(`Echec execution (${label}) : ${stderr.slice(0, 1000)}`);
+        }
         const errorMsg = `🤖 [Claude] Echec de l'execution : ${stderr.slice(0, 1000)}`;
         try {
           await onError(errorMsg);
@@ -212,7 +222,9 @@ function runClaude(label, prompt, notify, relaunch = 0) {
 
       if (err) {
         console.error(`[${ts()}] Echec execution : ${err.message || "erreur inconnue"}`);
-        sentryLog.logError(`Echec execution (${label}) : ${err.message || "erreur inconnue"}`);
+        if (!isSentryTriggered) {
+          sentryLog.logError(`Echec execution (${label}) : ${err.message || "erreur inconnue"}`);
+        }
         const errorMsg = `🤖 [Claude] Echec de l'execution : ${err.message || "erreur inconnue"}`;
         try {
           await onError(errorMsg);
@@ -221,7 +233,9 @@ function runClaude(label, prompt, notify, relaunch = 0) {
       }
 
       console.log(`[${ts()}] Execution terminee avec succes`);
-      sentryLog.logInfo(`Execution terminee avec succes (${label})`);
+      if (!isSentryTriggered) {
+        sentryLog.logInfo(`Execution terminee avec succes (${label})`);
+      }
       if (relaunch) {
         await postDiscordMessage(
           `▶️ Relance automatique ${relaunch}/${MAX_AUTO_RELAUNCHES} terminée (${label}) : le pipeline a repris normalement.`
