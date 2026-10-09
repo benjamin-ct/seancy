@@ -680,6 +680,33 @@ export default function FilterPanel({
                 </div>
               )}
 
+              {/* Avant les plages de l'année/note/durée (voire pays/langue) :
+                  des bascules simples type "Au cinéma" ne doivent pas
+                  finir enterrées tout en bas du panneau, surtout sur
+                  mobile où tout s'empile en une seule colonne (retour
+                  Trello, carte "Pré-reglage des filtres"). */}
+              {switches.map((s) => (
+                <div key={s.key} className={styles.field}>
+                  <span className={styles.label} id={`${panelId}-${s.key}`}>
+                    {s.label}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={s.checked}
+                    aria-labelledby={`${panelId}-${s.key}`}
+                    className={styles.switchRow}
+                    onClick={() => s.onChange(!s.checked)}
+                  >
+                    <span className={styles.switchText}>{s.text}</span>
+                    <span
+                      className={`${styles.switch} ${s.checked ? styles.switchOn : ""}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+              ))}
+
               {countryLanguage && (
                 <>
                   <div className={styles.field}>
@@ -827,28 +854,6 @@ export default function FilterPanel({
                   fields={advancedFields}
                 />
               )}
-
-              {switches.map((s) => (
-                <div key={s.key} className={styles.field}>
-                  <span className={styles.label} id={`${panelId}-${s.key}`}>
-                    {s.label}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={s.checked}
-                    aria-labelledby={`${panelId}-${s.key}`}
-                    className={styles.switchRow}
-                    onClick={() => s.onChange(!s.checked)}
-                  >
-                    <span className={styles.switchText}>{s.text}</span>
-                    <span
-                      className={`${styles.switch} ${s.checked ? styles.switchOn : ""}`}
-                      aria-hidden="true"
-                    />
-                  </button>
-                </div>
-              ))}
 
               {rangeError && (
                 <p className={styles.rangeError} role="alert">

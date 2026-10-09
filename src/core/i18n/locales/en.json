@@ -1153,6 +1153,8 @@
     "another": "Another pick"
   },
   "filterPanel": {
+    "inTheatersFilter": "In theaters",
+    "inTheatersOnly": "Only movies currently in theaters",
     "filters": "Filters",
     "activeCount_one": "{{count}} active filter",
     "activeCount_other": "{{count}} active filters",

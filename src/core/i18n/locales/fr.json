@@ -1153,6 +1153,8 @@
     "another": "Autre suggestion"
   },
   "filterPanel": {
+    "inTheatersFilter": "Au cinéma",
+    "inTheatersOnly": "Seulement les films en salle",
     "filters": "Filtres",
     "activeCount_one": "{{count}} filtre actif",
     "activeCount_other": "{{count}} filtres actifs",

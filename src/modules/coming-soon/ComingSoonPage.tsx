@@ -62,6 +62,24 @@ function dateRangeFor(windowDays: number) {
   return { dateFrom: toIsoDate(from), dateTo: toIsoDate(to) };
 }
 
+// "En salle" : garde les films pour lesquels le Worker a trouvé une date de
+// sortie ciné régionale (voir includeRegionReleaseDate, même indicateur que
+// le badge "Salles" ci-dessus). Le paramètre natif TMDB with_release_type
+// n'a aucun effet observé en pratique (vérifié : résultats strictement
+// identiques avec/sans sur discover/movie), d'où ce filtre côté client.
+// Sans impact sur le tri : TMDB trie déjà chronologiquement (sortField ci-
+// dessous), et retirer des éléments d'une liste triée la laisse triée.
+function keepTheatricalOnly<T extends { region_release_date?: string | null }>(
+  items: T[],
+  active: boolean,
+  mediaType: MediaType
+): T[] {
+  if (!active || mediaType !== "movie") {
+    return items;
+  }
+  return items.filter((item) => item.region_release_date != null);
+}
+
 // item.region_release_date (résolu côté Worker, voir discover() avec
 // includeRegionReleaseDate) est la date de sortie ciné région-consciente ;
 // item.release_date est la date "primaire" globale de TMDB, pas fiable pour
@@ -224,6 +242,11 @@ export default function ComingSoonPage() {
   const activeCountries = useMyCountries ? favoriteCountryCodes : countries;
   const activeLanguages = useMyLanguages ? favoriteLanguageCodes : languages;
   const [windowDays, setWindowDays] = useState(30);
+  // "En salle" pour une sortie à venir = restreint aux films dont la sortie
+  // annoncée est une sortie ciné (voir keepTheatricalOnly), pas une mise en
+  // ligne numérique/TV directe. Sans effet pour les séries : repassé à faux
+  // via changeMediaType quand on quitte Films.
+  const [inTheatersOnly, setInTheatersOnly] = useState(false);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [providers, setProviders] = useState<WatchProviderOption[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -251,6 +274,7 @@ export default function ComingSoonPage() {
   const changeMediaType = useCallback((next: MediaType) => {
     setMediaType(next);
     setGenreIds((prev) => (prev.length ? [] : prev));
+    setInTheatersOnly((prev) => (next === "movie" ? prev : false));
   }, []);
 
   useEffect(() => {
@@ -301,7 +325,11 @@ export default function ComingSoonPage() {
         if (cancelled) {
           return;
         }
-        const items = filterExcluded(data.results, mediaType).map((r) => ({ ...r, mediaType }));
+        const items = keepTheatricalOnly(
+          filterExcluded(data.results, mediaType),
+          inTheatersOnly,
+          mediaType
+        ).map((r) => ({ ...r, mediaType }));
         setAllResults(dedupe(items));
         setTotalPages(Math.min(data.total_pages || 1, 500));
         setPage(1);
@@ -328,14 +356,18 @@ export default function ComingSoonPage() {
     setLoadingMore(true);
     fetchPage(nextPage)
       .then((data) => {
-        const fresh = filterExcluded(data.results, mediaType).map((r) => ({ ...r, mediaType }));
+        const fresh = keepTheatricalOnly(
+          filterExcluded(data.results, mediaType),
+          inTheatersOnly,
+          mediaType
+        ).map((r) => ({ ...r, mediaType }));
         setAllResults((prev) => dedupe([...prev, ...fresh]));
         setTotalPages(Math.min(data.total_pages || 1, 500));
         setPage(nextPage);
       })
       .catch((err) => setError(err))
       .finally(() => setLoadingMore(false));
-  }, [loadingMore, page, totalPages, mediaType, fetchPage, filterExcluded]);
+  }, [loadingMore, page, totalPages, mediaType, fetchPage, filterExcluded, inTheatersOnly]);
 
   const hasMore = page < totalPages;
   const visibleResults = allResults;
@@ -424,6 +456,19 @@ export default function ComingSoonPage() {
           value: windowDays,
           onChange: setWindowDays,
         }}
+        switches={
+          mediaType === "movie"
+            ? [
+                {
+                  key: "in-theaters-only",
+                  label: t("filterPanel.inTheatersFilter"),
+                  text: t("filterPanel.inTheatersOnly"),
+                  checked: inTheatersOnly,
+                  onChange: setInTheatersOnly,
+                },
+              ]
+            : []
+        }
       />
 
       {status === "loading" && !refreshing && <ComingSoonSkeleton />}
