@@ -30,24 +30,29 @@ if (SENTRY_DSN) {
   });
 }
 
+// Sentry.logger (feature Logs), pas captureMessage (feature Issues) : ce
+// sont des événements opérationnels (déclenchement, succès, limite
+// d'usage), pas des erreurs à trier dans le flux d'Issues — captureMessage
+// y créait une Issue, qui redéclenchait le webhook Sentry → Claude (voir
+// #290/#291).
 function logInfo(message, extra) {
   console.log(`[sentry-log] ${message}`);
   if (SENTRY_DSN) {
-    Sentry.captureMessage(message, { level: "info", extra });
+    Sentry.logger.info(message, extra);
   }
 }
 
 function logWarn(message, extra) {
   console.warn(`[sentry-log] ${message}`);
   if (SENTRY_DSN) {
-    Sentry.captureMessage(message, { level: "warning", extra });
+    Sentry.logger.warn(message, extra);
   }
 }
 
 function logError(message, extra) {
   console.error(`[sentry-log] ${message}`);
   if (SENTRY_DSN) {
-    Sentry.captureMessage(message, { level: "error", extra });
+    Sentry.logger.error(message, extra);
   }
 }
 
