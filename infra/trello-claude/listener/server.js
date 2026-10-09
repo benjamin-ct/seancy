@@ -546,6 +546,18 @@ const server = http.createServer((req, res) => {
       const issueLabel = issue?.title || issue?.culprit || issue?.id || "detail indisponible";
       const issueUrl = issue?.web_url || issue?.url || null;
 
+      // Les logs infra du listener lui-même (sentry-log.js, tag source:infra) remontent dans ce
+      // même projet Sentry, en level "info" — jamais utilisé côté app (src/core/logger.ts n'a que
+      // logWarn/logError). Sans ce filtre, le pipeline se rappelle lui-même en boucle : chaque
+      // exécution déclenchée par une alerte Sentry logue sa propre fin dans Sentry, qui redéclenche
+      // une exécution, etc. (constaté en prod : titre imbriqué grossissant à chaque itération).
+      if (issue?.level === "info") {
+        console.log(
+          `[${ts()}] /sentry-webhook: alerte de niveau info ignoree (bruit infra) : ${issueLabel}`
+        );
+        return;
+      }
+
       try {
         await postDiscordMessage(
           `🚨 Nouvelle alerte Sentry : ${issueLabel}${issueUrl ? `\n${issueUrl}` : ""}`,
