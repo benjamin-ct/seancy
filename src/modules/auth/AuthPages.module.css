@@ -87,3 +87,27 @@
   color: var(--fg);
   font-weight: 600;
 }
+
+/* Visible seulement sur mobile (audit M15) : sur desktop, la barre flottante
+   LegalLinks reste affichée (LegalLinks.module.css, même seuil 860px) et ce
+   doublon a été jugé redondant (retour review). */
+.legalLine {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.legalLine a {
+  color: var(--muted);
+}
+
+.legalLine a:hover {
+  color: var(--fg);
+}
+
+@media (min-width: 861px) {
+  .legalLine {
+    display: none;
+  }
+}

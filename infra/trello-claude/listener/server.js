@@ -1,6 +1,7 @@
 const http = require("http");
 const { execFile } = require("child_process");
 const fs = require("fs");
+const sentryLog = require("./sentry-log");
 
 const PORT = process.env.PORT || 8080;
 const DOCKER_CONTAINER = process.env.DOCKER_CONTAINER || "bobine-repo";
@@ -133,7 +134,16 @@ async function postDiscordMessage(text, webhookUrl = DISCORD_WEBHOOK_URL) {
 // sérialisable pour être rejoué par une relance automatique. relaunch : numéro de la relance
 // automatique (0 pour un déclenchement normal).
 function runClaude(label, prompt, notify, relaunch = 0) {
+  // Les executions declenchees pour traiter une alerte Sentry ne doivent jamais reloguer vers
+  // Sentry (debut, succes ou echec) : le projet seancy-logs alerte sur toute nouvelle issue, y
+  // compris ces logs infra "Declenchement"/"Execution terminee" — sans ce garde-fou, traiter une
+  // alerte Sentry cree une nouvelle issue Sentry qui redeclenche une execution, indefiniment
+  // (observe sur SEANCY-LOGS-1Z : titre imbrique sur 4 niveaux).
+  const isSentryTriggered = notify?.type === "sentry";
   console.log(`[${ts()}] Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
+  if (!isSentryTriggered) {
+    sentryLog.logInfo(`Declenchement pour ${label}${relaunch ? ` (relance ${relaunch})` : ""}`);
+  }
   const onError = (errorMsg) => notifyError(notify, errorMsg);
   const runPrompt = relaunch ? `${prompt} ${relaunchNote(relaunch)}` : prompt;
 
@@ -200,6 +210,9 @@ function runClaude(label, prompt, notify, relaunch = 0) {
 
       if (err && hasStderr) {
         console.error(`[${ts()}] Echec execution : ${stderr.slice(0, 1000)}`);
+        if (!isSentryTriggered) {
+          sentryLog.logError(`Echec execution (${label}) : ${stderr.slice(0, 1000)}`);
+        }
         const errorMsg = `🤖 [Claude] Echec de l'execution : ${stderr.slice(0, 1000)}`;
         try {
           await onError(errorMsg);
@@ -209,6 +222,9 @@ function runClaude(label, prompt, notify, relaunch = 0) {
 
       if (err) {
         console.error(`[${ts()}] Echec execution : ${err.message || "erreur inconnue"}`);
+        if (!isSentryTriggered) {
+          sentryLog.logError(`Echec execution (${label}) : ${err.message || "erreur inconnue"}`);
+        }
         const errorMsg = `🤖 [Claude] Echec de l'execution : ${err.message || "erreur inconnue"}`;
         try {
           await onError(errorMsg);
@@ -217,6 +233,9 @@ function runClaude(label, prompt, notify, relaunch = 0) {
       }
 
       console.log(`[${ts()}] Execution terminee avec succes`);
+      if (!isSentryTriggered) {
+        sentryLog.logInfo(`Execution terminee avec succes (${label})`);
+      }
       if (relaunch) {
         await postDiscordMessage(
           `▶️ Relance automatique ${relaunch}/${MAX_AUTO_RELAUNCHES} terminée (${label}) : le pipeline a repris normalement.`
@@ -446,6 +465,7 @@ async function handleUsageLimit({ label, prompt, notify, relaunch, output }) {
     clearResumeState();
     const msg = `🚨 Limite d'usage Claude toujours atteinte après ${MAX_AUTO_RELAUNCHES} relances automatiques consécutives (${label}). Abandon : relancer à la main (déplacer une carte ou bobine-logs pour le détail).`;
     console.error(`[${ts()}] ${msg}`);
+    sentryLog.logError(msg);
     await discord(msg);
     return;
   }
@@ -468,6 +488,7 @@ async function handleUsageLimit({ label, prompt, notify, relaunch, output }) {
     : "heure de reset illisible";
   const msg = `⏸️ Limite d'usage Claude atteinte (${label}) : ${resetText}. Relance automatique ${state.relaunch}/${MAX_AUTO_RELAUNCHES} prévue à ${formatParis(resumeAt)} ; les webhooks Trello/Sentry sont ignorés d'ici là.`;
   console.log(`[${ts()}] ${msg}`);
+  sentryLog.logWarn(msg);
   await discord(msg);
 }
 
@@ -524,6 +545,18 @@ const server = http.createServer((req, res) => {
       const issue = payload?.data?.issue || payload?.data?.event || payload;
       const issueLabel = issue?.title || issue?.culprit || issue?.id || "detail indisponible";
       const issueUrl = issue?.web_url || issue?.url || null;
+
+      // Les logs infra du listener lui-même (sentry-log.js, tag source:infra) remontent dans ce
+      // même projet Sentry, en level "info" — jamais utilisé côté app (src/core/logger.ts n'a que
+      // logWarn/logError). Sans ce filtre, le pipeline se rappelle lui-même en boucle : chaque
+      // exécution déclenchée par une alerte Sentry logue sa propre fin dans Sentry, qui redéclenche
+      // une exécution, etc. (constaté en prod : titre imbriqué grossissant à chaque itération).
+      if (issue?.level === "info") {
+        console.log(
+          `[${ts()}] /sentry-webhook: alerte de niveau info ignoree (bruit infra) : ${issueLabel}`
+        );
+        return;
+      }
 
       try {
         await postDiscordMessage(

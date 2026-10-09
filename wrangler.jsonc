@@ -59,6 +59,34 @@
       "database_id": "3403301e-2ef9-4f70-9f2e-e10d577beda0"
     }
   ],
+  // Binding natif « Rate Limiting » de Workers (audit F4) : compteur partagé
+  // entre isolats/colos, sans écriture D1 — contrairement à
+  // `checkRateLimitInMemory` (worker/rate-limit-memory.ts), qui compte par
+  // isolat et qu'un balayage distribué peut donc contourner. Limité ici aux
+  // routes visées par le ticket (slugs publics + avatar) : le binding natif
+  // n'accepte qu'une période fixe de 10 ou 60 s et un coût de 1 par appel,
+  // ce qui ne couvre pas les autres usages de rate-limit-memory.ts (fenêtre
+  // de 5 min pour /api/theatrical-index, coût variable pour l'enrichissement
+  // TMDB) — ceux-là restent en mémoire. `namespace_id` est un identifiant
+  // arbitraire propre à ce Worker (pas une ressource à créer côté
+  // dashboard, contrairement à d1_databases ci-dessus).
+  "ratelimits": [
+    {
+      "name": "PUBLIC_SLUG_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "AVATAR_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "LIBRARY_WRITE_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ],
   // Synchro temps réel multi-appareils (voir worker/sync.ts) : un Durable
   // Object UserSyncHub par compte. Déclaré via "exports" (provisionné au
   // déploiement) plutôt que "migrations" + binding "durable_objects" : les

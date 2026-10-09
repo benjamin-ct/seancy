@@ -9,7 +9,13 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext.tsx";
-import { logError, logWarn } from "../logger.ts";
+import { logWarn } from "../logger.ts";
+import {
+  storageGet,
+  storageGetJSON,
+  storageSet,
+  storageSetJSON,
+} from "../../shared/lib/storage.ts";
 import { syncClientHeaders, useLiveSyncRevision } from "../sync/liveSync.ts";
 
 // Genres que la personne ne veut jamais voir suggérés (Horreur,
@@ -34,16 +40,8 @@ interface ExcludedGenresContextValue {
 const ExcludedGenresContext = createContext<ExcludedGenresContextValue | null>(null);
 
 function loadInitialIds(): number[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isFinite(id)) : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isFinite(id)) : [];
 }
 
 export function ExcludedGenresProvider({ children }: { children: ReactNode }) {
@@ -70,11 +68,7 @@ export function ExcludedGenresProvider({ children }: { children: ReactNode }) {
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(excludedGenreIds));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les genres exclus.", err);
-    }
+    storageSetJSON(STORAGE_KEY, excludedGenreIds);
   }, [excludedGenreIds]);
 
   // Synchronisation avec le compte : au moment où l'utilisateur devient
@@ -110,7 +104,7 @@ export function ExcludedGenresProvider({ children }: { children: ReactNode }) {
           return;
         }
         const remoteIds = remote.genreIds || [];
-        const alreadySyncedFor = localStorage.getItem(SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           lastSyncedJsonRef.current = JSON.stringify(remoteIds);
           setExcludedGenreIds(remoteIds);
@@ -118,7 +112,7 @@ export function ExcludedGenresProvider({ children }: { children: ReactNode }) {
         }
         const merged = [...new Set([...excludedGenreIds, ...remoteIds])];
         setExcludedGenreIds(merged);
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         // `merge: true` : `remoteIds` peut déjà être périmé si un autre
         // appareil vient de synchroniser entre le GET ci-dessus et ce PUT —
         // le serveur fait l'union avec ce qu'il a réellement plutôt que de

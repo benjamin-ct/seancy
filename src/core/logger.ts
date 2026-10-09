@@ -9,10 +9,29 @@
 // Le SDK est chargé à la demande (`import()`), une fois le DSN connu : il
 // n'alourdit plus le bundle initial, et n'est jamais téléchargé sans DSN
 // (audit H6).
-type SentryModule = typeof import("@sentry/react");
+type SentryModule = typeof import("./sentryClient.ts");
 
 let sentryInitPromise: Promise<void> | null = null;
 let sentry: SentryModule | null = null;
+
+// Mêmes hostnames que worker/sentry.ts (dupliqués plutôt qu'importés : ce
+// fichier est bundlé côté client, worker/sentry.ts dépend de
+// @sentry/cloudflare). Sans environment explicite, le SDK retombe sur
+// "production" par défaut — voir ticket Trello "Dashboard de suivis de
+// Claude".
+const PRODUCTION_HOSTNAME = "seancy.com";
+const LEGACY_PRODUCTION_HOSTNAME = "bobine.creusatbenjamin.workers.dev";
+const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+
+function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
+  if (hostname === PRODUCTION_HOSTNAME || hostname === LEGACY_PRODUCTION_HOSTNAME) {
+    return "production";
+  }
+  if (hostname === PREPROD_HOSTNAME) {
+    return "preprod";
+  }
+  return "preview";
+}
 
 export function ensureSentryInit(): Promise<void> {
   if (!sentryInitPromise) {
@@ -20,8 +39,17 @@ export function ensureSentryInit(): Promise<void> {
       .then((res) => res.json())
       .then(async ({ dsn }: { dsn?: string | null }) => {
         if (dsn) {
-          const module = await import("@sentry/react");
-          module.init({ dsn, tracesSampleRate: 0 });
+          const module = await import("./sentryClient.ts");
+          // Tag partagé avec le Worker (worker/sentry.ts) et le script de
+          // logs infra du NAS : permet de filtrer un seul projet Sentry
+          // plutôt que d'en séparer un par source (voir ticket Trello
+          // "Avenir du développement").
+          module.init({
+            dsn,
+            tracesSampleRate: 0,
+            environment: getEnvironmentName(window.location.hostname),
+            initialScope: { tags: { source: "app" } },
+          });
           sentry = module;
         }
       })
@@ -57,5 +85,9 @@ export function logError(message: string, err: unknown): void {
 export function logWarn(message: string, err?: unknown): void {
   console.warn(message, err);
   const text = err ? `${message} ${String(err)}` : message;
-  withSentry((module) => module.captureMessage(text, "warning"));
+  // Sentry.logger (feature Logs), pas captureMessage (feature Issues) : un
+  // warning n'est pas une erreur à trier, il doit apparaître dans l'onglet
+  // Logs plutôt que polluer le flux d'Issues (voir ticket Trello "Dashboard
+  // de suivis de Claude").
+  withSentry((module) => module.logger.warn(text));
 }

@@ -9,8 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext.tsx";
-import { logError, logWarn } from "../logger.ts";
+import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncRevision } from "../sync/liveSync.ts";
+import {
+  storageGet,
+  storageGetJSON,
+  storageSet,
+  storageSetJSON,
+} from "../../shared/lib/storage.ts";
 
 // Langues originales préférées sur le compte (ex. "fr", "en"), pré-réglées
 // une fois pour filtrer Nouveautés/Prochainement en un clic plutôt que de
@@ -30,16 +36,8 @@ interface FavoriteLanguagesContextValue {
 const FavoriteLanguagesContext = createContext<FavoriteLanguagesContextValue | null>(null);
 
 function loadInitialCodes(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
 }
 
 export function FavoriteLanguagesProvider({ children }: { children: ReactNode }) {
@@ -57,11 +55,7 @@ export function FavoriteLanguagesProvider({ children }: { children: ReactNode })
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(favoriteLanguageCodes));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les langues favorites.", err);
-    }
+    storageSetJSON(STORAGE_KEY, favoriteLanguageCodes);
   }, [favoriteLanguageCodes]);
 
   useEffect(() => {
@@ -86,7 +80,7 @@ export function FavoriteLanguagesProvider({ children }: { children: ReactNode })
           return;
         }
         const remoteCodes = remote.languageCodes || [];
-        const alreadySyncedFor = localStorage.getItem(SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           lastSyncedJsonRef.current = JSON.stringify(remoteCodes);
           setFavoriteLanguageCodes(remoteCodes);
@@ -94,7 +88,7 @@ export function FavoriteLanguagesProvider({ children }: { children: ReactNode })
         }
         const merged = [...new Set([...favoriteLanguageCodes, ...remoteCodes])];
         setFavoriteLanguageCodes(merged);
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/favorite-languages", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },

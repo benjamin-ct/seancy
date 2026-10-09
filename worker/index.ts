@@ -14,6 +14,10 @@ import {
   applyLibraryChanges,
   getCustomListsForUser,
   replaceCustomListsForUser,
+  upsertCustomListForUser,
+  deleteCustomListForUser,
+  countCustomListsForUser,
+  customListExistsForUser,
   getListSharesForUser,
   shareListForUser,
   unshareListForUser,
@@ -29,6 +33,10 @@ import {
   TOP_PICKS_MAX,
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
+  getNotInterestedForUser,
+  addNotInterested,
+  getRecommendationCache,
+  setRecommendationCache,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -42,11 +50,20 @@ import {
   updateSubscriptionLocale,
   linkSubscriptionToAccount,
   getSubscriptionsForUser,
+  deleteUserAccount,
+  exportUserAccountData,
   type SubscriptionAccount,
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
+import {
+  buildTasteProfile,
+  getRecommendationCandidates,
+  rankRecommendations,
+  type RecommendationMediaType,
+} from "./recommendations.ts";
+import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
   isValidEmail,
@@ -66,6 +83,7 @@ import {
   sendEmailChangeCode,
   sendEmailChangedNotice,
   type EmailLocale,
+  type AuthUser,
 } from "./auth.ts";
 
 const EMAIL_LOCALES: EmailLocale[] = ["fr", "en"];
@@ -84,12 +102,16 @@ import {
   sanitizeGenrePrefs,
   sanitizeKeyList,
   sanitizeCustomListsPayload,
+  sanitizeSingleCustomList,
+  MAX_CUSTOM_LISTS,
   sanitizeDisplayName,
   sanitizeIdList,
   sanitizeIsoCodeList,
   LANGUAGE_CODE_PATTERN,
   COUNTRY_CODE_PATTERN,
   sanitizeReminder,
+  isAllowedPushEndpoint,
+  isValidPushKeys,
 } from "./validate.ts";
 import { verifyRecaptcha } from "./recaptcha.ts";
 import { getTheatricalIndex } from "./tmdb.ts";
@@ -174,6 +196,18 @@ function json(
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+// Factorise le contrôle « connecté ou 401 » répété dans la plupart des
+// routes authentifiées (audit M16) : les appelants font
+// `if (user instanceof Response) return user;` puis utilisent `user` typé
+// `AuthUser` pour le reste de la fonction.
+async function requireUser(request: Request, env: Env): Promise<AuthUser | Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  return user;
+}
+
 // Corps JSON attendu sous forme d'objet : `null` pour un JSON invalide, mais
 // aussi pour `null`, un tableau ou un scalaire, sur lesquels un simple
 // `body.champ` lèverait une exception.
@@ -238,6 +272,19 @@ const SEARCH_INDEX_SYNC_CRON = "30 7 * * *";
 const RATE_LIMIT_RESPONSE = (): Response =>
   json({ error: "Trop de requêtes. Réessayez dans quelques minutes." }, 429);
 
+// Audit M4 : plafond de taille de corps pour les écritures authentifiées à
+// fort volume potentiel (library, library/sync, custom-lists, excluded-genres,
+// favorite-providers) — large marge au-dessus d'un payload légitime (ex.
+// 1000 items de liste perso, voir MAX_CUSTOM_LIST_ITEMS), mais qui écarte
+// avant même `request.json()` un corps disproportionné.
+const MAX_WRITE_BODY_BYTES = 1_000_000;
+
+function writeBodyTooLarge(request: Request): boolean {
+  return Number(request.headers.get("content-length") ?? 0) > MAX_WRITE_BODY_BYTES;
+}
+
+const BODY_TOO_LARGE_RESPONSE = (): Response => json({ error: "Requête trop volumineuse." }, 413);
+
 // Variante du proxy TMDB : `retry-after` (fin de la fenêtre d'une minute de
 // ses plafonds) permet à tmdbFetch de réessayer tout seul au bon moment
 // plutôt que d'afficher une erreur.
@@ -297,17 +344,16 @@ async function handleSubscribe(request: Request, env: Env): Promise<Response> {
   };
   if (
     typeof endpoint !== "string" ||
-    !endpoint.startsWith("https://") ||
-    !keys?.p256dh ||
-    !keys?.auth
+    !isAllowedPushEndpoint(endpoint) ||
+    !isValidPushKeys(keys?.p256dh, keys?.auth)
   ) {
     return json({ error: "Abonnement push incomplet ou invalide (endpoint/keys manquants)." }, 400);
   }
 
   const subscriptionId = await upsertSubscription(env.DB, {
     endpoint,
-    p256dh: String(keys.p256dh),
-    auth: String(keys.auth),
+    p256dh: String(keys?.p256dh),
+    auth: String(keys?.auth),
     locale: sanitizeSubscriptionLocale(locale),
     account: await subscriptionAccountOf(request, env),
   });
@@ -475,9 +521,9 @@ async function handleTestAccountNotification(
   if (isProductionHostname(new URL(request.url).hostname)) {
     return json({ error: "Introuvable." }, 404);
   }
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   if (
     !(await checkRateLimit(env.DB, `test-notification:user:${user.id}`, {
@@ -525,16 +571,38 @@ async function handleTestAccountNotification(
   return json({ ok: true, channel });
 }
 
+// Comparaison en temps constant d'une clé de debug (évite qu'une différence
+// de durée de réponse ne laisse deviner la clé secrète octet par octet,
+// audit F2). Passe par un hachage pour que `timingSafeEqual` compare toujours
+// deux tampons de même longueur, quelle que soit celle des chaînes d'origine.
+async function timingSafeEqualString(received: string | null, expected: string): Promise<boolean> {
+  if (received === null) {
+    return false;
+  }
+  const encoder = new TextEncoder();
+  const [receivedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(received)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(receivedHash, expectedHash);
+}
+
 // Déclenchement manuel de la vérification quotidienne, pour diagnostiquer
 // sans attendre le prochain passage du cron. Protégé par une clé partagée
 // pour éviter qu'un tiers ne déclenche des requêtes TMDB / push à volonté ;
-// désactivé par défaut si la clé n'est pas configurée.
-async function handleManualRun(request: Request, env: Env): Promise<Response> {
+// désactivé par défaut si la clé n'est pas configurée. Le travail est confié
+// à `waitUntil` (comme le vrai cron) : la requête HTTP ne reste pas ouverte
+// le temps de toute la vérification quotidienne (audit F2).
+async function handleManualRun(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
-  await runDailyCheck(env);
+  ctx.waitUntil(runDailyCheck(env));
   return json({ ok: true });
 }
 
@@ -543,7 +611,7 @@ async function handleManualRun(request: Request, env: Env): Promise<Response> {
 // /api/run-check.
 async function handleManualSyncSearchIndex(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
   await syncPopularTitles(env);
@@ -573,7 +641,7 @@ async function handleSearchIndex(request: Request, env: Env): Promise<Response> 
 // vraie erreur survienne en prod. Même protection que /api/run-check.
 async function handleTestError(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
   logError(
@@ -583,51 +651,55 @@ async function handleTestError(request: Request, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
-// Envoie une notification de test à tous les abonnements, pour vérifier que
-// toute la chaîne fonctionne (VAPID, service worker, permission navigateur)
-// sans dépendre de la logique métier — au premier passage, celle-ci ne
-// notifie jamais rien (elle se contente de prendre une référence). Même
-// protection que /api/run-check.
+// Envoie une notification de test à UN SEUL abonnement (?subscriptionId=…),
+// pour vérifier que toute la chaîne fonctionne (VAPID, service worker,
+// permission navigateur) sans dépendre de la logique métier. Ciblé plutôt que
+// diffusé à tous les abonnés de la prod (audit F2 : un appel par erreur ne
+// doit pas spammer toute la base).
 async function handleTestNotification(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
 
-  const subscriptions = await getAllSubscriptions(env.DB);
-  if (subscriptions.length === 0) {
+  const subscriptionId = Number(new URL(request.url).searchParams.get("subscriptionId"));
+  if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) {
     return json(
-      { error: "Aucun abonnement enregistré. Activez d'abord les notifications dans l'app." },
-      404
+      {
+        error:
+          "Paramètre ?subscriptionId=<id> requis (évite un envoi à tous les abonnés par erreur).",
+      },
+      400
     );
   }
 
-  const results: Array<{ id: number; ok: boolean; error?: string }> = [];
-  for (const subscription of subscriptions) {
-    try {
-      await sendPush(
-        subscription,
-        {
-          title: "Seancy 🎬",
-          body: "Ceci est une notification de test — si vous la voyez, tout fonctionne !",
-          url: "/ma-liste",
-        },
-        env
-      );
-      results.push({ id: subscription.id, ok: true });
-    } catch (err) {
-      if (err instanceof ExpiredSubscriptionError) {
-        await deleteSubscriptionById(env.DB, subscription.id);
-      }
-      results.push({
-        id: subscription.id,
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  const subscriptions = await getAllSubscriptions(env.DB);
+  const subscription = subscriptions.find((s) => s.id === subscriptionId);
+  if (!subscription) {
+    return json({ error: "Abonnement introuvable." }, 404);
   }
 
-  return json({ results });
+  try {
+    await sendPush(
+      subscription,
+      {
+        title: "Seancy 🎬",
+        body: "Ceci est une notification de test — si vous la voyez, tout fonctionne !",
+        url: "/ma-liste",
+      },
+      env
+    );
+    return json({ results: [{ id: subscription.id, ok: true }] });
+  } catch (err) {
+    if (err instanceof ExpiredSubscriptionError) {
+      await deleteSubscriptionById(env.DB, subscription.id);
+    }
+    return json({
+      results: [
+        { id: subscription.id, ok: false, error: err instanceof Error ? err.message : String(err) },
+      ],
+    });
+  }
 }
 
 // Compte (lien magique) ---------------------------------------------------
@@ -771,9 +843,9 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleMe(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   return json(
     {
@@ -798,9 +870,9 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
 // client ajoute la version à l'URL (?v=<updated_at>), d'où un cache long :
 // une nouvelle photo change l'URL.
 async function handleGetOwnAvatar(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const avatar = await getAvatar(env.DB, user.id);
   if (!avatar) {
@@ -818,11 +890,11 @@ async function handleGetOwnAvatar(request: Request, env: Env): Promise<Response>
 // Corps = l'image elle-même (déjà recadrée en 256 px par le navigateur), pas
 // du JSON. Le format réel est vérifié sur les octets (voir worker/avatars.ts).
 async function handlePutAvatar(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
-  if (!checkRateLimitInMemory(`avatar:user:${user.id}`, { limit: 20, windowMs: 60_000 })) {
+  if (!(await env.AVATAR_RATE_LIMITER.limit({ key: `avatar:user:${user.id}` })).success) {
     return RATE_LIMIT_RESPONSE();
   }
   if (Number(request.headers.get("content-length") ?? 0) > AVATAR_MAX_BYTES) {
@@ -843,9 +915,9 @@ async function handlePutAvatar(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleDeleteAvatar(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   await deleteAvatar(env.DB, user.id);
   publishToUser(request, user.id, { type: "display-name" });
@@ -857,9 +929,9 @@ async function handleDeleteAvatar(request: Request, env: Env): Promise<Response>
 // Même garde IDOR que les autres endpoints authentifiés ci-dessous :
 // user.id vient uniquement du cookie de session.
 async function handleUpdateDisplayName(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -883,9 +955,9 @@ async function handleUpdateDisplayName(request: Request, env: Env): Promise<Resp
 // garde IDOR que les autres endpoints authentifiés : user.id vient
 // uniquement du cookie de session.
 async function handleRequestEmailChange(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -952,9 +1024,9 @@ async function handleRequestEmailChange(request: Request, env: Env): Promise<Res
 }
 
 async function handleConfirmEmailChange(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   // Seule vraie protection contre un bruteforce du code à 6 caractères,
   // comme pour /api/auth/verify.
@@ -1012,9 +1084,9 @@ async function handleConfirmEmailChange(request: Request, env: Env): Promise<Res
 // les pseudos existants), puis de nouveau à l'enregistrement (PUT), où
 // l'index unique fait foi.
 async function handleUsernameAvailability(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   if (!checkRateLimitInMemory(`username-check:user:${user.id}`, { limit: 60, windowMs: 60_000 })) {
     return RATE_LIMIT_RESPONSE();
@@ -1028,9 +1100,9 @@ async function handleUsernameAvailability(request: Request, env: Env): Promise<R
 }
 
 async function handleUpdateUsername(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -1064,9 +1136,9 @@ async function handleUpdateUsername(request: Request, env: Env): Promise<Respons
 // IDOR que les autres endpoints authentifiés : user.id vient uniquement du
 // cookie de session.
 async function handleUpdateProfileShare(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -1087,17 +1159,17 @@ async function handleUpdateProfileShare(request: Request, env: Env): Promise<Res
 // Letterboxd. Seuls des titres « vus » du compte sont acceptés ; l'ordre du
 // tableau est l'ordre d'affichage.
 async function handleGetTopPicks(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   return json({ topPicks: await getTopPicks(env.DB, user.id) });
 }
 
 async function handlePutTopPicks(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -1118,17 +1190,17 @@ async function handlePutTopPicks(request: Request, env: Env): Promise<Response> 
 
 // Rappels « Me prévenir » (migration 0014, worker/reminders.ts) ----------
 async function handleGetReminders(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   return json({ reminders: await getRemindersForUser(env.DB, user.id) });
 }
 
 async function handlePutReminder(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   if (
     !(await checkRateLimit(env.DB, `reminders:user:${user.id}`, {
@@ -1156,9 +1228,9 @@ async function handlePutReminder(request: Request, env: Env): Promise<Response> 
 }
 
 async function handleDeleteReminder(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -1176,7 +1248,7 @@ async function handleDeleteReminder(request: Request, env: Env): Promise<Respons
 // plafonné par IP pour qu'on ne puisse pas balayer l'espace des slugs.
 async function handleGetPublicProfile(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-profile:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
     return RATE_LIMIT_RESPONSE();
   }
   const viewer = await getUserFromRequest(env.DB, request);
@@ -1198,9 +1270,9 @@ async function handleFollow(
   slug: string,
   ctx: ExecutionContext
 ): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   if (
     !(await checkRateLimit(env.DB, `follow:user:${user.id}`, { limit: 120, windowMs: 60 * 60_000 }))
@@ -1267,7 +1339,7 @@ async function handleGetPublicFollowList(
   kind: "followers" | "following"
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-profile:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
     return RATE_LIMIT_RESPONSE();
   }
   const targetId = SHARE_SLUG_PATTERN.test(slug) ? await getUserIdBySlug(env.DB, slug) : null;
@@ -1289,9 +1361,9 @@ async function handleGetAccountFollowList(
   env: Env,
   kind: "followers" | "following"
 ): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const profiles =
     kind === "followers"
@@ -1301,9 +1373,9 @@ async function handleGetAccountFollowList(
 }
 
 async function handleGetFeed(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   return json({ entries: await getFeed(env.DB, user.id) });
 }
@@ -1311,9 +1383,9 @@ async function handleGetFeed(request: Request, env: Env): Promise<Response> {
 // Bloc « Vos abonnements » de la fiche détail : qui, parmi les profils
 // suivis, a vu (et noté) ou veut voir ce titre.
 async function handleGetTitleActivity(request: Request, env: Env, url: URL): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const mediaType = url.searchParams.get("mediaType");
   const tmdbId = Number(url.searchParams.get("id"));
@@ -1334,9 +1406,9 @@ const PROFILE_SEARCH_MIN_LENGTH = 2;
 const PROFILE_SEARCH_MAX_LENGTH = 50;
 
 async function handleSearchProfiles(request: Request, env: Env, url: URL): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   if (!checkRateLimitInMemory(`profile-search:user:${user.id}`, { limit: 30, windowMs: 60_000 })) {
     return RATE_LIMIT_RESPONSE();
@@ -1361,7 +1433,7 @@ async function handleGetPublicProfileAvatar(
   slug: string
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-profile:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1414,14 +1486,57 @@ async function handleLogout(request: Request, env: Env): Promise<Response> {
 // autres appareils s'en aperçoivent aussitôt (fermeture 4001, voir
 // liveSync.ts) ou à leur prochaine requête.
 async function handleLogoutAll(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   await deleteUserSessions(env.DB, user.id);
   await revokeUserSockets(request, user.id, "all");
   return json({ ok: true }, 200, {
     "set-cookie": sessionCookieHeaders(request, null),
+  });
+}
+
+// Suppression de compte en libre-service (audit M14) : confirmation forte
+// déjà faite côté client (saisie de l'adresse e-mail dans AccountSettings),
+// ce endpoint ne la revérifie pas — la seule preuve d'identité qui compte
+// ici est la session (cookie httpOnly), comme pour tout autre endpoint
+// authentifié de ce fichier. Supprime toutes les tables liées en un seul
+// batch atomique (voir deleteUserAccount), puis ferme les WebSockets du
+// compte et efface le cookie de session, exactement comme une déconnexion.
+async function handleDeleteAccount(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  await deleteUserAccount(env.DB, user.id);
+  await revokeUserSockets(request, user.id, "all");
+  return json({ ok: true }, 200, {
+    "set-cookie": sessionCookieHeaders(request, null),
+  });
+}
+
+// Export de compte en libre-service (audit M14, droit à la portabilité) :
+// un seul fichier JSON téléchargeable regroupant toutes les données
+// connues du compte. `content-disposition: attachment` déclenche le
+// téléchargement direct depuis un clic de lien côté client (pas besoin de
+// passer par un Blob/URL.createObjectURL).
+async function handleExportAccount(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  const data = await exportUserAccountData(env.DB, user.id);
+  if (!data) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  return new Response(JSON.stringify(data, null, 2), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition": 'attachment; filename="seancy-export.json"',
+      "cache-control": "no-store",
+    },
   });
 }
 
@@ -1439,18 +1554,24 @@ async function handleLogoutAll(request: Request, env: Env): Promise<Response> {
 // vue admin), il doit être validé contre `user.id` et jamais faire
 // confiance à une valeur fournie par le client sans ce contrôle.
 async function handleGetLibrary(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const library = await getLibraryForUser(env.DB, user.id);
   return json(library);
 }
 
 async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (!(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library:user:${user.id}` })).success) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1480,9 +1601,17 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
 // savoir quoi écrire. Même garde IDOR que handleGetLibrary/handlePutLibrary
 // ci-dessus : user.id vient uniquement du cookie de session.
 async function handleLibrarySync(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library-sync:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1509,23 +1638,34 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
 // uniquement du cookie de session, jamais du corps de la requête.
 async function handleGetCustomLists(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const customLists = await getCustomListsForUser(env.DB, user.id);
   return json(customLists);
 }
 
-// Remplacement complet à chaque appel (voir LibraryContext : anti-rebond côté
-// client, un PUT par salve de changements) — pas de synchronisation
-// incrémentale ici, contrairement à /api/library/sync : une liste perso
-// change par opérations multi-lignes (création, renommage, glisser-déposer)
-// qu'un diff incrémental compliquerait pour un gain nul à cette échelle.
+// Remplacement complet de TOUTES les listes perso — réservé depuis l'audit
+// M4 à la fusion initiale d'un nouvel appareil (voir LibraryContext,
+// CUSTOM_LISTS_SYNCED_FOR_KEY), un vrai remplacement complet y est correct
+// et rare. Toute modification normale passe désormais par
+// handlePutCustomList/handleDeleteCustomList ci-dessous (une seule liste à
+// la fois) : avant, éditer un item d'une liste réécrivait aussi toutes les
+// autres listes du compte en D1 (amplification déjà observée, voir ticket
+// "Milliers de calls workers").
 async function handlePutCustomLists(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-lists:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1538,6 +1678,68 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
   return json({ ok: true });
 }
 
+// Remplacement d'UNE SEULE liste perso (audit M4, « synchro incrémentale ») :
+// chemin normal pour toute création/modification (création, renommage,
+// ajout/retrait d'item, glisser-déposer) une fois la fusion initiale faite.
+// Toujours un remplacement complet DE CETTE LISTE (pas de diff item par
+// item) : une liste change par opérations multi-lignes, comme documenté sur
+// replaceCustomListsForUser — seule la granularité change, pas la stratégie.
+async function handlePutCustomList(request: Request, env: Env, listId: string): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const list = sanitizeSingleCustomList(listId, body);
+  if (!list) {
+    return json({ error: "Liste invalide." }, 400);
+  }
+  // Le plafond total (MAX_CUSTOM_LISTS) ne peut être vérifié qu'ici, pas dans
+  // le sanitizer : celui-ci ne voit qu'une liste à la fois, pas le total déjà
+  // en base. Un ré-envoi d'une liste déjà existante (simple édition) reste
+  // toujours accepté, seule la création d'une liste EN PLUS du plafond est
+  // refusée.
+  const alreadyExists = await customListExistsForUser(env.DB, user.id, list.id);
+  if (!alreadyExists && (await countCustomListsForUser(env.DB, user.id)) >= MAX_CUSTOM_LISTS) {
+    return json({ error: "Nombre maximal de listes atteint.", reason: "too-many-lists" }, 400);
+  }
+  await upsertCustomListForUser(env.DB, user.id, list);
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+async function handleDeleteCustomList(
+  request: Request,
+  env: Env,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await deleteCustomListForUser(env.DB, user.id, listId);
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
 // Partage des listes perso en lecture seule --------------------------------
 //
 // Un lien par liste, créé à la demande (bouton « Partager ») : slug
@@ -1545,17 +1747,17 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
 // endpoints authentifiés : user.id vient uniquement du cookie de session,
 // et une liste n'est partageable que si elle appartient à ce compte.
 async function handleGetListShares(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   return json(await getListSharesForUser(env.DB, user.id));
 }
 
 async function handlePutListShare(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const body = await readJsonObject(request);
   if (!body) {
@@ -1586,7 +1788,7 @@ async function handlePutListShare(request: Request, env: Env): Promise<Response>
 // sa vue éditable côté client).
 async function handleGetPublicList(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-list:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-list:ip:${ip}` })).success) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1605,18 +1807,27 @@ async function handleGetPublicList(request: Request, env: Env, slug: string): Pr
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
 // uniquement du cookie de session, jamais du corps de la requête.
 async function handleGetExcludedGenres(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const genreIds = await getExcludedGenresForUser(env.DB, user.id);
   return json({ genreIds });
 }
 
 async function handlePutExcludedGenres(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `excluded-genres:user:${user.id}` }))
+      .success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1631,23 +1842,134 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   return json({ ok: true });
 }
 
+// Recommandations personnalisées "Pour toi" ------------------------------
+// Tout le calcul (profil de goûts, scoring, diversité) vit dans
+// recommendations.ts ; ce handler ne fait que rassembler les signaux
+// stockés (bibliothèque, genres exclus, "pas intéressé") et renvoyer le
+// résultat. Réservé aux comptes connectés : un visiteur anonyme reste sur
+// le comportement existant (discover() classique) côté client, voir
+// DiscoverPage.tsx.
+const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
+// Retour de review sur la carte Trello : relire toute la bibliothèque et
+// rescorer les candidats à chaque ouverture de la page d'accueil est trop
+// coûteux (quota TMDB/CPU du Worker). Le résultat est donc précalculé par
+// lot et mis en cache (migration 0020, voir db.ts) ; on ne recalcule que si
+// le cache a dépassé sa durée de vie ou s'il contient moins d'éléments que
+// ce qui est demandé (liste épuisée). La taille du lot calculé est le
+// maximum accepté par l'API plutôt que le `limit` de la requête, pour que
+// tant les 24 items de la grille actuelle qu'une future pagination restent
+// servis par le même lot sans recalcul.
+const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const RECOMMENDATION_CACHE_SIZE = 40;
+
+async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (!checkRateLimitInMemory(`recommendations:user:${user.id}`, RECOMMENDATIONS_RATE_LIMIT)) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  const url = new URL(request.url);
+  const typeParam = url.searchParams.get("type") || "all";
+  const mediaTypes: RecommendationMediaType[] =
+    typeParam === "movie" || typeParam === "tv" ? [typeParam] : ["movie", "tv"];
+  const limitParam = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 40) : 20;
+
+  const cached = await getRecommendationCache(env.DB, user.id, typeParam);
+  const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
+  if (cached && isFresh && cached.items.length >= limit) {
+    return json({ items: cached.items.slice(0, limit), coldStart: cached.coldStart });
+  }
+
+  const [library, excludedGenreIds, notInterested] = await Promise.all([
+    getLibraryForUser(env.DB, user.id),
+    getExcludedGenresForUser(env.DB, user.id),
+    getNotInterestedForUser(env.DB, user.id),
+  ]);
+  const watched = Object.values(library.watched);
+  const watchlist = Object.values(library.watchlist);
+  const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
+
+  const candidateLists = await Promise.all(
+    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+  );
+  const candidates = candidateLists.flat();
+  const items = rankRecommendations(candidates, profile, {
+    limit: Math.max(limit, RECOMMENDATION_CACHE_SIZE),
+  });
+  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  return json({ items: items.slice(0, limit), coldStart: profile.isColdStart });
+}
+
+async function handlePostNotInterested(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `not-interested:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const r = body as {
+    mediaType?: unknown;
+    tmdbId?: unknown;
+    genreIds?: unknown;
+    releaseDate?: unknown;
+  };
+  if (!isMediaType(r.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(r.tmdbId);
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  const genreIds = sanitizeIdList(r.genreIds);
+  const releaseDate =
+    typeof r.releaseDate === "string" && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(r.releaseDate)
+      ? r.releaseDate.slice(0, 10)
+      : null;
+  await addNotInterested(env.DB, user.id, r.mediaType, tmdbId, genreIds, releaseDate);
+  return json({ ok: true });
+}
+
 // Plateformes favorites synchronisées -------------------------------------
 //
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
 // uniquement du cookie de session, jamais du corps de la requête.
 async function handleGetFavoriteProviders(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const providerIds = await getFavoriteProvidersForUser(env.DB, user.id);
   return json({ providerIds });
 }
 
 async function handlePutFavoriteProviders(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `favorite-providers:user:${user.id}` }))
+      .success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1667,18 +1989,18 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
 // uniquement du cookie de session, jamais du corps de la requête.
 async function handleGetFavoriteLanguages(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const languageCodes = await getFavoriteLanguagesForUser(env.DB, user.id);
   return json({ languageCodes });
 }
 
 async function handlePutFavoriteLanguages(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   let body: unknown;
   try {
@@ -1701,18 +2023,18 @@ async function handlePutFavoriteLanguages(request: Request, env: Env): Promise<R
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
 // uniquement du cookie de session, jamais du corps de la requête.
 async function handleGetFavoriteCountries(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const countryCodes = await getFavoriteCountriesForUser(env.DB, user.id);
   return json({ countryCodes });
 }
 
 async function handlePutFavoriteCountries(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   let body: unknown;
   try {
@@ -1740,18 +2062,18 @@ async function handlePutFavoriteCountries(request: Request, env: Env): Promise<R
 const SUPPORTED_LOCALES = ["fr", "en"];
 
 async function handleGetLocale(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const locale = await getLocaleForUser(env.DB, user.id);
   return json({ locale });
 }
 
 async function handlePutLocale(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   let body: unknown;
   try {
@@ -1778,18 +2100,18 @@ async function handlePutLocale(request: Request, env: Env): Promise<Response> {
 const ISO_3166_1_ALPHA_2 = /^[A-Z]{2}$/;
 
 async function handleGetRegion(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   const region = await getRegionForUser(env.DB, user.id);
   return json({ region });
 }
 
 async function handlePutRegion(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
   let body: unknown;
   try {
@@ -2141,7 +2463,7 @@ export default withSentry({
         return withSecurityHeaders(serveRobots(url));
       }
       if (url.pathname === "/sitemap.xml") {
-        return withSecurityHeaders(serveSitemap(url));
+        return withSecurityHeaders(await serveSitemap(url, env));
       }
       if (
         PAGE_META_ROUTE.test(url.pathname) &&
@@ -2261,7 +2583,7 @@ async function routeRequest(
   }
 
   if (url.pathname === "/api/run-check" && request.method === "POST") {
-    return handleManualRun(request, env);
+    return handleManualRun(request, env, ctx);
   }
 
   if (url.pathname === "/api/search-index" && request.method === "GET") {
@@ -2298,6 +2620,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/auth/logout-all" && request.method === "POST") {
     return handleLogoutAll(request, env);
+  }
+
+  if (url.pathname === "/api/account" && request.method === "DELETE") {
+    return handleDeleteAccount(request, env);
+  }
+
+  if (url.pathname === "/api/account/export" && request.method === "GET") {
+    return handleExportAccount(request, env);
   }
 
   if (url.pathname === "/api/account/display-name" && request.method === "PATCH") {
@@ -2406,6 +2736,14 @@ async function routeRequest(
     return handlePutCustomLists(request, env);
   }
 
+  const singleCustomListMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)$/);
+  if (singleCustomListMatch && request.method === "PUT") {
+    return handlePutCustomList(request, env, singleCustomListMatch[1]);
+  }
+  if (singleCustomListMatch && request.method === "DELETE") {
+    return handleDeleteCustomList(request, env, singleCustomListMatch[1]);
+  }
+
   if (url.pathname === "/api/list-shares" && request.method === "GET") {
     return handleGetListShares(request, env);
   }
@@ -2421,6 +2759,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/excluded-genres" && request.method === "PUT") {
     return handlePutExcludedGenres(request, env);
+  }
+
+  if (url.pathname === "/api/recommendations" && request.method === "GET") {
+    return handleGetRecommendations(request, env);
+  }
+
+  if (url.pathname === "/api/not-interested" && request.method === "POST") {
+    return handlePostNotInterested(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

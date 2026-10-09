@@ -24,14 +24,7 @@ export { getSeriesEpisodeBadge } from "./seriesEpisodeBadge.ts";
 export type { SeriesEpisodeBadge } from "./seriesEpisodeBadge.ts";
 export { getMovieReleaseBadge } from "./movieReleaseBadge.ts";
 export type { MovieReleaseBadge } from "./movieReleaseBadge.ts";
-export {
-  posterUrl,
-  posterSrcSet,
-  backdropUrl,
-  logoUrl,
-  IMG_BASE,
-  TmdbConfigError,
-} from "./tmdbClient.ts";
+export { posterUrl, posterSrcSet, backdropUrl, logoUrl, TmdbConfigError } from "./tmdbClient.ts";
 import { tmdbFetch, IS_DEV, currentTmdbLanguage } from "./tmdbClient.ts";
 import { LruCache } from "../lib/lruCache.ts";
 
@@ -340,10 +333,6 @@ export async function searchMultiRanked(
 
 // Personnes (acteurs, réalisateurs) --------------------------------------
 
-export function searchPerson(query: string, page = 1) {
-  return tmdbFetch("/search/person", { query, page, include_adult: false });
-}
-
 export function getPerson(id: string | number): Promise<PersonDetails> {
   return tmdbFetch(`/person/${id}`);
 }
@@ -351,12 +340,6 @@ export function getPerson(id: string | number): Promise<PersonDetails> {
 // Filmographie complète (apparitions devant ET derrière la caméra).
 export function getPersonCredits(id: string | number): Promise<PersonCredits> {
   return tmdbFetch(`/person/${id}/combined_credits`);
-}
-
-export function trending(mediaType: "all" | MediaType = "all", window: "day" | "week" = "week") {
-  return tmdbFetch<PagedResponse<MediaSummary & { media_type: MediaType }>>(
-    `/trending/${mediaType}/${window}`
-  );
 }
 
 // Détails ---------------------------------------------------------------

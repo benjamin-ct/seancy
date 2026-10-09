@@ -457,6 +457,13 @@ export default function RandomPage() {
           }
         }
       }
+      // Plusieurs `await` séparent ce point du déclenchement : la page peut
+      // avoir été démontée entre-temps (navigation pendant le tirage, audit
+      // M16) — poser le résultat sur un composant démonté ne crashe pas mais
+      // fuit du travail (sessionStorage, re-renders) pour rien.
+      if (!mountedRef.current) {
+        return;
+      }
       if (!drawn) {
         clearPick();
         setStatus("empty");
@@ -466,6 +473,9 @@ export default function RandomPage() {
       if (poster) {
         await preloadImage(poster, POSTER_WAIT_MS);
       }
+      if (!mountedRef.current) {
+        return;
+      }
       setPick(drawn.item);
       setPickDetails(drawn.details);
       setProvidersResult(watchProvidersFromDetails(drawn.details, region));
@@ -473,6 +483,9 @@ export default function RandomPage() {
       setDrawCount((count) => count + 1);
       setStatus("success");
     } catch (err) {
+      if (!mountedRef.current) {
+        return;
+      }
       clearPick();
       setError(err as Error);
       setStatus("error");
@@ -492,6 +505,10 @@ export default function RandomPage() {
   const pickType = pick?.mediaType ?? drawTypes[0];
   const watched = pick ? isWatched(pickType, pick.id) : false;
   const inWatchlist = pick ? isInWatchlist(pickType, pick.id) : false;
+  // Pas encore sorti (ciné ou plateforme) : le bouton "Vu" porterait à
+  // confusion, donc masqué tant que rien n'a déjà été marqué vu (voir
+  // MediaCard.tsx, même logique sur les cartes).
+  const isUpcoming = Boolean(date && new Date(date) > new Date());
   const accentKey = pick
     ? posterAccentFromGenres(pick.genre_ids, `${pickType}:${pick.id}`)
     : "drama";
@@ -511,6 +528,15 @@ export default function RandomPage() {
     return [...new Set([...mixed, ...personal])];
   }, [catalogPosters, history, watchlist]);
   const reelPoster = useReelPoster(rolling, reelPosters);
+
+  // Garde de démontage pour `drawRandom` (audit M16) : ses `await` peuvent se
+  // résoudre après que la page a été quittée en plein tirage.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Un titre est déjà tiré à l'arrivée sur la page, avec la source et les
   // filtres par défaut (même tirage que le bouton « Tirer un titre »). La
@@ -733,20 +759,22 @@ export default function RandomPage() {
                 <Icon name="star" filled={inWatchlist} />
                 {inWatchlist ? t("randomPage.wantToWatchOn") : t("randomPage.wantToWatchOff")}
               </button>
-              <button
-                type="button"
-                className={`${styles.secondaryBtn} ${watched ? styles.onWatched : ""}`}
-                aria-pressed={watched}
-                onClick={() => {
-                  const item = buildLibItem();
-                  if (item) {
-                    toggleWatched(item);
-                  }
-                }}
-              >
-                <Icon name="check" strokeWidth={watched ? 3 : 2} />
-                {watched ? t("randomPage.watchedOn") : t("randomPage.watchedOff")}
-              </button>
+              {(watched || !isUpcoming) && (
+                <button
+                  type="button"
+                  className={`${styles.secondaryBtn} ${watched ? styles.onWatched : ""}`}
+                  aria-pressed={watched}
+                  onClick={() => {
+                    const item = buildLibItem();
+                    if (item) {
+                      toggleWatched(item);
+                    }
+                  }}
+                >
+                  <Icon name="check" strokeWidth={watched ? 3 : 2} />
+                  {watched ? t("randomPage.watchedOn") : t("randomPage.watchedOff")}
+                </button>
+              )}
               <TrailerButton videos={pickDetails?.videos?.results} />
               <Link
                 to={`/media/${pickType}/${pick.id}#recommendations`}

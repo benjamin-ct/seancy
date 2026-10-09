@@ -11,6 +11,7 @@ import { Icon } from "../../shared/components/index.ts";
 import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
 import type { Genre, MediaItem } from "../../core/types/tmdb.ts";
 import posterStyles from "../../shared/styles/posterAccents.module.css";
+import { storageGetJSON, storageSetJSON } from "../../shared/lib/storage.ts";
 import styles from "./TonightPick.module.css";
 
 // Parmi combien de films populaires on tire celui du soir : assez pour
@@ -29,25 +30,14 @@ function today(): string {
 }
 
 function readSkipped(): number[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SKIPPED_KEY) || "null") as {
-      date?: string;
-      ids?: unknown;
-    } | null;
-    return raw?.date === today() && Array.isArray(raw.ids)
-      ? raw.ids.filter((id): id is number => typeof id === "number")
-      : [];
-  } catch {
-    return [];
-  }
+  const raw = storageGetJSON<{ date?: string; ids?: unknown } | null>(SKIPPED_KEY, null);
+  return raw?.date === today() && Array.isArray(raw.ids)
+    ? raw.ids.filter((id): id is number => typeof id === "number")
+    : [];
 }
 
 function writeSkipped(ids: number[]) {
-  try {
-    localStorage.setItem(SKIPPED_KEY, JSON.stringify({ date: today(), ids }));
-  } catch {
-    // Stockage indisponible (navigation privée…) : l'écart vaut pour la session.
-  }
+  storageSetJSON(SKIPPED_KEY, { date: today(), ids });
 }
 
 // Tirage stable sur la journée (même film à chaque visite du jour, un autre

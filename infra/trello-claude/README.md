@@ -94,6 +94,22 @@ alertes avec les notifications de fin de pipeline Trello.
    new issue is created") > action "Send a notification via a webhook" > URL =
    `https://<host-du-listener>:29000/sentry-webhook?secret=<SENTRY_WEBHOOK_SECRET>`.
 
+## Logs infra → Sentry
+
+Décidé sur le ticket Trello "Avenir du développement" (éviter de maintenir un outil de logs à part) :
+`webhook-listener` pousse ses propres logs (déclenchement du pipeline, succès/échec, limite d'usage
+atteinte, relance programmée) vers Sentry via `sentry-log.js`, taguée `source:infra` — même projet
+Sentry que l'app (`source:app`, voir `worker/sentry.ts` et `src/core/logger.ts` à la racine du repo),
+filtrable par ce tag plutôt que séparé en deux projets.
+
+Étape manuelle pour l'activer : renseigner `SENTRY_DSN` dans `.env` avec la **même valeur** que le
+secret `SENTRY_DSN` déjà posé côté dashboard Cloudflare pour le Worker (Settings > Variables and
+Secrets) — pas une nouvelle clé à créer. Sans cette variable, `sentry-log.js` reste un no-op
+silencieux (seuls les `console.log`/Discord existants continuent de fonctionner). Non vérifié de
+bout en bout depuis ce pipeline (pas de DSN disponible dans cet environnement) : à confirmer après
+le premier déploiement avec la variable renseignée (déclencher le pipeline une fois, vérifier
+qu'un événement tagué `source:infra` apparaît côté Sentry).
+
 ## Limite d'usage Claude : relance automatique
 
 Quand une exécution s'arrête sur la limite d'usage Claude, le listener ne se contente plus d'un

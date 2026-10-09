@@ -10,6 +10,7 @@ import { Icon } from "../../../shared/components/index.ts";
 import { posterAccentFromGenres } from "../../../shared/lib/posterAccent.ts";
 import { moveKey, useSortable } from "../../../shared/hooks/useSortable.ts";
 import posterStyles from "../../../shared/styles/posterAccents.module.css";
+import { storageGetJSON, storageSetJSON } from "../../../shared/lib/storage.ts";
 import styles from "./TopPicksPanel.module.css";
 
 const MAX_PICKS = 5;
@@ -24,20 +25,12 @@ const RANK_CLASS = ["rank1", "rank2", "rank3", "rankOutline", "rankOutline"] as 
 const CACHE_KEY = "seancy.topPicks.v1";
 
 function readCachedPicks(): string[] | null {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null");
-    return Array.isArray(value) ? value.filter((key) => typeof key === "string") : null;
-  } catch {
-    return null;
-  }
+  const value = storageGetJSON<unknown>(CACHE_KEY, null);
+  return Array.isArray(value) ? value.filter((key) => typeof key === "string") : null;
 }
 
 function cachePicks(picks: string[]) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(picks));
-  } catch {
-    // Stockage indisponible (navigation privée...) : pas de cache.
-  }
+  storageSetJSON(CACHE_KEY, picks);
 }
 
 // Top 5 du profil partagé choisi à la main parmi ses titres vus (seuls les

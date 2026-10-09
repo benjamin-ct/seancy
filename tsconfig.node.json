@@ -29,6 +29,7 @@
     "src/core/api/retryAfter.ts",
     "src/core/api/globalProviders.ts",
     "src/core/types/tmdb.ts",
+    "src/core/validation/mediaType.ts",
     "src/shared/lib/numericRangeFilter.ts",
     "src/core/botDetection.ts",
     "worker/bots.ts",

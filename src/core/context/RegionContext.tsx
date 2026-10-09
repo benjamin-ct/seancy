@@ -11,6 +11,7 @@ import { DEFAULT_REGION, getTheatricalStatusIndex, type TheatricalIndex } from "
 import { isLikelyAutomatedClient } from "../botDetection.ts";
 import { DEFAULT_LOCALE, type Locale } from "../i18n/i18n.ts";
 import { useLocale } from "./LocaleContext.tsx";
+import { storageGet, storageSet } from "../../shared/lib/storage.ts";
 
 interface RegionContextValue {
   region: string;
@@ -34,24 +35,12 @@ export function isValidRegionCode(value: string): boolean {
 }
 
 export function loadStoredRegion(): string | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && isValidRegionCode(stored)) {
-      return stored;
-    }
-  } catch {
-    // localStorage indisponible (mode privé strict...) : repli silencieux.
-  }
-  return null;
+  const stored = storageGet(STORAGE_KEY);
+  return stored && isValidRegionCode(stored) ? stored : null;
 }
 
 function persistRegion(region: string): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, region);
-  } catch {
-    // Repli silencieux : la région reste appliquée pour cette session,
-    // simplement pas mémorisée pour la prochaine visite.
-  }
+  storageSet(STORAGE_KEY, region);
 }
 
 // Nom du pays dans la locale active (ex. "FR" -> "France"/"France", "US" ->

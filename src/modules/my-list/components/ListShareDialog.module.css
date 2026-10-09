@@ -149,6 +149,15 @@
   color: var(--muted);
 }
 
+/* L'input interne masque son propre focus (outline carré moche sur une
+   pilule arrondie, voir plus bas) : ce ring suit la forme de la pilule à la
+   place, sinon le focus clavier sur ce champ en lecture seule ne se voit
+   plus du tout (audit F8). */
+.linkField:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .linkField input {
   flex: 1;
   min-width: 0;

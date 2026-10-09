@@ -30,6 +30,27 @@ export function isProductionHostname(hostname: string): boolean {
   return hostname === PRODUCTION_HOSTNAME || hostname === LEGACY_PRODUCTION_HOSTNAME;
 }
 
+// Hostname de l'environnement `develop` persistant (voir ticket Trello
+// "Avenir du développement", PR #282) : même mécanisme de nommage que les
+// previews de PR (slug de branche + nom du Worker), nom de branche "develop"
+// donnant ce slug stable.
+export const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+
+// Sans environment explicite, le SDK Sentry retombe sur "production" par
+// défaut — les erreurs des previews de PR et de `develop` remontaient donc
+// jusqu'ici marquées production (voir ticket Trello "Dashboard de suivis de
+// Claude"). Reste "preview" pour tout ce qui n'est ni la vraie prod ni
+// `develop` (previews de PR, `wrangler dev` local).
+export function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
+  if (isProductionHostname(hostname)) {
+    return "production";
+  }
+  if (hostname === PREPROD_HOSTNAME) {
+    return "preprod";
+  }
+  return "preview";
+}
+
 // `wrangler versions upload --preview-alias` ne supprime jamais l'alias de
 // preview à la fermeture d'une PR (aucun endpoint Cloudflare pour ça — voir
 // carte Trello "Infra : nettoyer les Worker preview aliases"), alors que
@@ -51,8 +72,17 @@ export function withSentry<Handler extends ExportedHandler<Env>>(handler: Handle
     (env) => ({
       dsn: env.SENTRY_DSN,
       tracesSampleRate: 0,
+      // Tag partagé avec le client (src/core/logger.ts) et le script de
+      // logs infra du NAS (infra/trello-claude/listener/sentry-log.js) :
+      // permet de filtrer un seul projet Sentry ("applicatif" vs "infra"
+      // plutôt que deux projets séparés — décidé sur le ticket Trello
+      // "Avenir du développement").
+      initialScope: { tags: { source: "app" } },
       beforeSend(event) {
         const hostname = event.request?.url ? new URL(event.request.url).hostname : null;
+        if (hostname) {
+          event.environment = getEnvironmentName(hostname);
+        }
         if (hostname && !isProductionHostname(hostname) && isDeadPreviewD1Error(event)) {
           return null;
         }

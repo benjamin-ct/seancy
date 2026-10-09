@@ -391,6 +391,22 @@
   font-size: 14px;
 }
 
+.confirm input {
+  width: 100%;
+  height: 44px;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  padding: 0 14px;
+  color: var(--fg);
+  font-size: 15px;
+}
+
+.confirm input:focus-visible {
+  outline: none;
+  border-color: var(--control);
+}
+
 .linkField {
   display: flex;
   align-items: center;
@@ -399,6 +415,14 @@
   background: var(--bg);
   border: 1px solid var(--border-2);
   border-radius: 14px;
+}
+
+/* Voir ListShareDialog.module.css, même raison (champ en lecture seule dont
+   l'input masque son propre focus) : le ring suit la forme du champ plutôt
+   que de disparaître (audit F8). */
+.linkField:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .linkField input {

@@ -5,6 +5,7 @@ import { searchMultiRanked, posterUrl } from "../../../core/api/tmdb.ts";
 import { useAuth } from "../../../core/context/AuthContext.tsx";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
+import { prefersReducedMotion } from "../../lib/motion.ts";
 import type { SearchMultiResult } from "../../../core/types/tmdb.ts";
 import TicketLogo from "../TicketLogo/TicketLogo.tsx";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
@@ -361,7 +362,7 @@ export default function NavBar() {
   );
 
   function onNavClick() {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }
 
   return (
@@ -516,7 +517,15 @@ export default function NavBar() {
               `${styles.tabbarItem} ${isActive ? styles.tabbarItemActive : ""}`
             }
           >
-            <Icon name={link.icon} size={24} strokeWidth={1.9} />
+            {({ isActive }) => (
+              <>
+                <Icon name={link.icon} size={isActive ? 20 : 24} strokeWidth={1.9} />
+                {/* Libellé visible seulement sur l'onglet actif (audit F8) :
+                    les autres restent en icône seule, faute de place pour
+                    tout étiqueter dans cette largeur de pilule mobile. */}
+                {isActive && <span className={styles.tabbarLabel}>{link.label}</span>}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

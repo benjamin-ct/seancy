@@ -43,10 +43,12 @@ import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
 import { STAR_LABEL_KEYS } from "../../shared/lib/ratingTier.ts";
 import { pop } from "../../shared/lib/motion.ts";
 import { getMediaPreview, type MediaPreview } from "../../shared/lib/mediaPreviewCache.ts";
+import { toMediaItem } from "../../shared/lib/mediaItem.ts";
 import posterStyles from "../../shared/styles/posterAccents.module.css";
 import dropdownStyles from "../../shared/components/Dropdown/Dropdown.module.css";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
-import type { CastMember, MediaDetails, MediaType } from "../../core/types/tmdb.ts";
+import type { CastMember, MediaDetails } from "../../core/types/tmdb.ts";
+import { isMediaType } from "../../core/validation/mediaType.ts";
 import styles from "./DetailPage.module.css";
 import { TmdbHttpError } from "../../core/api/tmdbClient.ts";
 import NotFoundPage from "../not-found/NotFoundPage.tsx";
@@ -116,7 +118,12 @@ export default function DetailPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { mediaType, id } = useParams<{ mediaType: MediaType; id: string }>();
+  // `useParams` ne garantit rien sur la forme de `mediaType` : une URL
+  // `/media/foo/1` le laisserait passer tel quel vers TMDB sans ce garde
+  // (audit F6). `isMediaType` restreint ensuite le type du reste du
+  // composant à `MediaType | undefined`, comme avant ce correctif.
+  const { mediaType: rawMediaType, id } = useParams<{ mediaType: string; id: string }>();
+  const mediaType = isMediaType(rawMediaType) ? rawMediaType : undefined;
   // Fiche déjà chargée pendant la session (déjà vue) : affichée dès le
   // premier rendu, sans passer par le squelette.
   const [details, setDetails] = useState<MediaDetails | null>(() =>
@@ -221,7 +228,7 @@ export default function DetailPage() {
   }, [linkCopied]);
 
   if (!mediaType || !id) {
-    return null;
+    return <NotFoundPage />;
   }
 
   function backLink(className: string) {
@@ -284,8 +291,6 @@ export default function DetailPage() {
   const inWatchlist = isInWatchlist(mediaType, id);
   const excluded = isExcludedTitle(mediaType, id);
   const notifying = hasReminder(mediaType, Number(id));
-  // Pas de sens de proposer un rappel de sortie pour un titre déjà sorti.
-  const isUpcoming = Boolean(date && new Date(date) > new Date());
   const accentKey = posterAccentFromGenres(
     details.genres?.map((g) => g.id),
     `${mediaType}:${id}`
@@ -299,6 +304,11 @@ export default function DetailPage() {
   // globale TMDB indépendante de la région, alors que `theatricalDate` est
   // la sortie ciné réelle dans la région active.
   const displayDate = theatricalDate || date;
+  // Pas de sens de proposer un rappel de sortie, ni de marquer "vu", pour un
+  // titre déjà sorti : `displayDate` (et non `date`) pour rester cohérent
+  // avec la date affichée à l'écran (ciné régional prioritaire sur la date
+  // primaire TMDB, qui peut déjà être passée dans un autre pays).
+  const isUpcoming = Boolean(displayDate && new Date(displayDate) > new Date());
   const theatricalStatus = theatricalStatusFromDate(theatricalDate);
   const theatricalDateFormatted = theatricalDate ? formatFullDate(theatricalDate, locale) : null;
   const theatricalMessage = theatricalStatus
@@ -366,7 +376,11 @@ export default function DetailPage() {
     mediaType,
     title,
     posterPath: details.poster_path ?? null,
-    date,
+    // displayDate (sortie ciné régionale si connue) et pas `date` (date TMDB
+    // globale) : sinon un ajout aux favoris/listes/rappels depuis cette fiche
+    // stocke une date différente de celle affichée à l'écran juste au-dessus
+    // (cause du ticket Trello sur les dates erronées en Prochainement/Ma liste).
+    date: displayDate,
     genreIds: details.genres?.map((g) => g.id) || [],
     runtimeMinutes: estimateRuntimeMinutes(details, mediaType),
   };
@@ -657,34 +671,38 @@ export default function DetailPage() {
                   {inWatchlist ? t("detailPage.wantToWatchOn") : t("detailPage.wantToWatchOff")}
                 </span>
               </button>
-              <button
-                type="button"
-                className={`${styles.actionBtn} ${styles.watchedBtn} ${watched ? styles.watchedOn : ""}`}
-                onClick={(e) => {
-                  if (!watched) {
-                    pop(e.currentTarget.firstElementChild);
-                  }
-                  if (mediaType === "tv") {
-                    toggleSeriesWatched();
-                  } else {
-                    toggleWatched(libItem);
-                  }
-                }}
-                aria-pressed={watched}
-                disabled={markingSeries}
-              >
-                <Icon name="check" strokeWidth={watched ? 3 : 2} />
-                <span className={styles.btnLabel}>
-                  {mediaType === "tv"
-                    ? watched
-                      ? t("detailPage.seriesWatchedOn")
-                      : t("detailPage.seriesWatchedOff")
-                    : watched
-                      ? t("detailPage.watchedOn")
-                      : t("detailPage.watchedOff")}
-                </span>
-              </button>
-              {!watched && (
+              {/* Pas encore sorti (ciné ou plateforme) : le bouton "Vu" porterait à
+                  confusion, donc masqué tant que rien n'a déjà été marqué vu. */}
+              {(watched || !isUpcoming) && (
+                <button
+                  type="button"
+                  className={`${styles.actionBtn} ${styles.watchedBtn} ${watched ? styles.watchedOn : ""}`}
+                  onClick={(e) => {
+                    if (!watched) {
+                      pop(e.currentTarget.firstElementChild);
+                    }
+                    if (mediaType === "tv") {
+                      toggleSeriesWatched();
+                    } else {
+                      toggleWatched(libItem);
+                    }
+                  }}
+                  aria-pressed={watched}
+                  disabled={markingSeries}
+                >
+                  <Icon name="check" strokeWidth={watched ? 3 : 2} />
+                  <span className={styles.btnLabel}>
+                    {mediaType === "tv"
+                      ? watched
+                        ? t("detailPage.seriesWatchedOn")
+                        : t("detailPage.seriesWatchedOff")
+                      : watched
+                        ? t("detailPage.watchedOn")
+                        : t("detailPage.watchedOff")}
+                  </span>
+                </button>
+              )}
+              {!watched && !isUpcoming && (
                 <span className={styles.watchDateWrap}>
                   <span className={`${styles.actionBtn} ${styles.watchDateBtn}`} aria-hidden="true">
                     <Icon name="calendar" />
@@ -939,10 +957,7 @@ export default function DetailPage() {
           </div>
           <div className={gridStyles.grid}>
             {recommendations.slice(0, 12).map((item) => (
-              <MediaCard
-                key={item.id}
-                item={{ ...item, mediaType: item.media_type || mediaType }}
-              />
+              <MediaCard key={item.id} item={toMediaItem(item, mediaType)} />
             ))}
           </div>
         </section>

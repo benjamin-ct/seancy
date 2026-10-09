@@ -6,6 +6,7 @@ import i18n, {
   loadInitialLocale,
   type Locale,
 } from "../i18n/i18n.ts";
+import { storageSet } from "../../shared/lib/storage.ts";
 
 // Langue de l'interface, indépendante du réglage des plateformes de
 // streaming (voir FavoriteProvidersContext, qui reste piloté par
@@ -37,12 +38,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       }
     });
     document.documentElement.setAttribute("lang", locale);
-    try {
-      localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-    } catch {
-      // Repli silencieux : la langue reste appliquée pour cette session,
-      // simplement pas mémorisée pour la prochaine visite.
-    }
+    storageSet(LOCALE_STORAGE_KEY, locale);
     return () => {
       cancelled = true;
     };

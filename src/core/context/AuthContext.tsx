@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -75,6 +76,11 @@ interface AuthContextValue {
   // Remplace ou supprime la photo de profil personnelle.
   uploadAvatar: (image: Blob) => Promise<void>;
   removeAvatar: () => Promise<void>;
+  // Suppression définitive du compte et de toutes ses données (audit M14,
+  // ticket RGPD). La confirmation forte (saisie de l'adresse e-mail) se
+  // fait côté appelant (voir AccountSettings) ; cet appel exécute la
+  // suppression sans autre garde que la session déjà ouverte.
+  deleteAccount: () => Promise<void>;
 }
 
 export interface UsernameCheck {
@@ -424,33 +430,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [t]
   );
 
-  return (
-    <AuthContext.Provider
-      value={{
-        status,
-        email,
-        displayName,
-        shareSlug,
-        username,
-        avatarVersion,
-        requestLink,
-        verify,
-        verifyCode,
-        logout,
-        logoutAll,
-        updateDisplayName: updateDisplayNameCallback,
-        setProfileShared,
-        requestEmailChange,
-        confirmEmailChange,
-        updateUsername,
-        checkUsername,
-        uploadAvatar,
-        removeAvatar,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  // Si l'appel échoue, rien n'est effacé : l'erreur remonte au bouton, comme
+  // logoutAll ci-dessus.
+  const deleteAccount = useCallback(async () => {
+    const res = await fetch("/api/account", { method: "DELETE", headers: syncClientHeaders() });
+    if (!res.ok) {
+      throw new Error(t("accountCard.deleteAccountError"));
+    }
+    pinnedRef.current = false;
+    leaveAccount();
+  }, [t]);
+
+  // Audit H9 (fichiers concernés) : sans ce useMemo, un nouvel objet était
+  // recréé à chaque rendu du Provider, donc tout consommateur de useAuth()
+  // se re-rendait même quand aucun des champs lus ne changeait réellement.
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      status,
+      email,
+      displayName,
+      shareSlug,
+      username,
+      avatarVersion,
+      requestLink,
+      verify,
+      verifyCode,
+      logout,
+      logoutAll,
+      updateDisplayName: updateDisplayNameCallback,
+      setProfileShared,
+      requestEmailChange,
+      confirmEmailChange,
+      updateUsername,
+      checkUsername,
+      uploadAvatar,
+      removeAvatar,
+      deleteAccount,
+    }),
+    [
+      status,
+      email,
+      displayName,
+      shareSlug,
+      username,
+      avatarVersion,
+      requestLink,
+      verify,
+      verifyCode,
+      logout,
+      logoutAll,
+      updateDisplayNameCallback,
+      setProfileShared,
+      requestEmailChange,
+      confirmEmailChange,
+      updateUsername,
+      checkUsername,
+      uploadAvatar,
+      removeAvatar,
+      deleteAccount,
+    ]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // Les messages d'erreur du Worker sont en français : on les traduit côté

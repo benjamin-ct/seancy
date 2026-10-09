@@ -99,6 +99,62 @@
   color: var(--subtle);
 }
 
+/* Confirmation de suppression intégrée (audit F8) : remplace window.confirm,
+   incohérent avec le reste de l'app (voir AccountSettings.module.css,
+   .confirm, même principe). */
+.confirmDelete {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+  border-radius: 14px;
+  font-size: 14px;
+}
+
+.confirmDelete p {
+  margin: 0;
+}
+
+.confirmDelete .inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.confirmDelete button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.confirmDeleteBtn {
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.confirmDeleteBtn:hover {
+  background: var(--accent-strong);
+}
+
+.confirmCancelBtn {
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--fg);
+}
+
+.confirmCancelBtn:hover {
+  background: var(--surface-2);
+}
+
 /* Conteneur : la poignée se cale en bas à gauche de l'affiche (2/3, donc
    150cqw de haut), le logo de plateforme occupant le coin haut droit. */
 .sortItem {

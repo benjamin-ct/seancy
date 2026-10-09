@@ -9,8 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext.tsx";
-import { logError, logWarn } from "../logger.ts";
+import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncRevision } from "../sync/liveSync.ts";
+import {
+  storageGet,
+  storageGetJSON,
+  storageSet,
+  storageSetJSON,
+} from "../../shared/lib/storage.ts";
 
 // Pays de production préférés sur le compte (ex. "FR", "US"), pré-réglés une
 // fois pour filtrer Nouveautés/Prochainement en un clic plutôt que de
@@ -30,16 +36,8 @@ interface FavoriteCountriesContextValue {
 const FavoriteCountriesContext = createContext<FavoriteCountriesContextValue | null>(null);
 
 function loadInitialCodes(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
 }
 
 export function FavoriteCountriesProvider({ children }: { children: ReactNode }) {
@@ -57,11 +55,7 @@ export function FavoriteCountriesProvider({ children }: { children: ReactNode })
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(favoriteCountryCodes));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les pays favoris.", err);
-    }
+    storageSetJSON(STORAGE_KEY, favoriteCountryCodes);
   }, [favoriteCountryCodes]);
 
   useEffect(() => {
@@ -86,7 +80,7 @@ export function FavoriteCountriesProvider({ children }: { children: ReactNode })
           return;
         }
         const remoteCodes = remote.countryCodes || [];
-        const alreadySyncedFor = localStorage.getItem(SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           lastSyncedJsonRef.current = JSON.stringify(remoteCodes);
           setFavoriteCountryCodes(remoteCodes);
@@ -94,7 +88,7 @@ export function FavoriteCountriesProvider({ children }: { children: ReactNode })
         }
         const merged = [...new Set([...favoriteCountryCodes, ...remoteCodes])];
         setFavoriteCountryCodes(merged);
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/favorite-countries", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },

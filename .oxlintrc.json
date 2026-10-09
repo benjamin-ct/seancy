@@ -3,6 +3,12 @@
   "plugins": ["react", "oxc", "typescript"],
   "rules": {
     "react/rules-of-hooks": "error",
+    // Les ~24 `eslint-disable-next-line react-hooks/exhaustive-deps` du
+    // projet anticipaient déjà cette règle (probablement un reliquat d'une
+    // config ESLint antérieure) : activée, elle ne produit aucun nouveau
+    // signalement aujourd'hui (vérifié), elle sert juste à couvrir le code
+    // futur sans disable explicite (audit M17).
+    "react/exhaustive-deps": "warn",
     "react/only-export-components": ["warn", { "allowConstantExport": true }],
     "curly": ["error", "all"],
     "typescript/no-explicit-any": "warn",

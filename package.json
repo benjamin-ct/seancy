@@ -31,6 +31,7 @@
     "verify:tmdb-edge-cache": "node scripts/verify-tmdb-edge-cache.ts",
     "verify:security-headers": "node scripts/security-headers.ts --check",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
+    "check:dead-code": "knip --include files,dependencies",
     "postinstall": "node scripts/generate-icons.ts",
     "prepare": "husky"
   },
@@ -45,6 +46,7 @@
     "react-dom": "^19.3.0",
     "react-i18next": "^17.0.14",
     "react-router-dom": "^7.18.3",
+    "valibot": "^1.5.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
@@ -55,12 +57,14 @@
     "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^6.1.1",
     "husky": "^9.1.7",
+    "knip": "^6.39.0",
     "lint-staged": "^17.4.1",
     "oxlint": "^1.82.0",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vite-plugin-pwa": "^1.3.0",
+    "workbox-core": "^7.4.1",
     "workbox-expiration": "^7.4.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",

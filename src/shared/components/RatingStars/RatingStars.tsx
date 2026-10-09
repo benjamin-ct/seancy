@@ -53,11 +53,15 @@ export default function RatingStars({
         ref={starsRef}
         className={`${styles.stars} ${styles[`s-${tier.cls}`]}`}
         onMouseLeave={() => setHovered(null)}
+        role="radiogroup"
+        aria-label={t("ratingStars.groupAriaLabel")}
       >
         {VALUES.map((n) => (
           <button
             key={n}
             type="button"
+            role="radio"
+            aria-checked={n === value}
             className={`${styles.star} ${n <= displayValue ? styles.lit : ""}`}
             disabled={disabled}
             onMouseEnter={() => setHovered(n)}

@@ -429,8 +429,10 @@ export function serveRobots(url: URL): Response {
   });
 }
 
-// Pages fixes seulement : les fiches (des centaines de milliers de titres
-// TMDB) sont découvertes par les liens internes, pas listées ici.
+// Pages fixes. Le catalogue complet (des centaines de milliers de titres
+// TMDB) reste découvert par les liens internes plutôt que listé ici : seuls
+// les titres populaires, déjà indexés localement pour la recherche (voir
+// popular_titles dans search-index.ts), sont ajoutés ci-dessous.
 const SITEMAP_PATHS = [
   "/",
   "/nouveautes",
@@ -440,8 +442,18 @@ const SITEMAP_PATHS = [
   "/confidentialite",
 ];
 
-export function serveSitemap(url: URL): Response {
+export async function serveSitemap(url: URL, env: Env): Promise<Response> {
   const entries = SITEMAP_PATHS.map((path) => `  <url><loc>${url.origin}${path}</loc></url>`);
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT tmdb_id, media_type FROM popular_titles ORDER BY popularity DESC"
+    ).all<{ tmdb_id: number; media_type: string }>();
+    for (const { tmdb_id, media_type } of results) {
+      entries.push(`  <url><loc>${url.origin}/media/${media_type}/${tmdb_id}</loc></url>`);
+    }
+  } catch (err) {
+    logError("Titres populaires indisponibles pour le sitemap :", err);
+  }
   const body = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
