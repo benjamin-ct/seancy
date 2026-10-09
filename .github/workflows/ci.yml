@@ -103,6 +103,7 @@ jobs:
           npm run verify:tmdb-retry-after
           npm run verify:tmdb-edge-cache
           npm run verify:security-headers
+          npm run verify:changeset-parsing
 
       - name: Build
         run: npm run build
@@ -121,6 +122,27 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Fragment de changelog requis sur toute PR qui touche du code produit —
+  # voir .changeset/README.md et scripts/check-changeset.ts. fetch-depth: 0
+  # nécessaire pour calculer le diff contre la base réelle (le clone
+  # superficiel par défaut n'a pas cette réf).
+  check-changeset:
+    name: Fragment changelog (.changeset) requis
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/check-changeset.ts
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
 
   deploy-preview:
     name: Deploy preview & comment
