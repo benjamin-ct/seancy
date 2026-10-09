@@ -1012,6 +1012,55 @@ export async function addNotInterested(
     .run();
 }
 
+// Cache du lot de recommandations déjà calculé pour un utilisateur et un
+// scope de type ("movie" | "tv" | "all", voir migration 0020) — évite de
+// relire toute la bibliothèque et de rescorer les candidats à chaque
+// ouverture de la page d'accueil.
+export interface RecommendationCacheRow {
+  items: unknown[];
+  coldStart: boolean;
+  computedAt: number;
+}
+
+export async function getRecommendationCache(
+  db: D1Database,
+  userId: number,
+  mediaScope: string
+): Promise<RecommendationCacheRow | null> {
+  const row = await db
+    .prepare(
+      "SELECT items, cold_start, computed_at FROM recommendation_cache WHERE user_id = ? AND media_scope = ?"
+    )
+    .bind(userId, mediaScope)
+    .first<{ items: string; cold_start: number; computed_at: number }>();
+  if (!row) {
+    return null;
+  }
+  return {
+    items: JSON.parse(row.items),
+    coldStart: row.cold_start === 1,
+    computedAt: row.computed_at,
+  };
+}
+
+export async function setRecommendationCache(
+  db: D1Database,
+  userId: number,
+  mediaScope: string,
+  items: unknown[],
+  coldStart: boolean
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO recommendation_cache (user_id, media_scope, items, cold_start, computed_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, media_scope) DO UPDATE SET
+         items = excluded.items, cold_start = excluded.cold_start, computed_at = excluded.computed_at`
+    )
+    .bind(userId, mediaScope, JSON.stringify(items), coldStart ? 1 : 0, Date.now())
+    .run();
+}
+
 export async function getFavoriteProvidersForUser(
   db: D1Database,
   userId: number

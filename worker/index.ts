@@ -35,6 +35,8 @@ import {
   replaceExcludedGenresForUser,
   getNotInterestedForUser,
   addNotInterested,
+  getRecommendationCache,
+  setRecommendationCache,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -1847,6 +1849,17 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
 // le comportement existant (discover() classique) côté client, voir
 // DiscoverPage.tsx.
 const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
+// Retour de review sur la carte Trello : relire toute la bibliothèque et
+// rescorer les candidats à chaque ouverture de la page d'accueil est trop
+// coûteux (quota TMDB/CPU du Worker). Le résultat est donc précalculé par
+// lot et mis en cache (migration 0020, voir db.ts) ; on ne recalcule que si
+// le cache a dépassé sa durée de vie ou s'il contient moins d'éléments que
+// ce qui est demandé (liste épuisée). La taille du lot calculé est le
+// maximum accepté par l'API plutôt que le `limit` de la requête, pour que
+// tant les 24 items de la grille actuelle qu'une future pagination restent
+// servis par le même lot sans recalcul.
+const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const RECOMMENDATION_CACHE_SIZE = 40;
 
 async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
   const user = await requireUser(request, env);
@@ -1863,6 +1876,12 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   const limitParam = Number(url.searchParams.get("limit"));
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 40) : 20;
 
+  const cached = await getRecommendationCache(env.DB, user.id, typeParam);
+  const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
+  if (cached && isFresh && cached.items.length >= limit) {
+    return json({ items: cached.items.slice(0, limit), coldStart: cached.coldStart });
+  }
+
   const [library, excludedGenreIds, notInterested] = await Promise.all([
     getLibraryForUser(env.DB, user.id),
     getExcludedGenresForUser(env.DB, user.id),
@@ -1876,8 +1895,11 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
     mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
   );
   const candidates = candidateLists.flat();
-  const items = rankRecommendations(candidates, profile, { limit });
-  return json({ items, coldStart: profile.isColdStart });
+  const items = rankRecommendations(candidates, profile, {
+    limit: Math.max(limit, RECOMMENDATION_CACHE_SIZE),
+  });
+  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  return json({ items: items.slice(0, limit), coldStart: profile.isColdStart });
 }
 
 async function handlePostNotInterested(request: Request, env: Env): Promise<Response> {
