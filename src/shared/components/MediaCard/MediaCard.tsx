@@ -50,6 +50,11 @@ interface MediaCardProps {
   /** Opt-in (liste publique, tri « Ordre de X ») : numéro « 01 », « 02 »…
    * à la place du badge Film / Série. */
   position?: number;
+  /** Opt-in (grille "Pour toi", voir DiscoverPage) : 3e pastille qui
+   * masque la carte et enregistre un signal négatif pour les
+   * recommandations. Absent ailleurs — un visiteur de Nouveautés ou de Ma
+   * liste n'a pas cette action. */
+  onNotInterested?: (item: MediaItem) => void;
 }
 
 // Largeur affichée des affiches de la grille (voir mediaGrid.module.css : 2,
@@ -69,6 +74,7 @@ function MediaCard({
   genreName,
   ownerRating,
   position,
+  onNotInterested,
 }: MediaCardProps) {
   const { t } = useTranslation();
   const { toggleWatched, toggleWatchlist } = useLibraryActions();
@@ -290,6 +296,17 @@ function MediaCard({
             title={t("mediaCard.markAsWatched")}
           >
             <Icon name="check" size={16} strokeWidth={watched ? 3 : 1.5} />
+          </button>
+        )}
+        {onNotInterested && (
+          <button
+            type="button"
+            className={styles.pastille}
+            onClick={() => onNotInterested(item)}
+            aria-label={t("mediaCard.notInterestedNamed", { title })}
+            title={t("mediaCard.notInterested")}
+          >
+            <Icon name="eyeOff" size={16} strokeWidth={1.5} />
           </button>
         )}
       </div>

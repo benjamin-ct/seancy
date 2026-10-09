@@ -12,6 +12,13 @@ import { useFavoriteProviders } from "../../core/context/FavoriteProvidersContex
 import { useExcludedGenres } from "../../core/context/ExcludedGenresContext.tsx";
 import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx";
 import { useLibrary } from "../../core/context/LibraryContext.tsx";
+import { useAuth } from "../../core/context/AuthContext.tsx";
+import {
+  getRecommendations,
+  postNotInterested,
+  type RecommendationMediaItem,
+} from "../../core/api/recommendations.ts";
+import { logWarn } from "../../core/logger.ts";
 import {
   MediaCard,
   MediaCardSkeleton,
@@ -22,6 +29,9 @@ import {
   ContinueWatchingRow,
   FeaturedMediaRow,
   Icon,
+  EMPTY_ADVANCED_FILTERS,
+  DEFAULT_SORT_FIELD,
+  DEFAULT_SORT_DIRECTION,
 } from "../../shared/components/index.ts";
 import type { AdvancedFiltersState } from "../../shared/components/index.ts";
 import type { Genre, MediaItem } from "../../core/types/tmdb.ts";
@@ -109,6 +119,23 @@ export default function DiscoverPage() {
   const { excludedGenreIds } = useExcludedGenres();
   const { filterExcluded } = useExcludedTitles();
   const { watchlist } = useLibrary();
+  const { status: authStatus } = useAuth();
+  // Grille personnalisée "Pour toi" affichée à la place du discover()
+  // classique uniquement quand aucun filtre explicite n'est actif (sinon la
+  // personnalisation contredirait le filtre choisi à la main) — voir
+  // décision sur le ticket Trello "Recommandations personnalisées « Pour
+  // toi »". Mémorisé par le rendu réellement affiché (`usingPersonalized`
+  // state, pas recalculé ici) : un échec de l'appel /api/recommendations
+  // retombe sur discover() sans que l'utilisateur distingue une grille
+  // "vide" d'un filtre actif.
+  const isDefaultFilters =
+    genreIds.length === 0 &&
+    providerIds.length === 0 &&
+    !useMyPlatforms &&
+    sortField === DEFAULT_SORT_FIELD &&
+    sortDirection === DEFAULT_SORT_DIRECTION &&
+    JSON.stringify(advanced) === JSON.stringify(EMPTY_ADVANCED_FILTERS);
+  const [usingPersonalized, setUsingPersonalized] = useState(false);
 
   const advancedKey = JSON.stringify(advanced);
   const advancedError = getAdvancedFiltersRangeError(advanced);
@@ -117,8 +144,27 @@ export default function DiscoverPage() {
     : providerIds.length
       ? providerIds
       : undefined;
-  // « année · genre » sous chaque carte : premier genre TMDB du titre.
+  // « année · genre » sous chaque carte : premier genre TMDB du titre (ou,
+  // en grille personnalisée, la raison de la suggestion — voir reasonLabel
+  // plus bas).
   const genreNames = useMemo(() => new Map(genres.map((g) => [g.id, g.name])), [genres]);
+
+  const reasonLabel = useCallback(
+    (item: MediaItem): string | undefined => {
+      const reason = (item as Partial<RecommendationMediaItem>).reason;
+      if (!reason) {
+        return genreNames.get(item.genre_ids?.[0] ?? -1);
+      }
+      if (reason.kind === "genre") {
+        return genreNames.get(reason.genreId);
+      }
+      if (reason.kind === "decade") {
+        return t("discoverPage.reasonDecade", { decade: reason.decade });
+      }
+      return t("discoverPage.reasonTrending");
+    },
+    [genreNames, t]
+  );
 
   // "Séries en cours" : séries entamées avec au moins un épisode non vu déjà
   // sorti (indépendant du filtre Films/Séries de la grille de suggestions
@@ -186,34 +232,69 @@ export default function DiscoverPage() {
     const controller = new AbortController();
     setStatus("loading");
     setLoadMoreError(null);
-    discover(mediaType, {
-      signal: controller.signal,
-      page: 1,
-      genreId: genreIds,
-      excludeGenreIds: excludedGenreIds,
-      providerIds: activeProviderIds,
-      region,
-      sortField,
-      sortDirection,
-      excludeUpcoming: true,
-      includeRegionReleaseDate: true,
-      ...toDiscoverParams(advanced),
-    })
-      .then((data) => {
-        if (cancelled) {
-          return;
-        }
-        setResults(filterExcluded(data.results, mediaType).map((r) => ({ ...r, mediaType })));
-        setTotalPages(Math.min(data.total_pages || 1, 500));
-        setStatus("success");
+
+    const runClassicDiscover = () => {
+      discover(mediaType, {
+        signal: controller.signal,
+        page: 1,
+        genreId: genreIds,
+        excludeGenreIds: excludedGenreIds,
+        providerIds: activeProviderIds,
+        region,
+        sortField,
+        sortDirection,
+        excludeUpcoming: true,
+        includeRegionReleaseDate: true,
+        ...toDiscoverParams(advanced),
       })
-      .catch((err) => {
-        if (cancelled) {
-          return;
-        }
-        setError(err);
-        setStatus("error");
-      });
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          setUsingPersonalized(false);
+          setResults(filterExcluded(data.results, mediaType).map((r) => ({ ...r, mediaType })));
+          setTotalPages(Math.min(data.total_pages || 1, 500));
+          setStatus("success");
+        })
+        .catch((err) => {
+          if (cancelled) {
+            return;
+          }
+          setError(err);
+          setStatus("error");
+        });
+    };
+
+    // Grille "Pour toi" réservée aux comptes connectés sans filtre actif
+    // (voir isDefaultFilters) : repli immédiat et silencieux sur discover()
+    // dans tous les autres cas, y compris un échec ou une liste vide de
+    // /api/recommendations (cold start non applicable, erreur réseau...).
+    if (authStatus === "authenticated" && isDefaultFilters) {
+      getRecommendations(mediaType, 24, controller.signal)
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          const items = filterExcluded(data.items, mediaType);
+          if (items.length === 0) {
+            runClassicDiscover();
+            return;
+          }
+          setUsingPersonalized(true);
+          setResults(items);
+          setTotalPages(1);
+          setStatus("success");
+        })
+        .catch((err) => {
+          if (cancelled || err?.name === "AbortError") {
+            return;
+          }
+          runClassicDiscover();
+        });
+    } else {
+      runClassicDiscover();
+    }
+
     return () => {
       cancelled = true;
       controller.abort();
@@ -231,6 +312,8 @@ export default function DiscoverPage() {
     useMyPlatforms,
     favoriteProviderIds,
     region,
+    authStatus,
+    isDefaultFilters,
     sortField,
     sortDirection,
     advancedKey,
@@ -321,6 +404,17 @@ export default function DiscoverPage() {
 
   useScrollRestoration(status === "success", results.length);
 
+  // Masque la carte immédiatement (optimiste) ; le signal négatif part en
+  // tâche de fond. Pas de ré-affichage en cas d'échec réseau : impact nul
+  // (le titre réapparaîtra simplement au prochain calcul côté Worker) pour
+  // une action que l'utilisateur considère déjà faite.
+  const handleNotInterested = useCallback((item: MediaItem) => {
+    setResults((prev) => prev.filter((r) => r.id !== item.id));
+    postNotInterested(item).catch((err) =>
+      logWarn('Seancy : signal "pas intéressé" non enregistré.', err)
+    );
+  }, []);
+
   return (
     <div className={styles.page}>
       <h1 className={styles.srOnly}>{t("discoverPage.title")}</h1>
@@ -401,7 +495,8 @@ export default function DiscoverPage() {
                 key={item.id}
                 item={item}
                 yearGenre
-                genreName={genreNames.get(item.genre_ids?.[0] ?? -1)}
+                genreName={reasonLabel(item)}
+                onNotInterested={usingPersonalized ? handleNotInterested : undefined}
               />
             ))}
           </div>
