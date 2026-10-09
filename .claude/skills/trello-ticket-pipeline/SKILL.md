@@ -6,7 +6,7 @@ description: Pilote le développement à partir d'un board Trello relié à GitH
 # Workflow Trello → GitHub
 
 Ce skill fait tourner un pipeline de développement autonome basé sur les listes d'un board Trello. Il s'appuie sur les
-connecteurs **Trello** et **GitHub**. Le skill vit dans le dépôt `bobine` et n'est jamais lancé depuis un autre dépôt.
+connecteurs **Trello** et **GitHub**. Le skill vit dans le dépôt `seancy` et n'est jamais lancé depuis un autre dépôt.
 
 **Règle d'exécution impérative — environnement one-shot :**
 Ce skill s'exécute dans un unique processus `claude -p`. Il n'existe aucune reprise automatique après fin de ce processus.

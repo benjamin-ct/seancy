@@ -114,7 +114,6 @@ import {
 import { verifyRecaptcha } from "./recaptcha.ts";
 import { getTheatricalIndex } from "./tmdb.ts";
 import {
-  LEGACY_PRODUCTION_HOSTNAME,
   PRODUCTION_HOSTNAME,
   REDIRECTED_TO_PRODUCTION_HOSTNAMES,
   isProductionHostname,
@@ -846,21 +845,13 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  return json(
-    {
-      email: user.email,
-      displayName: user.displayName,
-      shareSlug: user.shareSlug,
-      username: user.username,
-      avatarVersion: await getAvatarVersion(env.DB, user.id),
-    },
-    200,
-    // Session ouverte sous les anciens noms de cookies (bobine_*) : appelé à
-    // chaque démarrage de l'app, c'est ici qu'elle passe aux nouveaux noms.
-    user.legacyCookie
-      ? { "set-cookie": sessionCookieHeaders(request, user.sessionToken, user.expiresAt) }
-      : undefined
-  );
+  return json({
+    email: user.email,
+    displayName: user.displayName,
+    shareSlug: user.shareSlug,
+    username: user.username,
+    avatarVersion: await getAvatarVersion(env.DB, user.id),
+  });
 }
 
 // Photo de profil personnelle (ticket « Ajouter son propre avatar ») --------
@@ -2450,14 +2441,6 @@ export default withSentry({
     // profil, liste), qui passent par ici pour leurs balises de partage
     // (voir page-meta.ts). Réponses reconstruites, d'où withSecurityHeaders.
     if (!url.pathname.startsWith("/api/")) {
-      // Ancienne URL de prod : liens partagés, robots et sitemap renvoient
-      // définitivement vers seancy.com. Les autres pages sont des assets
-      // servis sans passer par ici, redirigés côté client (src/main.tsx).
-      // /api/* reste servi pour les onglets encore ouverts sur l'ancienne
-      // URL, le temps qu'ils se rechargent.
-      if (url.hostname === LEGACY_PRODUCTION_HOSTNAME) {
-        return Response.redirect(`https://${PRODUCTION_HOSTNAME}${url.pathname}${url.search}`, 301);
-      }
       if (url.pathname === "/robots.txt") {
         return withSecurityHeaders(serveRobots(url));
       }
