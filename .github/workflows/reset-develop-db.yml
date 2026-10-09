@@ -1,0 +1,28 @@
+# Réinitialisation à la main de la base D1 persistante `seancy-develop`
+# (voir ticket Trello "Avenir du développement") : vide toutes les tables de
+# données puis rejoue le seed "full" (scripts/fixtures/develop-seed.sql) sur
+# une base propre. Jamais déclenché automatiquement — seulement depuis
+# l'onglet Actions (bouton "Run workflow"), quand les données de test de
+# develop sont devenues trop sales pour continuer à tester dessus.
+name: Reset develop database
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reset-develop:
+    name: Reset seancy-develop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Reset develop database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/preview-d1.ts reset-develop
