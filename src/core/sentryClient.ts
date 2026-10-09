@@ -4,4 +4,4 @@
 // module est ensuite gardé dans une variable, empêche le tree-shaking et
 // embarquait tout le SDK (replay, feedback, tracing…) — 474 Ko au lieu
 // d'environ 85 Ko (156 Ko contre 29 Ko gzip).
-export { init, captureException, captureMessage } from "@sentry/react";
+export { init, captureException, captureMessage, logger } from "@sentry/react";

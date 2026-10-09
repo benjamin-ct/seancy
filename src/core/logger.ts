@@ -85,5 +85,9 @@ export function logError(message: string, err: unknown): void {
 export function logWarn(message: string, err?: unknown): void {
   console.warn(message, err);
   const text = err ? `${message} ${String(err)}` : message;
-  withSentry((module) => module.captureMessage(text, "warning"));
+  // Sentry.logger (feature Logs), pas captureMessage (feature Issues) : un
+  // warning n'est pas une erreur à trier, il doit apparaître dans l'onglet
+  // Logs plutôt que polluer le flux d'Issues (voir ticket Trello "Dashboard
+  // de suivis de Claude").
+  withSentry((module) => module.logger.warn(text));
 }
