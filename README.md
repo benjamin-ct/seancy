@@ -1,8 +1,6 @@
 # Seancy 🎬
 
 > En ligne sur **https://seancy.com** (previews de PR sur `<slug>.dev.seancy.com`).
->
-> Anciennement « Bobine » (dépôt GitHub déjà renommé en `seancy`). Les repli de transition (redirection depuis l'ancienne URL, cookies/en-tête `bobine_*`, migration des clés localStorage) ont été retirés une fois confirmé qu'aucun client ne tourne plus sur l'ancien bundle.
 
 Application pour découvrir des films et séries, savoir où les regarder en streaming (France), tirer un titre au hasard, et suivre ce que tu as déjà vu.
 

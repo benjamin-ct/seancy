@@ -1,26 +1,31 @@
 # Fonctions shell pour piloter la stack Trello → Claude depuis le serveur (NAS).
 # À charger depuis ~/.bashrc (voir README.md, « Commandes serveur ») :
 #
-#   source /Volume2/config/trello-claude/bobine/infra/trello-claude/bobine-shell.sh
+#   source /Volume2/config/trello-claude/bobine/infra/trello-claude/seancy-shell.sh
 #
-# bobine-pull    checkout serveur propre ? puis git fetch + git pull --ff-only
-# bobine-main    checkout serveur propre et tout poussé ? puis bascule sur main à jour
-# bobine-rebuild [all|listener|claude] rebuild + recréation (vérifie qu'aucune exécution
-#                Claude n'est en cours avant de toucher à bobine-repo ; --force pour passer outre)
-# bobine-deploy  bobine-pull, puis bobine-rebuild (mêmes arguments)
-# bobine-status  branches/commits (checkout serveur et clone de Claude), exécution en cours, Docker
-# bobine-logs    suit les logs du listener Trello/Sentry
+# seancy-pull    checkout serveur propre ? puis git fetch + git pull --ff-only
+# seancy-main    checkout serveur propre et tout poussé ? puis bascule sur main à jour
+# seancy-rebuild [all|listener|claude] rebuild + recréation (vérifie qu'aucune exécution
+#                Claude n'est en cours avant de toucher à seancy-repo ; --force pour passer outre)
+# seancy-deploy  seancy-pull, puis seancy-rebuild (mêmes arguments)
+# seancy-status  branches/commits (checkout serveur et clone de Claude), exécution en cours, Docker
+# seancy-logs    suit les logs du listener Trello/Sentry
 #
-# Le checkout serveur est monté dans bobine-repo en /srv/bobine ; Claude travaille dans son
+# Le checkout serveur est monté dans seancy-repo en /srv/seancy ; Claude travaille dans son
 # propre clone (/workspace, volume claude-workspace) et ne change donc jamais sa branche.
 
-# Dossier de la stack (docker-compose-bobine.yml) sur le serveur.
-BOBINE_STACK_DIR="${BOBINE_STACK_DIR:-/Volume2/config/trello-claude/bobine/infra/trello-claude}"
+# Dossier de la stack (docker-compose-seancy.yml) sur le serveur. Le chemin
+# par défaut pointe encore vers le dossier physique `bobine/` du NAS : ce
+# nom de dossier n'est pas du code versionné, ce script ne peut donc pas le
+# renommer lui-même. Si vous renommez ce dossier sur le NAS, mettez à jour
+# la valeur par défaut ci-dessous (ou surchargez SEANCY_STACK_DIR avant de
+# sourcer ce fichier).
+SEANCY_STACK_DIR="${SEANCY_STACK_DIR:-/Volume2/config/trello-claude/bobine/infra/trello-claude}"
 
-bobine-pull() {
-  docker exec --user claudeuser bobine-repo bash -lc '
+seancy-pull() {
+  docker exec --user claudeuser seancy-repo bash -lc '
     set -e
-    cd /srv/bobine
+    cd /srv/seancy
 
     echo "=== Branche courante ==="
     git branch --show-current
@@ -32,7 +37,7 @@ bobine-pull() {
     if [ -n "$(git status --porcelain)" ]; then
       echo
       echo "ABANDON : le checkout contient des modifications non committees."
-      echo "Inspecte-les avec : docker exec --user claudeuser bobine-repo bash -lc '\''cd /srv/bobine && git status && git diff'\''"
+      echo "Inspecte-les avec : docker exec --user claudeuser seancy-repo bash -lc '\''cd /srv/seancy && git status && git diff'\''"
       exit 1
     fi
 
@@ -47,10 +52,10 @@ bobine-pull() {
   '
 }
 
-bobine-main() {
-  docker exec --user claudeuser bobine-repo bash -lc '
+seancy-main() {
+  docker exec --user claudeuser seancy-repo bash -lc '
     set -e
-    cd /srv/bobine
+    cd /srv/seancy
 
     echo "=== Branche courante ==="
     git branch --show-current
@@ -63,7 +68,7 @@ bobine-main() {
     if [ -n "$(git status --porcelain)" ]; then
       echo
       echo "ABANDON : le checkout contient des modifications non committees."
-      echo "Inspecte-les avec : docker exec --user claudeuser bobine-repo bash -lc '\''cd /srv/bobine && git status && git diff'\''"
+      echo "Inspecte-les avec : docker exec --user claudeuser seancy-repo bash -lc '\''cd /srv/seancy && git status && git diff'\''"
       exit 1
     fi
 
@@ -95,23 +100,23 @@ bobine-main() {
   '
 }
 
-# Verrou posé par bobine-claude-run pendant une exécution Claude (voir bobine-repo/).
-BOBINE_CLAUDE_LOCK="/tmp/bobine-claude-run.lock"
+# Verrou posé par seancy-claude-run pendant une exécution Claude (voir seancy-repo/).
+SEANCY_CLAUDE_LOCK="/tmp/seancy-claude-run.lock"
 
-# 0 si une exécution Claude tourne dans bobine-repo. flock -E 75 distingue « verrou pris »
+# 0 si une exécution Claude tourne dans seancy-repo. flock -E 75 distingue « verrou pris »
 # d'un conteneur arrêté (docker exec échoue alors avec un autre code).
-bobine-claude-busy() {
-  docker exec --user claudeuser bobine-repo \
-    flock -n -E 75 "$BOBINE_CLAUDE_LOCK" true >/dev/null 2>&1
+seancy-claude-busy() {
+  docker exec --user claudeuser seancy-repo \
+    flock -n -E 75 "$SEANCY_CLAUDE_LOCK" true >/dev/null 2>&1
   [ $? -eq 75 ]
 }
 
-# bobine-rebuild [all|listener|claude] [--force]
-#   listener : toujours sans risque, une exécution Claude en cours continue dans bobine-repo
+# seancy-rebuild [all|listener|claude] [--force]
+#   listener : toujours sans risque, une exécution Claude en cours continue dans seancy-repo
 #              (seul son log /tmp/claude-last-run.log est perdu).
-#   claude   : bobine-repo seul ; refusé si une exécution Claude est en cours.
+#   claude   : seancy-repo seul ; refusé si une exécution Claude est en cours.
 #   all      : les deux (défaut) ; même vérification.
-bobine-rebuild() {
+seancy-rebuild() {
   local target="all" force=""
   local arg
   for arg in "$@"; do
@@ -119,7 +124,7 @@ bobine-rebuild() {
       all | listener | claude) target="$arg" ;;
       --force) force=1 ;;
       *)
-        echo "Usage : bobine-rebuild [all|listener|claude] [--force]" >&2
+        echo "Usage : seancy-rebuild [all|listener|claude] [--force]" >&2
         return 64
         ;;
     esac
@@ -128,27 +133,27 @@ bobine-rebuild() {
   local services
   case "$target" in
     listener) services="webhook-listener" ;;
-    claude) services="bobine-repo" ;;
-    all) services="bobine-repo webhook-listener" ;;
+    claude) services="seancy-repo" ;;
+    all) services="seancy-repo webhook-listener" ;;
   esac
 
-  if [ "$target" != "listener" ] && [ -z "$force" ] && bobine-claude-busy; then
-    echo "ABANDON : une execution Claude est en cours dans bobine-repo."
-    echo "Relance plus tard, ou 'bobine-rebuild listener' pour ne mettre a jour que le listener."
+  if [ "$target" != "listener" ] && [ -z "$force" ] && seancy-claude-busy; then
+    echo "ABANDON : une execution Claude est en cours dans seancy-repo."
+    echo "Relance plus tard, ou 'seancy-rebuild listener' pour ne mettre a jour que le listener."
     echo "(--force pour recreer quand meme et interrompre Claude.)"
     return 1
   fi
 
   (
     set -e
-    cd "$BOBINE_STACK_DIR"
+    cd "$SEANCY_STACK_DIR"
 
     # shellcheck disable=SC2086 # liste de services volontairement découpée
-    docker-compose -f docker-compose-bobine.yml \
+    docker-compose -f docker-compose-seancy.yml \
       up -d --build --force-recreate $services
 
     echo
-    docker-compose -f docker-compose-bobine.yml ps
+    docker-compose -f docker-compose-seancy.yml ps
 
     echo
     echo "=== Derniers logs du listener ==="
@@ -158,15 +163,15 @@ bobine-rebuild() {
 
 # `&&` plutôt qu'un `set -e` : dans une fonction chargée par ~/.bashrc, un
 # `set -e` s'appliquerait au shell interactif lui-même, qui se fermerait dès
-# que bobine-pull échoue (checkout modifié).
-bobine-deploy() {
-  bobine-pull && bobine-rebuild "$@"
+# que seancy-pull échoue (checkout modifié).
+seancy-deploy() {
+  seancy-pull && seancy-rebuild "$@"
 }
 
-bobine-status() {
+seancy-status() {
   echo "=== Git (checkout serveur) ==="
-  docker exec --user claudeuser bobine-repo bash -lc '
-    cd /srv/bobine
+  docker exec --user claudeuser seancy-repo bash -lc '
+    cd /srv/seancy
     git status --short
     echo "Branche : $(git branch --show-current)"
     echo "Commit  : $(git log -1 --oneline)"
@@ -174,7 +179,7 @@ bobine-status() {
 
   echo
   echo "=== Claude (clone de travail) ==="
-  docker exec --user claudeuser bobine-repo bash -lc '
+  docker exec --user claudeuser seancy-repo bash -lc '
     if [ -d /workspace/.git ]; then
       cd /workspace
       echo "Branche : $(git branch --show-current)"
@@ -183,7 +188,7 @@ bobine-status() {
       echo "Pas encore cloné (créé à la première exécution)."
     fi
   '
-  if bobine-claude-busy; then
+  if seancy-claude-busy; then
     echo "Exécution : en cours"
   else
     echo "Exécution : aucune"
@@ -192,11 +197,11 @@ bobine-status() {
   echo
   echo "=== Docker ==="
   (
-    cd "$BOBINE_STACK_DIR"
-    docker-compose -f docker-compose-bobine.yml ps
+    cd "$SEANCY_STACK_DIR"
+    docker-compose -f docker-compose-seancy.yml ps
   )
 }
 
-bobine-logs() {
+seancy-logs() {
   docker logs -f --tail 100 trello-claude-listener
 }

@@ -5,4 +5,4 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-docker-compose -f docker-compose-bobine.yml up -d --build --force-recreate webhook-listener
+docker-compose -f docker-compose-seancy.yml up -d --build --force-recreate webhook-listener

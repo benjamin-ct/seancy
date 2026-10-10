@@ -165,7 +165,7 @@ précédente s'est arrêtée en cours de route) et continuer le développement (
 2. Développer ce qui est demandé, commiter au fur et à mesure. Si la carte demande un modèle ou un effort précis
    (voir « Modèle et effort par ticket »), cette étape — et elle seule — est déléguée à un `claude -p` dédié.
    - **Vérification visuelle** (tout changement d’interface) : le conteneur fournit
-     `bobine-screenshot <url> <sortie.png> --both [--full] [--cookie bobine_session=<jeton>]`
+     `seancy-screenshot <url> <sortie.png> --both [--full] [--cookie seancy_session=<jeton>]`
      (Chromium headless, desktop 1440×900 + mobile iPhone 13), puis lire les PNG avec Read.
      Cibles : la preview de la PR une fois déployée (accessible si `CF_ACCESS_CLIENT_ID` /
      `CF_ACCESS_CLIENT_SECRET` sont définis, sinon on obtient la page de connexion Access), ou
@@ -255,16 +255,16 @@ garde tout le reste : branche (2c.1), lecture de la carte, PR, attente CI, previ
      dernière ligne commence par `BLOCAGE:`.
 2. Lancer le développeur détaché, sa sortie dans un journal :
    ```bash
-   setsid nohup bobine-claude-dev -p "$(cat /tmp/claude-dev-prompt.md)" --model <sonnet|opus> --effort <niveau> \
+   setsid nohup seancy-claude-dev -p "$(cat /tmp/claude-dev-prompt.md)" --model <sonnet|opus> --effort <niveau> \
      --dangerously-skip-permissions --output-format stream-json --verbose \
      > /tmp/claude-dev.log 2>&1 < /dev/null &
    echo $! > /tmp/claude-dev.pid
    ```
-   Omettre `--model` ou `--effort` s'il n'est pas demandé : `bobine-claude-dev` ne fixe aucun défaut, donc `claude`
+   Omettre `--model` ou `--effort` s'il n'est pas demandé : `seancy-claude-dev` ne fixe aucun défaut, donc `claude`
    utilise son modèle et son effort par défaut (pas `$CLAUDE_MODEL`/`$CLAUDE_EFFORT` de la session courante).
-   Toujours passer par `bobine-claude-dev`, jamais `claude` directement : Claude
+   Toujours passer par `seancy-claude-dev`, jamais `claude` directement : Claude
    Code retire `CLAUDE_CODE_OAUTH_TOKEN` de l'environnement de ses commandes, et le wrapper le relit dans le fichier
-   écrit par `bobine-claude-run` (sinon « OAuth session expired »). Code de sortie 78 si ce fichier manque.
+   écrit par `seancy-claude-run` (sinon « OAuth session expired »). Code de sortie 78 si ce fichier manque.
 3. Surveiller toutes les 30 s (`ps -o stat= -p $(cat /tmp/claude-dev.pid)` : terminé si vide ou `Z`, car `kill -0`
    reste vrai sur un zombie ; ou dès qu'une ligne `result` apparaît ; `tail` du journal), dans des appels Bash de
    moins de 10 min mis bout à bout. C'est une attente active dans la même exécution, comme pour la CI : jamais de
@@ -293,7 +293,7 @@ Quand le développeur délégué s'arrête sur la limite d'usage Claude, la limi
 continuer le board dans cette exécution.
 
 1. Commiter tout le travail en cours sur la branche du ticket avec un message `wip: …`, sans le pousser. Au prochain
-   lancement, `bobine-claude-run` le signale dans la note « REPRISE ».
+   lancement, `seancy-claude-run` le signale dans la note « REPRISE ».
 2. Laisser la carte en `En cours`, sans label, et y poster un commentaire `🤖 [Claude]` : limite atteinte, heure de
    reset lue dans le journal, état d'avancement, reprise automatique prévue.
 3. Envoyer le résumé Discord de fin d'exécution, préfixé ⏸️, avec l'heure de reset.
@@ -308,11 +308,11 @@ contient une note « RELANCE AUTOMATIQUE » : reprendre le ticket là où il s'e
 ## Notes
 
 - **Actions sur le serveur (NAS)** : quand un message (commentaire Trello, résumé Discord, carte bloquée) demande à un
-  humain de vérifier, mettre à jour ou reconstruire la stack, citer les commandes `bobine-*` plutôt que les commandes
-  Docker/Git brutes : `bobine-status` (état Git + Docker), `bobine-pull` (mise à jour du checkout serveur),
-  `bobine-rebuild [all|listener|claude]` (rebuild + recréation des conteneurs, ex. après un changement de Dockerfile
+  humain de vérifier, mettre à jour ou reconstruire la stack, citer les commandes `seancy-*` plutôt que les commandes
+  Docker/Git brutes : `seancy-status` (état Git + Docker), `seancy-pull` (mise à jour du checkout serveur),
+  `seancy-rebuild [all|listener|claude]` (rebuild + recréation des conteneurs, ex. après un changement de Dockerfile
   ou de `listener/server.js` ; `listener` seul suffit et reste sans risque pendant une exécution de Claude),
-  `bobine-deploy` (les deux), `bobine-logs` (logs du listener). Définies dans `infra/trello-claude/bobine-shell.sh`
+  `seancy-deploy` (les deux), `seancy-logs` (logs du listener). Définies dans `infra/trello-claude/seancy-shell.sh`
   (voir `infra/trello-claude/README.md`, « Commandes serveur »). Claude travaille dans son propre clone (`/workspace`),
   distinct du checkout serveur : inutile de demander de « remettre main » pour lui.
 - `A valider` et `Idées` ne sont jamais lues ni modifiées par ce skill, sauf pour déposer une carte dans `A valider` une
