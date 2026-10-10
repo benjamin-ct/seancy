@@ -48,9 +48,10 @@ export class RecommendationsAuthError extends Error {}
 export async function getRecommendations(
   type: MediaType | "all" = "all",
   limit = 20,
-  signal?: AbortSignal
-): Promise<{ items: RecommendationMediaItem[]; coldStart: boolean }> {
-  const params = new URLSearchParams({ type, limit: String(limit) });
+  signal?: AbortSignal,
+  offset = 0
+): Promise<{ items: RecommendationMediaItem[]; coldStart: boolean; hasMore: boolean }> {
+  const params = new URLSearchParams({ type, limit: String(limit), offset: String(offset) });
   const res = await fetch(`/api/recommendations?${params}`, { signal });
   if (res.status === 401) {
     throw new RecommendationsAuthError("Non connecté.");
@@ -58,8 +59,12 @@ export async function getRecommendations(
   if (!res.ok) {
     throw new Error(`Erreur recommandations (${res.status})`);
   }
-  const data = (await res.json()) as { items: RecommendationApiItem[]; coldStart: boolean };
-  return { items: data.items.map(toMediaItem), coldStart: data.coldStart };
+  const data = (await res.json()) as {
+    items: RecommendationApiItem[];
+    coldStart: boolean;
+    hasMore: boolean;
+  };
+  return { items: data.items.map(toMediaItem), coldStart: data.coldStart, hasMore: data.hasMore };
 }
 
 export async function postNotInterested(item: MediaItem): Promise<void> {
