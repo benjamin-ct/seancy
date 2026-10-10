@@ -19,6 +19,7 @@ import { neighborOf, useSortable } from "../../../shared/hooks/useSortable.ts";
 import gridStyles from "../../../shared/styles/mediaGrid.module.css";
 import type { CustomList, LibraryItem } from "../../../core/types/library.ts";
 import ListShareDialog from "./ListShareDialog.tsx";
+import ListMembersDialog from "./ListMembersDialog.tsx";
 import styles from "./CustomListPanel.module.css";
 
 interface CustomListPanelProps {
@@ -52,24 +53,33 @@ export default function CustomListPanel({
   onShareChange,
 }: CustomListPanelProps) {
   const { t } = useTranslation();
-  const { getListItems, deleteList, renameList, reorderList, getRating } = useLibrary();
+  const { getListItems, deleteList, renameList, reorderList, leaveSharedList, getRating } =
+    useLibrary();
   const [shareOpen, setShareOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const { locale } = useLocale();
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(list.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const items = getListItems(list.id);
+  const items = getListItems(list.id, list.ownerId);
   const ratedCount = items.filter((item) => getRating(item.mediaType, item.id) != null).length;
 
   function handleDelete() {
-    deleteList(list.id);
+    deleteList(list.id, list.ownerId);
+    onDeleted();
+  }
+
+  function handleLeave() {
+    if (list.ownerId !== undefined) {
+      leaveSharedList(list.id, list.ownerId);
+    }
     onDeleted();
   }
 
   function submitRename() {
-    renameList(list.id, renameValue);
+    renameList(list.id, renameValue, list.ownerId);
     setRenaming(false);
   }
 
@@ -81,7 +91,7 @@ export default function CustomListPanel({
     enabled: canSort,
     onReorder: (next, moved) => {
       const { toKey, after } = neighborOf(next, moved);
-      reorderList(list.id, moved, toKey, after);
+      reorderList(list.id, moved, toKey, after, list.ownerId);
     },
   });
   const sorted =
@@ -146,6 +156,12 @@ export default function CustomListPanel({
             <span className={`${styles.status} ${shareSlug ? styles.statusShared : ""}`}>
               <Icon name={shareSlug ? "link" : "lock"} />
               {t(shareSlug ? "customListPanel.statusShared" : "customListPanel.statusPrivate")}
+            </span>
+          )}
+          {list.ownerId !== undefined && (
+            <span className={`${styles.status} ${styles.statusShared}`}>
+              <Icon name="users" />
+              {t("customListPanel.statusCommon")}
             </span>
           )}
         </div>
@@ -230,6 +246,13 @@ export default function CustomListPanel({
               >
                 <Icon name="trash" /> {t("customListPanel.deleteButton")}
               </button>
+              <button
+                type="button"
+                className={dropdownStyles.option}
+                onClick={() => setMembersOpen(true)}
+              >
+                <Icon name="users" /> {t("customListPanel.membersButton")}
+              </button>
             </Dropdown>
           </div>
         </div>
@@ -265,6 +288,15 @@ export default function CustomListPanel({
           onSlugChange={onShareChange}
         />
       )}
+
+      <ListMembersDialog
+        open={membersOpen}
+        onClose={() => setMembersOpen(false)}
+        listId={list.id}
+        listName={list.name}
+        ownerId={list.ownerId}
+        onLeft={handleLeave}
+      />
 
       {items.length === 0 ? (
         <EmptyState label={t("customListPanel.emptyState", { name: list.name })} />

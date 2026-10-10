@@ -800,7 +800,182 @@ export async function deleteCustomListForUser(
       .prepare("DELETE FROM custom_list_items WHERE user_id = ? AND list_id = ?")
       .bind(userId, listId),
     db.prepare("DELETE FROM custom_lists WHERE user_id = ? AND id = ?").bind(userId, listId),
+    // Une liste supprimée ne doit pas laisser de ligne list_members orpheline
+    // derrière elle (voir migration 0021) : sans ça, une future liste recréée
+    // avec le même id hériterait silencieusement des anciens membres.
+    db.prepare("DELETE FROM list_members WHERE owner_id = ? AND list_id = ?").bind(userId, listId),
   ]);
+}
+
+// Listes communes (migration 0021). -----------------------------------
+
+// Recherche d'un compte à inviter, par pseudo (préfixe ou sous-chaîne,
+// insensible à la casse puisque `username` est déjà normalisé en minuscules
+// à l'écriture — voir normalizeUsername). Contrairement à searchProfiles
+// (follows.ts), ne se limite pas aux profils publics : inviter quelqu'un
+// dans une liste commune est une action privée, pas une découverte publique.
+const LIST_MEMBER_SEARCH_LIMIT = 10;
+
+export async function searchInvitableUsers(
+  db: D1Database,
+  query: string,
+  excludeUserId: number
+): Promise<{ id: number; username: string; displayName: string | null }[]> {
+  const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const { results } = await db
+    .prepare(
+      `SELECT id, username, display_name FROM users
+       WHERE username IS NOT NULL AND username LIKE ?1 ESCAPE '\\' AND id <> ?2
+       ORDER BY username LIMIT ${LIST_MEMBER_SEARCH_LIMIT}`
+    )
+    .bind(pattern, excludeUserId)
+    .all<{ id: number; username: string; display_name: string | null }>();
+  return results.map((row) => ({
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+  }));
+}
+
+export async function getListMembers(
+  db: D1Database,
+  ownerId: number,
+  listId: string
+): Promise<{ id: number; username: string | null; displayName: string | null }[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT users.id, users.username, users.display_name
+       FROM list_members JOIN users ON users.id = list_members.member_id
+       WHERE list_members.owner_id = ? AND list_members.list_id = ?
+       ORDER BY list_members.created_at`
+    )
+    .bind(ownerId, listId)
+    .all<{ id: number; username: string | null; display_name: string | null }>();
+  return results.map((row) => ({
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+  }));
+}
+
+export async function countListMembers(
+  db: D1Database,
+  ownerId: number,
+  listId: string
+): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) as count FROM list_members WHERE owner_id = ? AND list_id = ?")
+    .bind(ownerId, listId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+export async function isListMember(
+  db: D1Database,
+  ownerId: number,
+  listId: string,
+  userId: number
+): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 FROM list_members WHERE owner_id = ? AND list_id = ? AND member_id = ?")
+    .bind(ownerId, listId, userId)
+    .first();
+  return row !== null;
+}
+
+/** `true` si le membre vient d'être ajouté (pas déjà présent). */
+export async function addListMember(
+  db: D1Database,
+  ownerId: number,
+  listId: string,
+  memberId: number
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      "INSERT OR IGNORE INTO list_members (owner_id, list_id, member_id, created_at) VALUES (?, ?, ?, ?)"
+    )
+    .bind(ownerId, listId, memberId, Date.now())
+    .run();
+  return result.meta.changes > 0;
+}
+
+export async function removeListMember(
+  db: D1Database,
+  ownerId: number,
+  listId: string,
+  memberId: number
+): Promise<void> {
+  await db
+    .prepare("DELETE FROM list_members WHERE owner_id = ? AND list_id = ? AND member_id = ?")
+    .bind(ownerId, listId, memberId)
+    .run();
+}
+
+// Listes dont l'utilisateur est membre (pas propriétaire) — même forme que
+// getCustomListsForUser, mais chaque liste porte en plus `ownerId` : c'est
+// ce qui dit au client (voir CustomList, LibraryContext) de passer par les
+// routes /api/shared-lists/:ownerId/:listId plutôt que /api/custom-lists/:id
+// pour la modifier.
+export async function getListsSharedWithUser(
+  db: D1Database,
+  userId: number
+): Promise<CustomListMap> {
+  const [{ results: listRows }, { results: itemRows }] = await Promise.all([
+    db
+      .prepare(
+        `SELECT custom_lists.id, custom_lists.user_id AS owner_id, custom_lists.name,
+                custom_lists.created_at
+         FROM list_members
+         JOIN custom_lists ON custom_lists.user_id = list_members.owner_id
+           AND custom_lists.id = list_members.list_id
+         WHERE list_members.member_id = ?`
+      )
+      .bind(userId)
+      .all<{ id: string; owner_id: number; name: string; created_at: number }>(),
+    db
+      .prepare(
+        `SELECT custom_list_items.list_id, custom_list_items.user_id AS owner_id,
+                custom_list_items.media_type, custom_list_items.tmdb_id, custom_list_items.data
+         FROM list_members
+         JOIN custom_list_items ON custom_list_items.user_id = list_members.owner_id
+           AND custom_list_items.list_id = list_members.list_id
+         WHERE list_members.member_id = ?
+         ORDER BY custom_list_items.list_id, custom_list_items.position`
+      )
+      .bind(userId)
+      .all<{
+        list_id: string;
+        owner_id: number;
+        media_type: string;
+        tmdb_id: number;
+        data: string;
+      }>(),
+  ]);
+
+  const customLists: CustomListMap = {};
+  for (const row of listRows) {
+    // Clé composite : l'id de liste seul n'est pas unique entre comptes
+    // différents (voir migration 0010, même remarque pour list_shares).
+    customLists[`shared:${row.owner_id}:${row.id}`] = {
+      id: row.id,
+      ownerId: row.owner_id,
+      name: row.name,
+      createdAt: row.created_at,
+      items: [],
+    };
+  }
+  for (const row of itemRows) {
+    const list = customLists[`shared:${row.owner_id}:${row.list_id}`];
+    if (!list) {
+      continue;
+    }
+    const item = JSON.parse(row.data);
+    if (typeof item.title === "string") {
+      item.title = decodeHtmlEntities(item.title);
+    }
+    list.items.push(item);
+  }
+  return customLists;
 }
 
 // Partage des listes perso en lecture seule (migration 0010). -------------

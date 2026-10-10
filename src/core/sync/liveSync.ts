@@ -14,6 +14,7 @@ import { logWarn } from "../logger.ts";
 export type SyncResource =
   | "library"
   | "custom-lists"
+  | "shared-lists"
   | "excluded-genres"
   | "favorite-providers"
   | "favorite-languages"

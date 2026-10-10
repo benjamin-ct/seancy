@@ -158,11 +158,17 @@ export default function DetailPage() {
     getRating,
     rateWatched,
     customLists,
+    sharedLists,
     isInList,
     addToList,
     removeFromList,
     createList,
   } = useLibrary();
+  // Listes communes (ticket "Ma liste commune") : des cibles valides pour
+  // "Ajouter à…" au même titre que mes propres listes, chacune portant déjà
+  // son `ownerId` (voir CustomList) à repasser à isInList/addToList/
+  // removeFromList pour qu'ils agissent sur la bonne liste.
+  const allLists = [...customLists, ...sharedLists];
   const { hasReminder, toggleReminder } = useReminders();
   const { region, regionName } = useRegion();
   const { locale } = useLocale();
@@ -391,7 +397,9 @@ export default function DetailPage() {
     (item) => !item.genre_ids?.some((gId) => excludedGenreIds.includes(gId))
   );
 
-  const listCount = customLists.filter((list) => isInList(list.id, mediaType, id)).length;
+  const listCount = allLists.filter((list) =>
+    isInList(list.id, mediaType, id, list.ownerId)
+  ).length;
 
   const rating = watched ? getRating(mediaType, id) : null;
 
@@ -741,18 +749,20 @@ export default function DetailPage() {
                 className={styles.listDropdown}
               >
                 <div className={dropdownStyles.head}>{t("detailPage.addToListHeading")}</div>
-                {customLists.length === 0 && (
+                {allLists.length === 0 && (
                   <p className={styles.emptyHint}>{t("detailPage.noListsYet")}</p>
                 )}
-                {customLists.map((list) => {
-                  const on = isInList(list.id, mediaType, id);
+                {allLists.map((list) => {
+                  const on = isInList(list.id, mediaType, id, list.ownerId);
                   return (
                     <button
-                      key={list.id}
+                      key={list.ownerId !== undefined ? `${list.ownerId}:${list.id}` : list.id}
                       type="button"
                       className={`${dropdownStyles.option} ${on ? dropdownStyles.optionOn : ""}`}
                       onClick={() =>
-                        on ? removeFromList(list.id, mediaType, id) : addToList(list.id, libItem)
+                        on
+                          ? removeFromList(list.id, mediaType, id, list.ownerId)
+                          : addToList(list.id, libItem, list.ownerId)
                       }
                     >
                       <span className={dropdownStyles.check}>

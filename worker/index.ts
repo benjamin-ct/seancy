@@ -22,6 +22,13 @@ import {
   shareListForUser,
   unshareListForUser,
   getPublicListBySlug,
+  searchInvitableUsers,
+  getListMembers,
+  countListMembers,
+  isListMember,
+  addListMember,
+  removeListMember,
+  getListsSharedWithUser,
   updateDisplayName,
   setShareSlug,
   getPublicProfile,
@@ -104,6 +111,7 @@ import {
   sanitizeCustomListsPayload,
   sanitizeSingleCustomList,
   MAX_CUSTOM_LISTS,
+  MAX_LIST_MEMBERS,
   sanitizeDisplayName,
   sanitizeIdList,
   sanitizeIsoCodeList,
@@ -1802,6 +1810,260 @@ async function handleGetPublicList(request: Request, env: Env, slug: string): Pr
   return json(list);
 }
 
+// Listes communes (ticket "Ma liste commune", migration 0021) -------------
+//
+// Une liste perso devient "commune" dès qu'elle a des membres : pas de
+// nouveau type de liste côté stockage, juste la table list_members en plus
+// de custom_lists/custom_list_items. Le statut "vu"/"envie de voir" affiché
+// pour chaque item reste celui du VIEWER connecté (library_items, déjà
+// indexé par utilisateur) : rien à faire ici pour que ce soit le cas, c'est
+// déjà comme ça pour toute liste — voir CustomListPanel côté client, qui ne
+// lit jamais le statut depuis la liste elle-même.
+//
+// `ownerId` en query (routes /members) n'est utile QUE pour un membre qui
+// consulte/quitte une liste dont il n'est pas propriétaire : omis, il vaut
+// l'utilisateur connecté (son propre cas normal). Jamais fait confiance à
+// l'inverse (ownerId du corps de la requête) pour autre chose qu'une
+// vérification d'appartenance — même garde IDOR que le reste du fichier.
+function resolveOwnerId(url: URL, selfId: number): number {
+  const raw = url.searchParams.get("ownerId");
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : selfId;
+}
+
+async function handleGetSharedLists(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  return json(await getListsSharedWithUser(env.DB, user.id));
+}
+
+// Membres d'une liste (propre ou dont on est membre) : lisible par le
+// propriétaire ou n'importe quel membre, pas par un tiers.
+async function handleGetListMembers(
+  request: Request,
+  env: Env,
+  url: URL,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  const ownerId = resolveOwnerId(url, user.id);
+  if (ownerId !== user.id && !(await isListMember(env.DB, ownerId, listId, user.id))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  if (ownerId === user.id && !(await customListExistsForUser(env.DB, user.id, listId))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  return json({ ownerId, members: await getListMembers(env.DB, ownerId, listId) });
+}
+
+// Recherche de comptes à inviter, par pseudo — réservée au propriétaire
+// (seul "la liste des membres, modifiable uniquement par le propriétaire",
+// cadrage du 2026-10-10, point 2).
+const INVITE_SEARCH_MIN_LENGTH = 2;
+const INVITE_SEARCH_MAX_LENGTH = 15;
+
+async function handleSearchInviteCandidates(
+  request: Request,
+  env: Env,
+  url: URL,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !checkRateLimitInMemory(`list-invite-search:user:${user.id}`, { limit: 30, windowMs: 60_000 })
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (!(await customListExistsForUser(env.DB, user.id, listId))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  const query = (url.searchParams.get("q") ?? "").trim().toLowerCase().replace(/^@/, "");
+  if (query.length < INVITE_SEARCH_MIN_LENGTH || query.length > INVITE_SEARCH_MAX_LENGTH) {
+    return json({ candidates: [] });
+  }
+  const existingMembers = await getListMembers(env.DB, user.id, listId);
+  const memberIds = new Set(existingMembers.map((m) => m.id));
+  const candidates = (await searchInvitableUsers(env.DB, query, user.id)).filter(
+    (candidate) => !memberIds.has(candidate.id)
+  );
+  return json({ candidates });
+}
+
+async function handlePostListMember(request: Request, env: Env, listId: string): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `list-members:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (!(await customListExistsForUser(env.DB, user.id, listId))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  const body = await readJsonObject(request);
+  const memberId = Number.parseInt(String(body?.userId ?? ""), 10);
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    return json({ error: "Compte invalide." }, 400);
+  }
+  if (memberId === user.id) {
+    return json({ error: "Vous êtes déjà propriétaire de cette liste." }, 400);
+  }
+  if ((await countListMembers(env.DB, user.id, listId)) >= MAX_LIST_MEMBERS) {
+    return json({ error: "Nombre maximal de membres atteint.", reason: "too-many-members" }, 400);
+  }
+  await addListMember(env.DB, user.id, listId, memberId);
+  // Le nouveau membre doit voir apparaître la liste sans recharger la page ;
+  // les autres appareils du propriétaire, le nouveau membre dans la liste.
+  publishToUser(request, user.id, { type: "shared-lists" });
+  publishToUser(request, memberId, { type: "shared-lists" });
+  return json({ ownerId: user.id, members: await getListMembers(env.DB, user.id, listId) });
+}
+
+async function handleDeleteListMember(
+  request: Request,
+  env: Env,
+  url: URL,
+  listId: string,
+  memberId: number
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  const ownerId = resolveOwnerId(url, user.id);
+  // Le propriétaire retire qui il veut ; un membre ne peut que se retirer
+  // lui-même ("quelqu'un doit pouvoir se retirer d'une liste", cadrage du
+  // 2026-10-10, point 1) — jamais retirer quelqu'un d'autre.
+  if (user.id !== ownerId && user.id !== memberId) {
+    return json({ error: "Action non autorisée." }, 403);
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `list-members:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await removeListMember(env.DB, ownerId, listId, memberId);
+  publishToUser(request, ownerId, { type: "shared-lists" });
+  if (memberId !== ownerId) {
+    publishToUser(request, memberId, { type: "shared-lists" });
+  }
+  return json({ ok: true });
+}
+
+// Se retirer soi-même d'une liste commune : route dédiée plutôt que
+// réutiliser /members/:memberId ci-dessus, parce que le client n'a nulle
+// part son propre id numérique (seul `email` est exposé par AuthContext) —
+// ici `memberId` vient de la session, jamais de l'URL.
+async function handleLeaveSharedList(
+  request: Request,
+  env: Env,
+  url: URL,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  const ownerId = resolveOwnerId(url, user.id);
+  if (ownerId === user.id) {
+    return json({ error: "Le propriétaire ne peut pas quitter sa propre liste." }, 400);
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `list-members:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await removeListMember(env.DB, ownerId, listId, user.id);
+  publishToUser(request, ownerId, { type: "shared-lists" });
+  return json({ ok: true });
+}
+
+// Modification d'une liste commune par un membre (pas le propriétaire, qui
+// passe par /api/custom-lists/:listId comme pour n'importe laquelle de ses
+// listes). "Tout le monde peut tout modifier sur la liste, sauf la liste des
+// membres" (cadrage du 2026-10-10, point 2) : même écriture complète de la
+// liste que upsertCustomListForUser, juste autorisée à un membre en plus du
+// propriétaire. La liste doit déjà exister : ce chemin ne permet pas à un
+// membre de créer une liste au-delà du plafond MAX_CUSTOM_LISTS de quelqu'un
+// d'autre.
+async function handlePutSharedList(
+  request: Request,
+  env: Env,
+  ownerId: number,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (user.id !== ownerId && !(await isListMember(env.DB, ownerId, listId, user.id))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${ownerId}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  if (!(await customListExistsForUser(env.DB, ownerId, listId))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const list = sanitizeSingleCustomList(listId, body);
+  if (!list) {
+    return json({ error: "Liste invalide." }, 400);
+  }
+  await upsertCustomListForUser(env.DB, ownerId, list);
+  publishToUser(request, ownerId, { type: "custom-lists" });
+  if (user.id !== ownerId) {
+    publishToUser(request, user.id, { type: "shared-lists" });
+  }
+  return json({ ok: true });
+}
+
+async function handleDeleteSharedList(
+  request: Request,
+  env: Env,
+  ownerId: number,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (user.id !== ownerId && !(await isListMember(env.DB, ownerId, listId, user.id))) {
+    return json({ error: "Liste introuvable." }, 404);
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${ownerId}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await deleteCustomListForUser(env.DB, ownerId, listId);
+  publishToUser(request, ownerId, { type: "custom-lists" });
+  if (user.id !== ownerId) {
+    publishToUser(request, user.id, { type: "shared-lists" });
+  }
+  return json({ ok: true });
+}
+
 // Genres exclus synchronisés ----------------------------------------------
 //
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
@@ -2753,6 +3015,49 @@ async function routeRequest(
   }
   if (singleCustomListMatch && request.method === "DELETE") {
     return handleDeleteCustomList(request, env, singleCustomListMatch[1]);
+  }
+
+  // Listes communes (ticket "Ma liste commune") ----------------------------
+
+  if (url.pathname === "/api/shared-lists" && request.method === "GET") {
+    return handleGetSharedLists(request, env);
+  }
+
+  const sharedListMatch = url.pathname.match(/^\/api\/shared-lists\/(\d+)\/([^/]+)$/);
+  if (sharedListMatch && request.method === "PUT") {
+    return handlePutSharedList(request, env, Number(sharedListMatch[1]), sharedListMatch[2]);
+  }
+  if (sharedListMatch && request.method === "DELETE") {
+    return handleDeleteSharedList(request, env, Number(sharedListMatch[1]), sharedListMatch[2]);
+  }
+
+  const listInviteSearchMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)\/invite-search$/);
+  if (listInviteSearchMatch && request.method === "GET") {
+    return handleSearchInviteCandidates(request, env, url, listInviteSearchMatch[1]);
+  }
+
+  const listLeaveMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)\/leave$/);
+  if (listLeaveMatch && request.method === "DELETE") {
+    return handleLeaveSharedList(request, env, url, listLeaveMatch[1]);
+  }
+
+  const listMembersMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)\/members$/);
+  if (listMembersMatch && request.method === "GET") {
+    return handleGetListMembers(request, env, url, listMembersMatch[1]);
+  }
+  if (listMembersMatch && request.method === "POST") {
+    return handlePostListMember(request, env, listMembersMatch[1]);
+  }
+
+  const listMemberMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)\/members\/(\d+)$/);
+  if (listMemberMatch && request.method === "DELETE") {
+    return handleDeleteListMember(
+      request,
+      env,
+      url,
+      listMemberMatch[1],
+      Number(listMemberMatch[2])
+    );
   }
 
   if (url.pathname === "/api/list-shares" && request.method === "GET") {

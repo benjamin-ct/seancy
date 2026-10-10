@@ -1,0 +1,209 @@
+.dialog {
+  width: min(480px, calc(100% - 2 * var(--gutter)));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.dialog::backdrop {
+  background: oklch(0 0 0 / 0.6);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+}
+
+.sheetGrabber {
+  display: none;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.closeBtn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.sectionTitle {
+  margin: 18px 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sectionTitle:first-of-type {
+  margin-top: 0;
+}
+
+.memberList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memberRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.memberName {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.removeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.search {
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.candidateList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.candidateRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.addBtn:disabled,
+.removeBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hint {
+  margin: 10px 0 0;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.error {
+  margin: 12px 0 0;
+  color: var(--accent-ink);
+  font-size: 13px;
+}
+
+.leaveZone {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.leaveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Feuille du bas sur mobile. */
+@media (max-width: 860px) {
+  .dialog {
+    width: 100%;
+    max-width: none;
+    margin: auto 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-bottom: 0;
+  }
+
+  .content {
+    padding: 10px 18px calc(22px + env(safe-area-inset-bottom));
+  }
+
+  .sheetGrabber {
+    display: block;
+    align-self: center;
+    width: 40px;
+    height: 4px;
+    margin-bottom: 14px;
+    border-radius: 999px;
+    background: var(--border-2);
+  }
+}
