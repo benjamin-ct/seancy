@@ -23,6 +23,7 @@ import type {
 } from "../../../core/types/tmdb.ts";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
 import posterStyles from "../../styles/posterAccents.module.css";
+import skeletonStyles from "../../styles/skeleton.module.css";
 import styles from "./MediaCard.module.css";
 
 interface MediaCardProps {
@@ -128,6 +129,12 @@ function MediaCard({
   const posterRef = useRef<HTMLDivElement>(null);
   const isNearViewport = useNearViewport(posterRef, showProviderBadge);
 
+  // Shimmer tant que l'affiche n'a pas fini de charger (retour de review sur
+  // #296 : le shimmer restait affiché en permanence, même une fois l'image
+  // chargée, car la classe ne dépendait que de la présence d'un poster_path,
+  // jamais de son état de chargement réel).
+  const [posterLoaded, setPosterLoaded] = useState(false);
+
   const [provider, setProvider] = useState<WatchProviderEntry | null>(null);
   // Distingue "pas encore vérifié" de "vérifié, rien trouvé".
   const [providerStatus, setProviderStatus] = useState<"idle" | "loading" | "done">("idle");
@@ -194,7 +201,10 @@ function MediaCard({
   return (
     <div className={styles.card}>
       <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
-        <div className={styles.poster} ref={posterRef}>
+        <div
+          className={`${styles.poster} ${item.poster_path && !posterLoaded ? skeletonStyles.block : ""}`}
+          ref={posterRef}
+        >
           {item.poster_path ? (
             <img
               src={posterUrl(item.poster_path) ?? undefined}
@@ -204,6 +214,8 @@ function MediaCard({
               alt=""
               loading="lazy"
               decoding="async"
+              onLoad={() => setPosterLoaded(true)}
+              onError={() => setPosterLoaded(true)}
             />
           ) : (
             <div className={`${styles.noPoster} ${posterStyles[accentKey]}`} aria-hidden="true">

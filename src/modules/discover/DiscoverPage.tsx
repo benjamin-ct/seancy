@@ -44,8 +44,12 @@ import styles from "./DiscoverPage.module.css";
 const GRID_SKELETON_COUNT = 12;
 // Taille de page de la grille personnalisée "Pour toi" — doit rester
 // cohérente entre le chargement initial et loadMore() pour que l'offset
-// envoyé à /api/recommendations (page - 1) * taille reste exact.
-const PERSONALIZED_PAGE_SIZE = 24;
+// envoyé à /api/recommendations (page - 1) * taille reste exact. Retour de
+// review sur #296 : 24 déclenchait un nouveau chargement visible trop
+// souvent au scroll ; 40 (le plafond côté Worker, voir handleGetRecommendations)
+// ramène le même ressenti que la grille "Découvrir" classique (~20-24
+// items/page TMDB, mais affichés par lots plus gros ici).
+const PERSONALIZED_PAGE_SIZE = 40;
 
 // Résultats déjà chargés, par entrée d'historique : au retour arrière, la
 // grille réapparaît tout de suite (sans squelette ni nouvel appel), prête à
@@ -382,8 +386,42 @@ export default function DiscoverPage() {
             );
             return [...prev, ...fresh];
           });
-          setPage(nextPage);
-          setTotalPages(data.hasMore ? nextPage + 1 : nextPage);
+          if (data.hasMore) {
+            setPage(nextPage);
+            setTotalPages(nextPage + 1);
+            return;
+          }
+          // Lot personnalisé épuisé (plafond de calcul côté Worker, voir
+          // RECOMMENDATION_CACHE_SIZE) : le scroll infini continue avec le
+          // flux "Découvrir" classique plutôt que de s'arrêter net — mêmes
+          // filtres par défaut, même pagination que les autres grilles.
+          setUsingPersonalized(false);
+          return discover(mediaType, {
+            page: nextPage,
+            genreId: genreIds,
+            excludeGenreIds: excludedGenreIds,
+            providerIds: activeProviderIds,
+            region,
+            sortField,
+            sortDirection,
+            excludeUpcoming: true,
+            includeRegionReleaseDate: true,
+            ...toDiscoverParams(advanced),
+          }).then((discoverData) => {
+            setResults((prev) => {
+              const seenIds = new Set(prev.map((item) => item.id));
+              const fresh = keepTheatricalOnly(
+                filterExcluded(discoverData.results, mediaType).filter(
+                  (item) => !seenIds.has(item.id)
+                ),
+                inTheatersOnly,
+                mediaType
+              ).map((r) => ({ ...r, mediaType }));
+              return [...prev, ...fresh];
+            });
+            setPage(nextPage);
+            setTotalPages(Math.min(discoverData.total_pages || 1, 500));
+          });
         })
         .catch((err) => setLoadMoreError(err))
         .finally(() => setLoadingMore(false));
@@ -448,6 +486,9 @@ export default function DiscoverPage() {
 
   // Sentinelle observée pour déclencher le chargement de la page suivante
   // dès qu'elle approche du bas de l'écran (scroll infini, plus de bouton).
+  // Retour de review sur #296 : 600px faisait apparaître le chargement trop
+  // près du bas (visible), 1200px le déclenche assez tôt pour que le lot
+  // suivant soit déjà là avant que l'utilisateur n'atteigne la fin.
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (status !== "success") {
@@ -463,7 +504,7 @@ export default function DiscoverPage() {
           loadMore();
         }
       },
-      { rootMargin: "600px" }
+      { rootMargin: "1200px" }
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -576,7 +617,11 @@ export default function DiscoverPage() {
                 item={item}
                 yearGenre
                 genreName={reasonLabel(item)}
-                onNotInterested={usingPersonalized ? handleNotInterested : undefined}
+                onNotInterested={
+                  (item as Partial<RecommendationMediaItem>).reason
+                    ? handleNotInterested
+                    : undefined
+                }
               />
             ))}
           </div>
