@@ -104,6 +104,7 @@ jobs:
           npm run verify:tmdb-edge-cache
           npm run verify:security-headers
           npm run verify:changeset-parsing
+          npm run verify:changelog-release
 
       - name: Build
         run: npm run build
@@ -335,6 +336,55 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply seancy-notifications --remote
+
+  # Release prod (ticket Trello "Épique git-flow : release develop→main
+  # automatisée") : au push sur `main` (donc au merge d'une release
+  # `develop` → `main`), compile les fragments de changelog accumulés depuis
+  # la dernière release (voir .changeset/README.md et
+  # scripts/changelogRelease.ts) en une entrée CHANGELOG.md + bump SemVer de
+  # package.json, puis commit directement sur `main`. Un garde-fou naturel
+  # contre la boucle : ce commit généré ne laisse plus aucun fragment, donc
+  # le run qu'il déclenche à son tour trouve .changeset/ vide et ne fait
+  # rien. `[skip ci]` évite quand même de relancer ce workflow pour rien sur
+  # ce second push (le déploiement prod réel, lui, part du déploiement Git
+  # Cloudflare Workers Builds branché sur `main`, qui n'obéit pas à
+  # `[skip ci]` — la version buildée inclut donc bien le bump).
+  #
+  # Avant le basculement complet sur `develop`/`main` (voir ticket "adapter
+  # le skill trello-ticket-pipeline"), aucune PR vers `main` n'ajoute encore
+  # de fragment .changeset/ (check-changeset.ts n'est pour l'instant exigé
+  # que sur les PR de cette branche d'intégration) : ce job tourne donc à
+  # chaque push sur `main` mais ne trouve rien à compiler, sans effet.
+  release-changelog:
+    name: Compile changelog & bump version
+    needs:
+      - verify
+      - secrets-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile changelog fragments
+        id: release
+        run: npm run release:changelog
+
+      - name: Commit version bump
+        if: steps.release.outputs.version != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md package.json package-lock.json .changeset
+          git commit -m "chore(release): v${{ steps.release.outputs.version }} [skip ci]"
+          git push
 
   # Environnement `develop` persistant (voir ticket Trello "Avenir du
   # développement") : une base D1 unique (seancy-develop, créée une fois,
