@@ -18,6 +18,7 @@ import {
   deleteCustomListForUser,
   countCustomListsForUser,
   customListExistsForUser,
+  getCustomListName,
   getListSharesForUser,
   shareListForUser,
   unshareListForUser,
@@ -1897,7 +1898,12 @@ async function handleSearchInviteCandidates(
   return json({ candidates });
 }
 
-async function handlePostListMember(request: Request, env: Env, listId: string): Promise<Response> {
+async function handlePostListMember(
+  request: Request,
+  env: Env,
+  listId: string,
+  ctx: ExecutionContext
+): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
@@ -1926,7 +1932,31 @@ async function handlePostListMember(request: Request, env: Env, listId: string):
   // les autres appareils du propriétaire, le nouveau membre dans la liste.
   publishToUser(request, user.id, { type: "shared-lists" });
   publishToUser(request, memberId, { type: "shared-lists" });
+  ctx.waitUntil(notifyAddedToList(request, env, user.id, listId, memberId));
   return json({ ownerId: user.id, members: await getListMembers(env.DB, user.id, listId) });
+}
+
+async function notifyAddedToList(
+  request: Request,
+  env: Env,
+  ownerId: number,
+  listId: string,
+  memberId: number
+): Promise<void> {
+  try {
+    const listName = await getCustomListName(env.DB, ownerId, listId);
+    if (!listName) {
+      return;
+    }
+    const subscriptions = await getSubscriptionsForUser(env.DB, memberId);
+    await notifyUser(
+      env,
+      { userId: memberId, subscriptions, syncHost: new URL(request.url).hostname },
+      { kind: "addedToList", mediaTitle: listName, url: "/profil?tab=ma-liste" }
+    );
+  } catch (err) {
+    logError("Notification d'ajout à une liste commune impossible :", err);
+  }
 }
 
 async function handleDeleteListMember(
@@ -3046,7 +3076,7 @@ async function routeRequest(
     return handleGetListMembers(request, env, url, listMembersMatch[1]);
   }
   if (listMembersMatch && request.method === "POST") {
-    return handlePostListMember(request, env, listMembersMatch[1]);
+    return handlePostListMember(request, env, listMembersMatch[1], ctx);
   }
 
   const listMemberMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)\/members\/(\d+)$/);

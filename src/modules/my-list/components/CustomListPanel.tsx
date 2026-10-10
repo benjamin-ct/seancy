@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useLibrary } from "../../../core/context/LibraryContext.tsx";
@@ -18,6 +18,7 @@ import posterStyles from "../../../shared/styles/posterAccents.module.css";
 import { neighborOf, useSortable } from "../../../shared/hooks/useSortable.ts";
 import gridStyles from "../../../shared/styles/mediaGrid.module.css";
 import type { CustomList, LibraryItem } from "../../../core/types/library.ts";
+import { getListMembers, memberLabel, type ListMember } from "../../../core/api/listMembers.ts";
 import ListShareDialog from "./ListShareDialog.tsx";
 import ListMembersDialog from "./ListMembersDialog.tsx";
 import styles from "./CustomListPanel.module.css";
@@ -65,6 +66,24 @@ export default function CustomListPanel({
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const items = getListItems(list.id, list.ownerId);
   const ratedCount = items.filter((item) => getRating(item.mediaType, item.id) != null).length;
+
+  // Badge "liste commune" (icône + survol = noms des membres) : chargé pour
+  // CETTE liste seule (un seul panneau de liste affiché à la fois), pas
+  // juste quand on est membre (déjà visible côté serveur via list.ownerId) —
+  // aussi quand on est propriétaire d'une liste qu'on a partagée, cas qui
+  // n'avait aucun indicateur avant ce ticket. Rechargé à la fermeture du
+  // dialogue (ajout/retrait d'un membre) pour rester à jour.
+  const [members, setMembers] = useState<ListMember[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getListMembers(list.id, list.ownerId)
+      .then(({ members: data }) => !cancelled && setMembers(data))
+      .catch(() => !cancelled && setMembers([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [list.id, list.ownerId, membersOpen]);
+  const isCommon = list.ownerId !== undefined || members.length > 0;
 
   function handleDelete() {
     deleteList(list.id, list.ownerId);
@@ -158,10 +177,18 @@ export default function CustomListPanel({
               {t(shareSlug ? "customListPanel.statusShared" : "customListPanel.statusPrivate")}
             </span>
           )}
-          {list.ownerId !== undefined && (
-            <span className={`${styles.status} ${styles.statusShared}`}>
+          {isCommon && (
+            <span
+              className={`${styles.status} ${styles.statusShared} ${styles.commonBadge}`}
+              tabIndex={0}
+            >
               <Icon name="users" />
               {t("customListPanel.statusCommon")}
+              {members.length > 0 && (
+                <span className={styles.commonTooltip} role="tooltip">
+                  {members.map(memberLabel).join(", ")}
+                </span>
+              )}
             </span>
           )}
         </div>

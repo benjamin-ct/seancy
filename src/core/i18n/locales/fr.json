@@ -607,6 +607,10 @@
       "title": "Disponible en streaming",
       "body": "« {{title}} » vient d'arriver sur une plateforme."
     },
+    "addedToList": {
+      "title": "Liste commune",
+      "body": "Vous avez été ajouté à la liste « {{title}} »."
+    },
     "newFollowerFallback": "Quelqu'un"
   },
   "legal": {

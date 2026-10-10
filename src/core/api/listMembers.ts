@@ -15,6 +15,13 @@ export interface InviteCandidate {
   displayName: string | null;
 }
 
+export function memberLabel(member: {
+  username: string | null;
+  displayName: string | null;
+}): string {
+  return member.displayName || (member.username ? `@${member.username}` : "?");
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {

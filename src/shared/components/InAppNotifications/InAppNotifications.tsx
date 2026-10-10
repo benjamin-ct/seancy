@@ -14,6 +14,7 @@ const KINDS = [
   "newFollower",
   "reminderReleased",
   "reminderAvailable",
+  "addedToList",
 ];
 
 interface Toast extends InAppNotification {

@@ -607,6 +607,10 @@
       "title": "Now streaming",
       "body": "\"{{title}}\" just arrived on a streaming service."
     },
+    "addedToList": {
+      "title": "Shared list",
+      "body": "You were added to the list \"{{title}}\"."
+    },
     "newFollowerFallback": "Someone"
   },
   "legal": {

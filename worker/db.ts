@@ -761,6 +761,20 @@ export async function customListExistsForUser(
   return row !== null;
 }
 
+// Nom seul (pas les items) : utilisé pour la notification d'invitation à une
+// liste commune, sans le coût de getCustomListsForUser.
+export async function getCustomListName(
+  db: D1Database,
+  userId: number,
+  listId: string
+): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT name FROM custom_lists WHERE user_id = ? AND id = ?")
+    .bind(userId, listId)
+    .first<{ name: string }>();
+  return row?.name ?? null;
+}
+
 // Remplacement d'UNE SEULE liste perso (voir PUT /api/custom-lists/:listId,
 // audit M4) : contrairement à replaceCustomListsForUser ci-dessus, ne touche
 // que les lignes de cette liste — modifier une liste de 100 items n'amplifie

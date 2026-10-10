@@ -39,7 +39,8 @@ export type NotificationKind =
   | "test"
   | "newFollower"
   | "reminderReleased"
-  | "reminderAvailable";
+  | "reminderAvailable"
+  | "addedToList";
 
 export interface InAppNotification {
   kind: NotificationKind;

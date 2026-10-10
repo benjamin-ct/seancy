@@ -4,6 +4,7 @@ import { Icon } from "../../../shared/components/index.ts";
 import {
   addListMember,
   getListMembers,
+  memberLabel,
   removeListMember,
   searchInviteCandidates,
   type InviteCandidate,
@@ -27,10 +28,6 @@ interface ListMembersDialogProps {
 const MAX_MEMBERS = 10;
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 300;
-
-function memberLabel(member: { username: string | null; displayName: string | null }): string {
-  return member.displayName || (member.username ? `@${member.username}` : "?");
-}
 
 // Membres d'une liste perso devenue commune (ticket "Ma liste commune") :
 // invitation par pseudo (propriétaire uniquement), retrait par le
