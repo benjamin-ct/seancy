@@ -11,7 +11,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { isChangesetError, readChangesets, type Bump, type Changeset } from "./changesetLib.ts";
 
 const CHANGELOG_PATH = "CHANGELOG.md";
-const CHANGELOG_HEADER =
+export const CHANGELOG_HEADER =
   "# Changelog\n\nFormat libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).\n";
 
 // Un bump "plus fort" l'emporte sur les autres fragments de la même release
@@ -103,16 +103,26 @@ function readPackageVersion(): string {
   return pkg.version;
 }
 
+// Insère juste après l'en-tête (avant la première entrée déjà présente), pas
+// au tout début : l'en-tête doit rester la première chose du fichier. Les
+// trois morceaux (en-tête, nouvelle entrée, entrées existantes) sont chacun
+// normalisés (`trimEnd`) avant d'être rejoints avec exactement une ligne
+// vide entre eux, plutôt que de recoller des index de `indexOf` — fragile,
+// un ancien essai laissait une ligne vide en trop après l'en-tête dès la
+// deuxième release (le séparateur ajouté à l'insertion précédente restait
+// dans la partie "en-tête" de la suivante).
+export function insertChangelogEntry(existing: string, entry: string): string {
+  const match = existing.match(/^## /m);
+  const header = (match ? existing.slice(0, match.index) : existing).trimEnd();
+  const rest = match ? existing.slice(match.index).trimEnd() : "";
+  return [header, entry.trimEnd(), rest].filter(Boolean).join("\n\n") + "\n";
+}
+
 function prependChangelog(entry: string): void {
   const existing = existsSync(CHANGELOG_PATH)
     ? readFileSync(CHANGELOG_PATH, "utf8")
     : CHANGELOG_HEADER;
-  // Insère juste après l'en-tête (avant la première entrée déjà présente),
-  // pas au tout début : l'en-tête doit rester la première chose du fichier.
-  const splitAt = existing.indexOf("\n## ");
-  const header = splitAt === -1 ? existing.trimEnd() + "\n" : existing.slice(0, splitAt + 1);
-  const rest = splitAt === -1 ? "" : existing.slice(splitAt + 1);
-  writeFileSync(CHANGELOG_PATH, `${header}\n${entry}${rest}`);
+  writeFileSync(CHANGELOG_PATH, insertChangelogEntry(existing, entry));
 }
 
 function main(): void {

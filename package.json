@@ -32,6 +32,7 @@
     "verify:security-headers": "node scripts/security-headers.ts --check",
     "verify:changeset-parsing": "node scripts/verify-changeset-parsing.ts",
     "verify:changelog-release": "node scripts/verify-changelog-release.ts",
+    "verify:changelog-parser": "node scripts/verify-changelog-parser.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
     "release:changelog": "node scripts/changelogRelease.ts",
