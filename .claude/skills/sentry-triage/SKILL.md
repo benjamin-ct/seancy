@@ -6,7 +6,7 @@ description: Traite une alerte Sentry reçue par le webhook de infra/trello-clau
 # Triage automatique des alertes Sentry
 
 Ce skill traite une alerte Sentry unique, reçue via le webhook `/sentry-webhook` du listener
-(`infra/trello-claude/listener/server.js`). Il s'exécute dans le même conteneur `bobine-repo` que
+(`infra/trello-claude/listener/server.js`). Il s'exécute dans le même conteneur `seancy-repo` que
 le skill `trello-ticket-pipeline`, dans un processus `claude -p` one-shot : mêmes contraintes
 (pas de reprise automatique après la sortie, pas de délégation d'attente à un sous-agent,
 notification Discord finale obligatoire).
@@ -77,6 +77,6 @@ terminer.
   `🤖 [Claude]`.
 - En cas d'incertitude sur l'architecture ou les credentials disponibles, ne pas deviner : décrire
   précisément le blocage dans le résumé Discord plutôt que d'agir à l'aveugle.
-- Si une action humaine est nécessaire sur le serveur (NAS), citer les commandes `bobine-*`
-  (`bobine-status`, `bobine-pull`, `bobine-rebuild`, `bobine-deploy`, `bobine-logs`, voir
+- Si une action humaine est nécessaire sur le serveur (NAS), citer les commandes `seancy-*`
+  (`seancy-status`, `seancy-pull`, `seancy-rebuild`, `seancy-deploy`, `seancy-logs`, voir
   `infra/trello-claude/README.md`, « Commandes serveur ») plutôt que les commandes Docker/Git brutes.

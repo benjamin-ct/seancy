@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Capture d'écran d'une page de l'app pour Claude (pas de navigateur dans le
 // conteneur autrement) : Chromium headless via Playwright, installé dans
-// l'image bobine-repo. Claude lit ensuite le PNG produit avec son outil Read.
+// l'image seancy-repo. Claude lit ensuite le PNG produit avec son outil Read.
 //
-//   bobine-screenshot <url> <sortie.png> [--mobile | --desktop | --both]
+//   seancy-screenshot <url> <sortie.png> [--mobile | --desktop | --both]
 //                     [--full] [--wait <ms>] [--cookie nom=valeur]...
 //                     [--click <sélecteur CSS>]... [--dark | --light]
 //
@@ -100,7 +100,7 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.url || !opts.out) {
     console.error(
-      "Usage : bobine-screenshot <url> <sortie.png> [--mobile|--desktop|--both] [--full] [--wait ms] [--cookie nom=valeur] [--click sélecteur] [--dark|--light]"
+      "Usage : seancy-screenshot <url> <sortie.png> [--mobile|--desktop|--both] [--full] [--wait ms] [--cookie nom=valeur] [--click sélecteur] [--dark|--light]"
     );
     process.exit(2);
   }

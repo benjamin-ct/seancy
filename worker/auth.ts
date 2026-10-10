@@ -27,12 +27,6 @@ const SESSION_COOKIE = "seancy_session";
 // session) n'a jamais ce cookie et peut sauter cet appel réseau — ce qui
 // couvre aussi tout le trafic de crawlers/bots, qui ne se connectent jamais.
 const AUTH_HINT_COOKIE = "seancy_auth";
-// Noms d'avant le renommage Seancy : la session est encore lue sous l'ancien
-// nom, puis reposée sous le nouveau par /api/auth/me (voir handleMe dans
-// index.ts), et les anciens cookies sont effacés à chaque pose ou
-// effacement des nouveaux.
-const LEGACY_SESSION_COOKIE = "bobine_session";
-const LEGACY_AUTH_HINT_COOKIE = "bobine_auth";
 // Alphabet sans caractères ambigus à l'oreille/à l'écrit (pas de 0/O, 1/I/L).
 const CODE_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
@@ -49,8 +43,6 @@ export interface AuthUser {
   sessionToken: string;
   /** Fin de validité de la session (ms depuis l'epoch). */
   expiresAt: number;
-  /** Session lue sous l'ancien nom de cookie (`bobine_session`). */
-  legacyCookie: boolean;
 }
 
 // Jetons de session et de lien magique (et codes courts) stockés hachés en
@@ -231,8 +223,7 @@ export async function getUserFromRequest(
   db: D1Database,
   request: Request
 ): Promise<AuthUser | null> {
-  const currentToken = parseCookie(request, SESSION_COOKIE);
-  const token = currentToken ?? parseCookie(request, LEGACY_SESSION_COOKIE);
+  const token = parseCookie(request, SESSION_COOKIE);
   if (!token) {
     return null;
   }
@@ -271,16 +262,14 @@ export async function getUserFromRequest(
     username: row.username,
     sessionToken: token,
     expiresAt: row.expires_at,
-    legacyCookie: !currentToken,
   };
 }
 
 // Cookie de session HttpOnly et cookie compagnon (voir AUTH_HINT_COOKIE),
 // toujours posés/effacés ensemble avec la même durée de vie pour que leur
-// présence reste cohérente ; `token` à null les efface. Les anciens noms
-// (bobine_*) sont effacés dans tous les cas. `Secure` casse les cookies en
-// local http (wrangler dev sans --local-protocol https) : on ne l'ajoute que
-// si la requête est bien passée en https.
+// présence reste cohérente ; `token` à null les efface. `Secure` casse les
+// cookies en local http (wrangler dev sans --local-protocol https) : on ne
+// l'ajoute que si la requête est bien passée en https.
 export function sessionCookieHeaders(
   request: Request,
   token: string | null,
@@ -291,8 +280,6 @@ export function sessionCookieHeaders(
   return [
     `${SESSION_COOKIE}=${token ?? ""}; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=${maxAge}`,
     `${AUTH_HINT_COOKIE}=${token ? "1" : ""}; Path=/;${secure} SameSite=Lax; Max-Age=${maxAge}`,
-    `${LEGACY_SESSION_COOKIE}=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0`,
-    `${LEGACY_AUTH_HINT_COOKIE}=; Path=/;${secure} SameSite=Lax; Max-Age=0`,
   ];
 }
 
