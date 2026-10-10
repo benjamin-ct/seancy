@@ -186,13 +186,19 @@ précédente s'est arrêtée en cours de route) et continuer le développement (
 4. Si le développement se termine sans blocage :
    1. Ouvrir une nouvelle Pull Request (cas d'un ticket neuf) ou pousser les nouveaux commits sur la PR existante (cas
       d'une reprise après review KO), avec dans la description un lien vers la carte Trello si ce n'est pas déjà fait.
-   2. Récupérer l'URL de preview :
+   2. **Fragment de changelog** (voir `.changeset/README.md`) : si cette PR modifie un fichier sous `src/`, `worker/`
+      ou `migrations/`, ajouter un fichier `.changeset/<slug>.md` dans le même commit, avec un `bump` (`patch` pour un
+      correctif sans nouveau comportement visible, `minor` pour une fonctionnalité/amélioration visible et
+      rétrocompatible, `major` pour un changement cassant) et une description courte orientée utilisateur (pas un
+      résumé technique de la PR). PR purement infra/outillage/doc (rien sous ces trois dossiers) : rien à ajouter, la
+      CI ne le demande pas.
+   3. Récupérer l'URL de preview :
       - si un bot de déploiement (Cloudflare Workers, Netlify, Vercel…) l'a postée en commentaire sur la PR, la
         reprendre
         depuis là ;
       - sinon, la chercher dans les checks/deployments de la PR sur GitHub.
-   3. Déplacer la carte vers `A valider`.
-   4. Ajouter un commentaire sur la carte avec le lien de la preview (et le lien de la PR).
+   4. Déplacer la carte vers `A valider`.
+   5. Ajouter un commentaire sur la carte avec le lien de la preview (et le lien de la PR).
       **Toujours préfixer le commentaire par `🤖 [Claude]`** pour indiquer clairement qu'il s'agit d'un message
       automatisé. Si le développement a été délégué, y indiquer le modèle et l'effort réellement utilisés.
 5. **Vérifier la fraîcheur des CGU / politique de confidentialité** (`src/modules/legal/`, routes
@@ -285,7 +291,7 @@ garde tout le reste : branche (2c.1), lecture de la carte, PR, attente CI, previ
      reprendre à 2c.4 (PR, preview, carte en `A valider`).
 
 6. Indiquer le modèle (id complet lu dans le journal) et l'effort utilisés dans le commentaire de fin de ticket
-   (2c.4.4) et dans le résumé Discord.
+   (2c.4.5) et dans le résumé Discord.
 
 ## Limite d'usage atteinte
 
