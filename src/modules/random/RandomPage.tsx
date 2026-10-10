@@ -61,6 +61,13 @@ const CATALOG_POOL_MAX = 64;
 // Attente maximale de l'affiche du titre tiré avant de le révéler : le
 // défilement continue en attendant, et la révélation montre la bonne affiche.
 const POSTER_WAIT_MS = 2500;
+// Durée plancher du défilement avant révélation (voir ticket Trello "Roue
+// aléatoire") : un tirage catalogue peut résoudre en moins de 2s, trop vite
+// pour que le défilement ait eu le temps de montrer plusieurs affiches — ça
+// donnait l'impression d'un bug plutôt que d'un tirage réussi. ~3-4 affiches
+// à REEL_INTERVAL_MS avant la révélation, quelle que soit la vitesse réelle
+// du tirage.
+const MIN_SPIN_MS = 1200;
 
 type DrawSource = "watchlist" | "catalog";
 // « Les deux » : chaque tirage choisit au hasard entre films et séries.
@@ -215,8 +222,11 @@ export default function RandomPage() {
   // Incrémenté à chaque tirage réussi : relance l'animation d'apparition,
   // même quand le même titre ressort.
   const [drawCount, setDrawCount] = useState(0);
-  // Affiches du catalogue vues au fil des requêtes (pour le défilement).
-  const [catalogPosters, setCatalogPosters] = useState<string[]>([]);
+  // Affiches du catalogue vues au fil des requêtes (pour le défilement),
+  // par type de média (voir collectCatalogPosters : un pool partagé entre
+  // films et séries continuait à montrer des affiches de films pendant un
+  // tirage « séries », faute d'être filtré par type).
+  const [catalogPosters, setCatalogPosters] = useState<Partial<Record<MediaType, string[]>>>({});
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
   const historyId = useId();
 
@@ -230,9 +240,10 @@ export default function RandomPage() {
 
   const { watchlist, watchedIds, isWatched, isInWatchlist, toggleWatched, toggleWatchlist } =
     useLibrary();
-  // Par défaut « Mes envies de voir » ; tout le catalogue tant que la liste
-  // est vide (visiteur, nouveau compte), sauf choix explicite.
-  const source: DrawSource = chosenSource ?? (watchlist.length > 0 ? "watchlist" : "catalog");
+  // Par défaut tout le catalogue (voir ticket Trello "Roue aléatoire" : un
+  // défaut sur « Mes envies de voir » surprenait, et menait au tirage lent
+  // de drawFromWatchlist, voir plus bas), sauf choix explicite.
+  const source: DrawSource = chosenSource ?? "catalog";
   const { region } = useRegion();
   const { favoriteProviderIds } = useFavoriteProviders();
   const { excludedGenreIds } = useExcludedGenres();
@@ -272,7 +283,7 @@ export default function RandomPage() {
     };
   }, [drawTypes, region]);
 
-  function collectCatalogPosters(items: { poster_path?: string | null }[]) {
+  function collectCatalogPosters(type: MediaType, items: { poster_path?: string | null }[]) {
     const paths = items.map((item) => item.poster_path).filter((p): p is string => !!p);
     if (paths.length === 0) {
       return;
@@ -283,8 +294,9 @@ export default function RandomPage() {
     // même le premier filtre) figeait le défilement sur toujours les mêmes
     // affiches, quels que soient les tirages suivants (cause du ticket).
     setCatalogPosters((prev) => {
-      const merged = [...new Set([...prev, ...paths])];
-      return merged.length > CATALOG_POOL_MAX ? merged.slice(-CATALOG_POOL_MAX) : merged;
+      const merged = [...new Set([...(prev[type] ?? []), ...paths])];
+      const trimmed = merged.length > CATALOG_POOL_MAX ? merged.slice(-CATALOG_POOL_MAX) : merged;
+      return { ...prev, [type]: trimmed };
     });
   }
 
@@ -294,7 +306,7 @@ export default function RandomPage() {
     let cancelled = false;
     for (const type of drawTypes) {
       discover(type, { page: 1, region })
-        .then((data) => !cancelled && collectCatalogPosters(shuffle(data.results ?? [])))
+        .then((data) => !cancelled && collectCatalogPosters(type, shuffle(data.results ?? [])))
         .catch(() => {});
     }
     return () => {
@@ -369,8 +381,16 @@ export default function RandomPage() {
       pool = pool.filter((entry) => entry.id !== pick.id || entry.mediaType !== pick.mediaType);
     }
     const candidates = shuffle(pool).slice(0, activeProviderIds.length > 0 ? MAX_ATTEMPTS : 1);
-    for (const entry of candidates) {
-      const details = await getDetails(entry.mediaType, entry.id);
+    // Les fiches sont demandées en parallèle plutôt que l'une après l'autre
+    // (voir ticket Trello "Roue aléatoire" : jusqu'à MAX_ATTEMPTS fiches
+    // complètes, chacune coûteuse (append_to_response), enchaînées en
+    // séquence faisaient dériver un tirage jusqu'à ~10s).
+    const detailsList = await Promise.all(
+      candidates.map((entry) => getDetails(entry.mediaType, entry.id))
+    );
+    for (let i = 0; i < candidates.length; i++) {
+      const entry = candidates[i];
+      const details = detailsList[i];
       if (
         activeProviderIds.length > 0 &&
         !hasAnyProvider(watchProvidersFromDetails(details, region), activeProviderIds)
@@ -405,7 +425,7 @@ export default function RandomPage() {
       yearMax: yearMax ? Number(yearMax) : undefined,
     };
     const first = await discover(type, { page: 1, ...discoverParams });
-    collectCatalogPosters(first.results ?? []);
+    collectCatalogPosters(type, first.results ?? []);
     const totalPages = Math.min(first.total_pages || 1, 500);
     if (totalPages === 0 || !first.results?.length) {
       return null;
@@ -415,6 +435,15 @@ export default function RandomPage() {
     for (let attempt = 0; attempt < MAX_ATTEMPTS && !candidate; attempt++) {
       const page = Math.max(1, Math.floor(Math.random() * Math.min(totalPages, 100)) + 1);
       const data = page === 1 ? first : await discover(type, { page, ...discoverParams });
+      // Les pages tirées au hasard ici (et pas seulement la première, déjà
+      // collectée ci-dessus) sont justement la source de variété réelle du
+      // défilement — sans ça, le pool catalogue restait figé sur la page 1
+      // (toujours les mêmes ~20 titres pour un même jeu de filtres), cause
+      // du manque de variété remonté sur le ticket malgré la fenêtre
+      // glissante.
+      if (page !== 1) {
+        collectCatalogPosters(type, data.results ?? []);
+      }
       let pool = filterExcluded(data.results, type);
       if (excludeWatched) {
         pool = pool.filter((item) => !watchedIds.has(`${type}:${item.id}`));
@@ -443,6 +472,7 @@ export default function RandomPage() {
     }
     setStatus("loading");
     setError(null);
+    const startedAt = Date.now();
     try {
       let drawn: Drawn | null = null;
       if (source === "watchlist") {
@@ -464,16 +494,26 @@ export default function RandomPage() {
       if (!mountedRef.current) {
         return;
       }
+      if (drawn) {
+        const poster = posterUrl(drawn.item.poster_path, "w342");
+        if (poster) {
+          await preloadImage(poster, POSTER_WAIT_MS);
+        }
+      }
+      // Délai plancher (voir MIN_SPIN_MS) : appliqué aussi bien au tirage
+      // réussi qu'à "empty", pour que le défilement ne s'arrête jamais après
+      // une seule affiche sous prétexte que la réponse réseau est arrivée
+      // vite.
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_SPIN_MS) {
+        await new Promise((resolve) => setTimeout(resolve, MIN_SPIN_MS - elapsed));
+      }
+      if (!mountedRef.current) {
+        return;
+      }
       if (!drawn) {
         clearPick();
         setStatus("empty");
-        return;
-      }
-      const poster = posterUrl(drawn.item.poster_path, "w342");
-      if (poster) {
-        await preloadImage(poster, POSTER_WAIT_MS);
-      }
-      if (!mountedRef.current) {
         return;
       }
       setPick(drawn.item);
@@ -517,16 +557,23 @@ export default function RandomPage() {
   const availability = availabilityOf(providersResult);
 
   // Affiches qui défilent pendant le tirage, façon machine à sous : catalogue,
-  // historique et envies de voir, en alternance.
+  // historique et envies de voir, en alternance. Filtrées sur drawTypes (voir
+  // ticket Trello "Roue aléatoire") : un tirage « séries » affichait des
+  // affiches de films piochées dans l'historique/les envies de voir ou dans
+  // un pool catalogue resté peuplé par un tirage « films » précédent.
   const reelPosters = useMemo(() => {
+    const catalog = drawTypes.flatMap((type) => catalogPosters[type] ?? []);
     const personal = shuffle(
-      [...history.map((h) => h.posterPath), ...watchlist.map((w) => w.posterPath)].filter(
-        (p): p is string => !!p
-      )
+      [
+        ...history.filter((h) => drawTypes.includes(h.mediaType)).map((h) => h.posterPath),
+        ...watchlist
+          .filter((w: LibraryItem) => drawTypes.includes(w.mediaType))
+          .map((w: LibraryItem) => w.posterPath),
+      ].filter((p): p is string => !!p)
     );
-    const mixed = catalogPosters.flatMap((path, i) => (personal[i] ? [path, personal[i]] : [path]));
+    const mixed = catalog.flatMap((path, i) => (personal[i] ? [path, personal[i]] : [path]));
     return [...new Set([...mixed, ...personal])];
-  }, [catalogPosters, history, watchlist]);
+  }, [catalogPosters, history, watchlist, drawTypes]);
   const reelPoster = useReelPoster(rolling, reelPosters);
 
   // Garde de démontage pour `drawRandom` (audit M16) : ses `await` peuvent se
