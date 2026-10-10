@@ -128,7 +128,18 @@
     "emailLabel": "Email address",
     "emailPlaceholder": "you@example.com",
     "sending": "Sending…",
-    "submitEmail": "Get my sign-in link"
+    "submitEmail": "Get my sign-in link",
+    "continueWith": "Continue with {{provider}}",
+    "orEmail": "or with your email address",
+    "oauthErrors": {
+      "unavailable": "This sign-in method isn't available right now.",
+      "rate-limited": "Too many sign-in attempts. Try again in a few minutes.",
+      "expired": "The sign-in has expired or was already used. Please start again.",
+      "cancelled": "Sign-in cancelled.",
+      "failed": "Sign-in didn't go through. Try again, or get a link by email.",
+      "no-email": "This account didn't share a verified email address with us: sign in with an email link, then link it from Profile → Account.",
+      "provider-taken": "Your Seancy account is already linked to another account from this provider. Sign in with that one or with an email link."
+    }
   },
   "membersOnly": {
     "title": "Members-only action",
@@ -245,6 +256,29 @@
     "avatarCropZoom": "Zoom",
     "avatarCropCancel": "Cancel",
     "avatarCropConfirm": "Confirm",
+    "signInMethods": {
+      "title": "Sign-in methods",
+      "hint": "Sign in with Google or Apple in addition to the email link, which always stays available. Your account email address doesn't change.",
+      "magicLink": "Email link or code",
+      "alwaysOn": "Always on",
+      "linked": "Linked",
+      "notLinked": "Not linked",
+      "link": "Link",
+      "unlink": "Unlink",
+      "linkLabel": "Link a {{provider}} account",
+      "unlinkLabel": "Unlink the {{provider}} account",
+      "unlinkError": "Couldn't unlink this account right now. Please try again.",
+      "results": {
+        "linked": "{{provider}} account linked: you can now use it to sign in.",
+        "used-elsewhere": "This {{provider}} account is already linked to another Seancy account.",
+        "provider-taken": "Another {{provider}} account is already linked: unlink it first.",
+        "cancelled": "Linking cancelled.",
+        "expired": "Linking expired. Please start again.",
+        "unavailable": "This sign-in method isn't available right now.",
+        "rate-limited": "Too many attempts. Try again in a few minutes.",
+        "failed": "Linking didn't go through. Please try again."
+      }
+    },
     "exportData": "Export my data",
     "exportDataHint": "Download a copy of all your account data in JSON format (right to data portability).",
     "exportDataButton": "Download my data",
@@ -696,6 +730,10 @@
       "sharedProfile": {
         "label": "Shared profile and username",
         "text": " (if you choose to share your profile): what you've watched, your watchlist, your custom lists, your ratings, your display name and your profile picture become visible read-only to anyone who has the link — never your email address. You can also pick an optional, unique username: it appears in the shared profile's address (/u/your_username) and on the profile itself. Turning sharing off makes the profile unreachable, including through the username; you can change or clear the username at any time from your profile."
+      },
+      "signInProviders": {
+        "label": "Sign in with Google or Apple",
+        "text": " (if you use it): your account identifier at that provider and the email address it shares with us, linked to your Seancy account to recognize you on later sign-ins. We never receive your password or any other data from that account. You can unlink it at any time from your profile, which deletes this data."
       }
     },
     "why": {
@@ -733,7 +771,15 @@
         "label": "Gravatar",
         "text": " (Automattic): displays your profile picture if you've set one up linked to your email address. We never send your email address in clear text to Gravatar, only its fingerprint (MD5 hash), in line with how this service works."
       },
-      "outro": "None of this data is sold or used for advertising purposes."
+      "outro": "None of this data is sold or used for advertising purposes.",
+      "google": {
+        "label": "Google (Sign in with Google)",
+        "text": ": if you choose to sign in with Google, sign-in happens at Google, under its privacy policy, which then shares your account identifier and email address with us."
+      },
+      "apple": {
+        "label": "Apple (Sign in with Apple)",
+        "text": ": same for signing in with Apple, under its privacy policy; Apple may share a relay email address instead of yours if you choose so."
+      }
     },
     "cookies": {
       "title": "Cookies and measurement tools",

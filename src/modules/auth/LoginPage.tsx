@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
@@ -10,6 +10,10 @@ export default function LoginPage() {
   useDocumentTitle(t("pageTitle.login"));
   const { status } = useAuth();
   const location = useLocation();
+  // Retour d'une connexion Google / Apple qui n'a pas abouti (voir
+  // handleOAuthCallback dans worker/index.ts).
+  const [searchParams] = useSearchParams();
+  const oauthError = searchParams.get("oauth");
   // Page d'origine quand on arrive ici depuis une page réservée aux membres
   // (ex. /profil, voir ProfilePage).
   const from = (location.state as { from?: string } | null)?.from;
@@ -24,6 +28,13 @@ export default function LoginPage() {
     <div className={styles.page}>
       <h1>{t("loginPage.title")}</h1>
       <p className={styles.subtitle}>{t("loginPage.subtitle")}</p>
+      {oauthError && (
+        <p className={`${styles.card} ${styles.error}`} role="alert">
+          {t(`loginPage.oauthErrors.${oauthError}`, {
+            defaultValue: t("loginPage.oauthErrors.failed"),
+          })}
+        </p>
+      )}
       <LoginForm />
     </div>
   );

@@ -128,7 +128,18 @@
     "emailLabel": "Adresse email",
     "emailPlaceholder": "vous@exemple.com",
     "sending": "Envoi…",
-    "submitEmail": "Recevoir mon lien de connexion"
+    "submitEmail": "Recevoir mon lien de connexion",
+    "continueWith": "Continuer avec {{provider}}",
+    "orEmail": "ou avec votre adresse email",
+    "oauthErrors": {
+      "unavailable": "Ce moyen de connexion n'est pas disponible pour le moment.",
+      "rate-limited": "Trop de tentatives de connexion. Réessayez dans quelques minutes.",
+      "expired": "La connexion a expiré ou a déjà été utilisée. Recommencez.",
+      "cancelled": "Connexion annulée.",
+      "failed": "La connexion n'a pas abouti. Réessayez, ou recevez un lien par email.",
+      "no-email": "Ce compte ne nous a pas transmis d'adresse email vérifiée : connectez-vous avec un lien par email, puis associez-le depuis Profil → Compte.",
+      "provider-taken": "Votre compte Seancy est déjà associé à un autre compte de ce fournisseur. Connectez-vous avec celui-ci ou avec un lien par email."
+    }
   },
   "membersOnly": {
     "title": "Action réservée aux membres connectés",
@@ -245,6 +256,29 @@
     "avatarCropZoom": "Zoom",
     "avatarCropCancel": "Annuler",
     "avatarCropConfirm": "Valider",
+    "signInMethods": {
+      "title": "Moyens de connexion",
+      "hint": "Connectez-vous avec Google ou Apple en plus du lien envoyé par email, qui reste toujours disponible. L'adresse email du compte ne change pas.",
+      "magicLink": "Lien ou code par email",
+      "alwaysOn": "Toujours actif",
+      "linked": "Associé",
+      "notLinked": "Non associé",
+      "link": "Associer",
+      "unlink": "Dissocier",
+      "linkLabel": "Associer un compte {{provider}}",
+      "unlinkLabel": "Dissocier le compte {{provider}}",
+      "unlinkError": "Impossible de dissocier ce compte pour le moment. Réessayez.",
+      "results": {
+        "linked": "Compte {{provider}} associé : vous pouvez maintenant l'utiliser pour vous connecter.",
+        "used-elsewhere": "Ce compte {{provider}} est déjà associé à un autre compte Seancy.",
+        "provider-taken": "Un autre compte {{provider}} est déjà associé : dissociez-le d'abord.",
+        "cancelled": "Association annulée.",
+        "expired": "L'association a expiré. Recommencez.",
+        "unavailable": "Ce moyen de connexion n'est pas disponible pour le moment.",
+        "rate-limited": "Trop de tentatives. Réessayez dans quelques minutes.",
+        "failed": "L'association n'a pas abouti. Réessayez."
+      }
+    },
     "exportData": "Exporter mes données",
     "exportDataHint": "Téléchargez une copie de toutes les données de votre compte au format JSON (droit à la portabilité).",
     "exportDataButton": "Télécharger mes données",
@@ -696,6 +730,10 @@
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
         "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse email. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
+      },
+      "signInProviders": {
+        "label": "Connexion avec Google ou Apple",
+        "text": " (si vous l'utilisez) : l'identifiant de votre compte chez ce fournisseur et l'adresse email qu'il nous transmet, rattachés à votre compte Seancy pour vous reconnaître aux connexions suivantes. Nous ne recevons ni votre mot de passe ni d'autres données de ce compte. Vous pouvez dissocier ce compte à tout moment depuis votre profil, ce qui supprime ces données."
       }
     },
     "why": {
@@ -733,7 +771,15 @@
         "label": "Gravatar",
         "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse email. Nous ne transmettons jamais votre email en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
       },
-      "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires."
+      "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires.",
+      "google": {
+        "label": "Google (Se connecter avec Google)",
+        "text": " : si vous choisissez de vous connecter avec Google, la connexion se fait chez Google, selon sa politique de confidentialité, qui nous transmet alors votre identifiant de compte et votre adresse email."
+      },
+      "apple": {
+        "label": "Apple (Se connecter avec Apple)",
+        "text": " : même principe pour la connexion avec Apple, selon sa politique de confidentialité ; Apple peut nous transmettre une adresse email de relais à la place de la vôtre si vous le choisissez."
+      }
     },
     "cookies": {
       "title": "Cookies et outils de mesure",

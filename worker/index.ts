@@ -85,6 +85,19 @@ import {
   type EmailLocale,
   type AuthUser,
 } from "./auth.ts";
+import {
+  configuredProviders,
+  consumeOAuthState,
+  exchangeCode,
+  findIdentityUser,
+  isOAuthProvider,
+  linkIdentity,
+  listIdentities,
+  sanitizeReturnTo,
+  startOAuth,
+  unlinkIdentity,
+  type OAuthProvider,
+} from "./oauth.ts";
 
 const EMAIL_LOCALES: EmailLocale[] = ["fr", "en"];
 
@@ -864,6 +877,135 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
   );
 }
 
+// Connexion avec Google / Apple (voir worker/oauth.ts) ----------------------
+
+// Redirection sans cache : chaque retour du fournisseur est à usage unique.
+function redirectTo(location: string): Response {
+  return new Response(null, { status: 303, headers: { location, "cache-control": "no-store" } });
+}
+
+function handleOAuthProviders(env: Env): Response {
+  return json({ providers: configuredProviders(env) });
+}
+
+async function handleOAuthStart(request: Request, env: Env, url: URL): Promise<Response> {
+  const provider = url.searchParams.get("provider");
+  const linking = url.searchParams.get("mode") === "link";
+  const failure = (reason: string) =>
+    redirectTo(linking ? `/profil?oauth=${reason}` : `/connexion?oauth=${reason}`);
+  if (!isOAuthProvider(provider) || !configuredProviders(env).includes(provider)) {
+    return failure("unavailable");
+  }
+  if (
+    !checkRateLimitInMemory(`oauth:ip:${getClientIp(request)}`, { limit: 20, windowMs: 60_000 })
+  ) {
+    return failure("rate-limited");
+  }
+  let userId: number | null = null;
+  if (linking) {
+    const user = await getUserFromRequest(env.DB, request);
+    if (!user) {
+      return redirectTo("/connexion");
+    }
+    userId = user.id;
+  }
+  return redirectTo(
+    await startOAuth(
+      env.DB,
+      env,
+      url.origin,
+      provider,
+      userId,
+      sanitizeReturnTo(url.searchParams.get("returnTo"))
+    )
+  );
+}
+
+// GET (Google) ou POST form_post (Apple, requête inter-sites : pas de
+// cookie de session attendu ici, tout vient du parcours enregistré).
+async function handleOAuthCallback(
+  request: Request,
+  env: Env,
+  url: URL,
+  provider: OAuthProvider
+): Promise<Response> {
+  const params =
+    request.method === "POST"
+      ? new URLSearchParams(await request.text().catch(() => ""))
+      : url.searchParams;
+  const state = await consumeOAuthState(env.DB, provider, params.get("state"));
+  if (!state) {
+    return redirectTo("/connexion?oauth=expired");
+  }
+  const failure = (reason: string) =>
+    redirectTo(state.userId ? `/profil?oauth=${reason}` : `/connexion?oauth=${reason}`);
+  const code = params.get("code");
+  if (!code) {
+    // Refus ou abandon chez le fournisseur (error=access_denied,
+    // user_cancelled_authorize…).
+    return failure("cancelled");
+  }
+
+  let identity;
+  try {
+    identity = await exchangeCode(env, url.origin, provider, code, state);
+  } catch (err) {
+    logError(`Connexion ${provider} en échec :`, err);
+    return failure("failed");
+  }
+
+  if (state.userId) {
+    const result = await linkIdentity(env.DB, state.userId, provider, identity);
+    return redirectTo(
+      `/profil?oauth=${result === "already-linked" ? "linked" : result}&provider=${provider}`
+    );
+  }
+
+  let email = (await findIdentityUser(env.DB, provider, identity.subject))?.email ?? null;
+  if (!email) {
+    if (!identity.email) {
+      return failure("no-email");
+    }
+    // Compte de même email vérifié (créé s'il n'existe pas) : le fournisseur
+    // atteste le contrôle de cette adresse, comme le ferait le lien magique.
+    const user = await findOrCreateUser(env.DB, identity.email);
+    const result = await linkIdentity(env.DB, user.id, provider, identity);
+    if (result === "provider-taken") {
+      // Le compte est déjà associé à un autre compte de ce fournisseur : on
+      // ne remplace pas l'association en silence.
+      return failure("provider-taken");
+    }
+    email = user.email;
+  }
+  const { token } = await createMagicLink(env.DB, email);
+  // Même destination par défaut que LoginPage.
+  const next = encodeURIComponent(state.returnTo ?? "/profil?tab=ma-liste");
+  return redirectTo(`/auth/verify?token=${token}&next=${next}`);
+}
+
+async function handleListIdentities(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  return json({
+    identities: await listIdentities(env.DB, user.id),
+    providers: configuredProviders(env),
+  });
+}
+
+async function handleUnlinkIdentity(request: Request, env: Env, url: URL): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  const provider = url.searchParams.get("provider");
+  if (!isOAuthProvider(provider)) {
+    return json({ error: "Fournisseur inconnu." }, 400);
+  }
+  await unlinkIdentity(env.DB, user.id, provider);
+  return json({ ok: true });
+}
 // Photo de profil personnelle (ticket « Ajouter son propre avatar ») --------
 //
 // Même garde IDOR que le reste : le compte vient uniquement du cookie. Le
@@ -2623,6 +2765,28 @@ async function routeRequest(
 
   if (url.pathname === "/api/auth/me" && request.method === "GET") {
     return handleMe(request, env);
+  }
+
+  if (url.pathname === "/api/auth/providers" && request.method === "GET") {
+    return handleOAuthProviders(env);
+  }
+
+  if (url.pathname === "/api/auth/oauth/start" && request.method === "GET") {
+    return handleOAuthStart(request, env, url);
+  }
+
+  if (url.pathname.startsWith("/api/auth/oauth/callback/")) {
+    const provider = url.pathname.slice("/api/auth/oauth/callback/".length);
+    if (isOAuthProvider(provider) && (request.method === "GET" || request.method === "POST")) {
+      return handleOAuthCallback(request, env, url, provider);
+    }
+  }
+
+  if (url.pathname === "/api/account/identities" && request.method === "GET") {
+    return handleListIdentities(request, env);
+  }
+  if (url.pathname === "/api/account/identities" && request.method === "DELETE") {
+    return handleUnlinkIdentity(request, env, url);
   }
 
   if (url.pathname === "/api/auth/logout" && request.method === "POST") {

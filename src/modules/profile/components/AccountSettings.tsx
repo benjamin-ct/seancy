@@ -10,6 +10,7 @@ import {
 import { Icon } from "../../../shared/components/index.ts";
 import AvatarCropDialog from "./AvatarCropDialog.tsx";
 import EmailChangeForm from "./EmailChangeForm.tsx";
+import SignInMethods from "./SignInMethods.tsx";
 import { SettingsGroup, SettingsRow } from "./SettingsGroup.tsx";
 import styles from "./AccountSettings.module.css";
 
@@ -451,6 +452,8 @@ export default function AccountSettings() {
         )}
         {emailChanged && <p className={styles.okHint}>{t("accountCard.emailChange.done")}</p>}
       </SettingsRow>
+
+      <SignInMethods />
 
       <SettingsRow label={t("accountCard.session")} description={t("accountCard.sessionHint")}>
         <button type="button" className={styles.secondaryBtn} onClick={logout}>
