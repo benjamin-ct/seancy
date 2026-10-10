@@ -23,6 +23,7 @@ import type {
 } from "../../../core/types/tmdb.ts";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
 import posterStyles from "../../styles/posterAccents.module.css";
+import skeletonStyles from "../../styles/skeleton.module.css";
 import styles from "./MediaCard.module.css";
 
 interface MediaCardProps {
@@ -194,7 +195,10 @@ function MediaCard({
   return (
     <div className={styles.card}>
       <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
-        <div className={styles.poster} ref={posterRef}>
+        <div
+          className={`${styles.poster} ${item.poster_path ? skeletonStyles.block : ""}`}
+          ref={posterRef}
+        >
           {item.poster_path ? (
             <img
               src={posterUrl(item.poster_path) ?? undefined}

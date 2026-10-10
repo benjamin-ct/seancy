@@ -382,8 +382,42 @@ export default function DiscoverPage() {
             );
             return [...prev, ...fresh];
           });
-          setPage(nextPage);
-          setTotalPages(data.hasMore ? nextPage + 1 : nextPage);
+          if (data.hasMore) {
+            setPage(nextPage);
+            setTotalPages(nextPage + 1);
+            return;
+          }
+          // Lot personnalisé épuisé (plafond de calcul côté Worker, voir
+          // RECOMMENDATION_CACHE_SIZE) : le scroll infini continue avec le
+          // flux "Découvrir" classique plutôt que de s'arrêter net — mêmes
+          // filtres par défaut, même pagination que les autres grilles.
+          setUsingPersonalized(false);
+          return discover(mediaType, {
+            page: nextPage,
+            genreId: genreIds,
+            excludeGenreIds: excludedGenreIds,
+            providerIds: activeProviderIds,
+            region,
+            sortField,
+            sortDirection,
+            excludeUpcoming: true,
+            includeRegionReleaseDate: true,
+            ...toDiscoverParams(advanced),
+          }).then((discoverData) => {
+            setResults((prev) => {
+              const seenIds = new Set(prev.map((item) => item.id));
+              const fresh = keepTheatricalOnly(
+                filterExcluded(discoverData.results, mediaType).filter(
+                  (item) => !seenIds.has(item.id)
+                ),
+                inTheatersOnly,
+                mediaType
+              ).map((r) => ({ ...r, mediaType }));
+              return [...prev, ...fresh];
+            });
+            setPage(nextPage);
+            setTotalPages(Math.min(discoverData.total_pages || 1, 500));
+          });
         })
         .catch((err) => setLoadMoreError(err))
         .finally(() => setLoadingMore(false));
@@ -576,7 +610,11 @@ export default function DiscoverPage() {
                 item={item}
                 yearGenre
                 genreName={reasonLabel(item)}
-                onNotInterested={usingPersonalized ? handleNotInterested : undefined}
+                onNotInterested={
+                  (item as Partial<RecommendationMediaItem>).reason
+                    ? handleNotInterested
+                    : undefined
+                }
               />
             ))}
           </div>
