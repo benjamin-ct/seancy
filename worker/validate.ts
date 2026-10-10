@@ -418,6 +418,9 @@ export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
 // complet (voir replaceCustomListsForUser et upsertCustomListForUser).
 export const MAX_CUSTOM_LISTS = 50;
 const MAX_CUSTOM_LIST_ITEMS = 1000;
+// Ticket "Ma liste commune" (cadrage du 2026-10-10, point 4) : 10 membres
+// max par liste commune, en plus du propriétaire.
+export const MAX_LIST_MEMBERS = 10;
 
 export interface CleanCustomList {
   id: string;

@@ -47,6 +47,38 @@
   color: var(--ok-ink);
 }
 
+/* Icône "liste commune" : la liste des membres apparaît au survol/focus
+   (clavier) plutôt que d'exiger d'ouvrir le dialogue des membres juste pour
+   voir qui est dessus. */
+.commonBadge {
+  position: relative;
+  cursor: default;
+}
+
+.commonTooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 5;
+  display: none;
+  max-width: 260px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: normal;
+  box-shadow: var(--shadow-lift);
+}
+
+.commonBadge:hover .commonTooltip,
+.commonBadge:focus-visible .commonTooltip {
+  display: block;
+}
+
 .headerActions {
   display: flex;
   flex-wrap: wrap;

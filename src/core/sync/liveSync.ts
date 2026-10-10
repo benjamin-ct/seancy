@@ -14,6 +14,7 @@ import { logWarn } from "../logger.ts";
 export type SyncResource =
   | "library"
   | "custom-lists"
+  | "shared-lists"
   | "excluded-genres"
   | "favorite-providers"
   | "favorite-languages"
@@ -38,7 +39,8 @@ export type NotificationKind =
   | "test"
   | "newFollower"
   | "reminderReleased"
-  | "reminderAvailable";
+  | "reminderAvailable"
+  | "addedToList";
 
 export interface InAppNotification {
   kind: NotificationKind;

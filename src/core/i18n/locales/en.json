@@ -497,9 +497,11 @@
     "ratedCount_other": "{{count}} rated",
     "statusPrivate": "Private",
     "statusShared": "Shared · read-only",
+    "statusCommon": "Shared list",
     "share": "Share",
     "moreActions": "More actions",
-    "renameLabel": "New list name"
+    "renameLabel": "New list name",
+    "membersButton": "Members"
   },
   "languageSettings": {
     "title": "Language",
@@ -604,6 +606,10 @@
     "reminderAvailable": {
       "title": "Now streaming",
       "body": "\"{{title}}\" just arrived on a streaming service."
+    },
+    "addedToList": {
+      "title": "Shared list",
+      "body": "You were added to the list \"{{title}}\"."
     },
     "newFollowerFallback": "Someone"
   },
@@ -1088,6 +1094,24 @@
     "nothingElse": "Nothing else from your profile is visible.",
     "createLink": "Create share link",
     "stopError": "Couldn't stop sharing. Please try again."
+  },
+  "listMembers": {
+    "title": "Members of \"{{name}}\"",
+    "subtitleOwner": "Invite someone by their username so they can add, remove and reorder titles with you.",
+    "subtitleMember": "Everyone can add, remove and reorder titles. Only the owner manages members.",
+    "close": "Close",
+    "membersHeading": "Members",
+    "noMembers": "No one else yet.",
+    "removeButton": "Remove",
+    "removeError": "Couldn't remove this member. Please try again.",
+    "inviteHeading": "Invite",
+    "invitePlaceholder": "Username…",
+    "noResults": "No account with that username.",
+    "addButton": "Add",
+    "addError": "Couldn't add this member. Please try again.",
+    "maxReached": "Maximum number of members reached ({{max}}).",
+    "leaveButton": "Leave list",
+    "loadError": "Couldn't load members."
   },
   "sharedList": {
     "eyebrow": "Shared list",

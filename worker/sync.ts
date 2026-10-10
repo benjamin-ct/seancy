@@ -42,6 +42,7 @@ function syncClientIdOf(request: Request): string | null {
 export type SyncResource =
   | "library"
   | "custom-lists"
+  | "shared-lists"
   | "excluded-genres"
   | "favorite-providers"
   | "favorite-languages"

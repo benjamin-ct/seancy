@@ -497,9 +497,11 @@
     "ratedCount_other": "{{count}} notés",
     "statusPrivate": "Privée",
     "statusShared": "Partagée · lecture seule",
+    "statusCommon": "Liste commune",
     "share": "Partager",
     "moreActions": "Plus d'actions",
-    "renameLabel": "Nouveau nom de la liste"
+    "renameLabel": "Nouveau nom de la liste",
+    "membersButton": "Membres"
   },
   "languageSettings": {
     "title": "Langue",
@@ -604,6 +606,10 @@
     "reminderAvailable": {
       "title": "Disponible en streaming",
       "body": "« {{title}} » vient d'arriver sur une plateforme."
+    },
+    "addedToList": {
+      "title": "Liste commune",
+      "body": "Vous avez été ajouté à la liste « {{title}} »."
     },
     "newFollowerFallback": "Quelqu'un"
   },
@@ -1088,6 +1094,24 @@
     "nothingElse": "Rien d'autre de votre profil n'est visible.",
     "createLink": "Créer le lien de partage",
     "stopError": "Impossible d'arrêter le partage. Réessayez."
+  },
+  "listMembers": {
+    "title": "Membres de « {{name}} »",
+    "subtitleOwner": "Invitez quelqu'un par son pseudo pour qu'il/elle puisse ajouter, retirer et réordonner les titres avec vous.",
+    "subtitleMember": "Tout le monde peut ajouter, retirer et réordonner les titres. Seul le propriétaire gère les membres.",
+    "close": "Fermer",
+    "membersHeading": "Membres",
+    "noMembers": "Personne d'autre pour l'instant.",
+    "removeButton": "Retirer",
+    "removeError": "Impossible de retirer ce membre. Réessayez.",
+    "inviteHeading": "Inviter",
+    "invitePlaceholder": "Pseudo…",
+    "noResults": "Aucun compte avec ce pseudo.",
+    "addButton": "Ajouter",
+    "addError": "Impossible d'ajouter ce membre. Réessayez.",
+    "maxReached": "Nombre maximal de membres atteint ({{max}}).",
+    "leaveButton": "Quitter la liste",
+    "loadError": "Impossible de charger les membres."
   },
   "sharedList": {
     "eyebrow": "Liste partagée",
