@@ -128,7 +128,7 @@ jobs:
   # nécessaire pour calculer le diff contre la base réelle (le clone
   # superficiel par défaut n'a pas cette réf).
   check-changeset:
-    name: Fragment changelog (.changeset) requis
+    name: Gates release (fragment changelog + version intacte)
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
@@ -141,6 +141,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/check-changeset.ts
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+      # Gate CI preprod (ticket Trello "Épique git-flow : CI preprod avancée
+      # sur develop") : le champ "version" de package.json n'est touché que
+      # par le job release-changelog, jamais à la main dans une PR — voir
+      # scripts/check-version-untouched.ts.
+      - run: node scripts/check-version-untouched.ts
         env:
           BASE_REF: origin/${{ github.base_ref }}
 

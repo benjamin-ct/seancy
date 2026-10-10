@@ -33,6 +33,7 @@
     "verify:changeset-parsing": "node scripts/verify-changeset-parsing.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
+    "check:version-untouched": "node scripts/check-version-untouched.ts",
     "check:dead-code": "knip --include files,dependencies",
     "postinstall": "node scripts/generate-icons.ts",
     "prepare": "husky"
