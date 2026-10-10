@@ -1854,13 +1854,12 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 // rescorer les candidats à chaque ouverture de la page d'accueil est trop
 // coûteux (quota TMDB/CPU du Worker). Le résultat est donc précalculé par
 // lot et mis en cache (migration 0020, voir db.ts) ; on ne recalcule que si
-// le cache a dépassé sa durée de vie ou s'il contient moins d'éléments que
-// ce qui est demandé (liste épuisée). La taille du lot calculé est le
-// maximum accepté par l'API plutôt que le `limit` de la requête, pour que
-// tant les 24 items de la grille actuelle qu'une future pagination restent
-// servis par le même lot sans recalcul.
+// le cache a dépassé sa durée de vie ou s'il ne couvre pas la page demandée
+// (`offset` + `limit`, voir scroll infini côté DiscoverPage.tsx). La taille
+// du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
+// pages suivantes soient servies par le même lot sans recalcul.
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const RECOMMENDATION_CACHE_SIZE = 40;
+const RECOMMENDATION_CACHE_SIZE = 96;
 
 async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
   const user = await requireUser(request, env);
@@ -1876,11 +1875,18 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
     typeParam === "movie" || typeParam === "tv" ? [typeParam] : ["movie", "tv"];
   const limitParam = Number(url.searchParams.get("limit"));
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 40) : 20;
+  const offsetParam = Number(url.searchParams.get("offset"));
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
 
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
-  if (cached && isFresh && cached.items.length >= limit) {
-    return json({ items: cached.items.slice(0, limit), coldStart: cached.coldStart });
+  if (cached && isFresh && cached.items.length >= offset + limit) {
+    const pageItems = cached.items.slice(offset, offset + limit);
+    return json({
+      items: pageItems,
+      coldStart: cached.coldStart,
+      hasMore: offset + pageItems.length < cached.items.length,
+    });
   }
 
   const [library, excludedGenreIds, notInterested] = await Promise.all([
@@ -1897,10 +1903,15 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   );
   const candidates = candidateLists.flat();
   const items = rankRecommendations(candidates, profile, {
-    limit: Math.max(limit, RECOMMENDATION_CACHE_SIZE),
+    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
   });
   await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
-  return json({ items: items.slice(0, limit), coldStart: profile.isColdStart });
+  const pageItems = items.slice(offset, offset + limit);
+  return json({
+    items: pageItems,
+    coldStart: profile.isColdStart,
+    hasMore: offset + pageItems.length < items.length,
+  });
 }
 
 async function handlePostNotInterested(request: Request, env: Env): Promise<Response> {

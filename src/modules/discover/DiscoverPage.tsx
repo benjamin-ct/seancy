@@ -42,6 +42,10 @@ import { useDiscoverFilters } from "./discoverFilters.ts";
 import styles from "./DiscoverPage.module.css";
 
 const GRID_SKELETON_COUNT = 12;
+// Taille de page de la grille personnalisée "Pour toi" — doit rester
+// cohérente entre le chargement initial et loadMore() pour que l'offset
+// envoyé à /api/recommendations (page - 1) * taille reste exact.
+const PERSONALIZED_PAGE_SIZE = 24;
 
 // Résultats déjà chargés, par entrée d'historique : au retour arrière, la
 // grille réapparaît tout de suite (sans squelette ni nouvel appel), prête à
@@ -303,7 +307,7 @@ export default function DiscoverPage() {
     // dans tous les autres cas, y compris un échec ou une liste vide de
     // /api/recommendations (cold start non applicable, erreur réseau...).
     if (authStatus === "authenticated" && isDefaultFilters) {
-      getRecommendations(mediaType, 24, controller.signal)
+      getRecommendations(mediaType, PERSONALIZED_PAGE_SIZE, controller.signal, 0)
         .then((data) => {
           if (cancelled) {
             return;
@@ -315,7 +319,8 @@ export default function DiscoverPage() {
           }
           setUsingPersonalized(true);
           setResults(items);
-          setTotalPages(1);
+          setPage(1);
+          setTotalPages(data.hasMore ? 2 : 1);
           setStatus("success");
         })
         .catch((err) => {
@@ -361,6 +366,30 @@ export default function DiscoverPage() {
     }
     const nextPage = page + 1;
     setLoadingMore(true);
+
+    if (usingPersonalized) {
+      getRecommendations(
+        mediaType,
+        PERSONALIZED_PAGE_SIZE,
+        undefined,
+        (nextPage - 1) * PERSONALIZED_PAGE_SIZE
+      )
+        .then((data) => {
+          setResults((prev) => {
+            const seenIds = new Set(prev.map((item) => item.id));
+            const fresh = filterExcluded(data.items, mediaType).filter(
+              (item) => !seenIds.has(item.id)
+            );
+            return [...prev, ...fresh];
+          });
+          setPage(nextPage);
+          setTotalPages(data.hasMore ? nextPage + 1 : nextPage);
+        })
+        .catch((err) => setLoadMoreError(err))
+        .finally(() => setLoadingMore(false));
+      return;
+    }
+
     discover(mediaType, {
       page: nextPage,
       genreId: genreIds,
@@ -396,6 +425,7 @@ export default function DiscoverPage() {
     page,
     totalPages,
     advancedError,
+    usingPersonalized,
     mediaType,
     genreIds,
     excludedGenreIds,
