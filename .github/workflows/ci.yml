@@ -152,6 +152,31 @@ jobs:
         env:
           BASE_REF: origin/${{ github.base_ref }}
 
+  # Gates supplémentaires avant qu'une release `develop` → `main` ne soit
+  # jugée possible (ticket Trello "Épique git-flow : CI preprod avancée sur
+  # develop", portée précisée par Benjy_CT le 2026-10-10 : "les checks
+  # nécessaires à s'assurer que c'est bien prêt pour partir en prod" — audit
+  # plus restrictif que le job verify, scan anti-PII des fixtures). gitleaks
+  # tourne déjà sur ce push via secrets-scan (ci-dessus, sans restriction
+  # d'event) : pas dupliqué ici.
+  develop-release-gates:
+    name: Gates pré-release (develop)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Plus restrictif que le "high" du job verify (PR) : sur develop,
+      # juste avant une release possible, on veut voir les vulnérabilités
+      # modérées aussi, pas seulement les plus critiques.
+      - name: Audit dépendances (plus restrictif, pré-release)
+        run: npm audit --audit-level=moderate
+      - run: node scripts/check-pii-fixtures.ts
+
   deploy-preview:
     name: Deploy preview & comment
     needs:
