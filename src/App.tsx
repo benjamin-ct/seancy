@@ -41,6 +41,9 @@ const TermsPage = lazy(() =>
 const PrivacyPolicyPage = lazy(() =>
   import("./modules/legal/index.ts").then((m) => ({ default: m.PrivacyPolicyPage }))
 );
+const ChangelogPage = lazy(() =>
+  import("./modules/changelog/index.ts").then((m) => ({ default: m.ChangelogPage }))
+);
 const NotFound = lazy(() => import("./modules/not-found/index.ts"));
 
 // Pendant le téléchargement d'une page : rien les 300 premières ms (cas
@@ -126,6 +129,7 @@ export default function App() {
               <Route path="/auth/verify" element={<VerifyAuthPage />} />
               <Route path="/conditions-utilisation" element={<TermsPage />} />
               <Route path="/confidentialite" element={<PrivacyPolicyPage />} />
+              <Route path="/changelog" element={<ChangelogPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -16,6 +16,7 @@ export default function Footer() {
         <nav className={styles.links}>
           <Link to="/conditions-utilisation">{t("footer.terms")}</Link>
           <Link to="/confidentialite">{t("footer.privacy")}</Link>
+          <Link to="/changelog">{t("footer.changelog")}</Link>
         </nav>
       </div>
     </footer>

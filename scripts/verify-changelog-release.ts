@@ -3,9 +3,11 @@
 // Pas de framework de test dans ce repo : script autonome.
 
 import {
+  CHANGELOG_HEADER,
   aggregateBump,
   bumpVersion,
   formatChangelogEntry,
+  insertChangelogEntry,
   planRelease,
 } from "./changelogRelease.ts";
 import type { Changeset } from "./changesetLib.ts";
@@ -72,6 +74,22 @@ check(
     nextVersion: "1.1.0",
     changelogEntry: "## 1.1.0 — 2026-10-10\n\n### Nouveautés\n\n- Ajout.\n",
   }
+);
+
+// insertChangelogEntry ------------------------------------------------------
+check(
+  "insertChangelogEntry première release (fichier juste l'en-tête)",
+  insertChangelogEntry(CHANGELOG_HEADER, "## 1.0.0 — 2026-10-10\n\n### Nouveautés\n\n- Ajout.\n"),
+  `${CHANGELOG_HEADER}\n## 1.0.0 — 2026-10-10\n\n### Nouveautés\n\n- Ajout.\n`
+);
+
+check(
+  "insertChangelogEntry deuxième release : une ligne vide sépare les deux entrées",
+  insertChangelogEntry(
+    `${CHANGELOG_HEADER}\n## 1.0.0 — 2026-10-10\n\n### Nouveautés\n\n- Ajout.\n`,
+    "## 1.1.0 — 2026-10-11\n\n### Correctifs\n\n- Corrige un bug.\n"
+  ),
+  `${CHANGELOG_HEADER}\n## 1.1.0 — 2026-10-11\n\n### Correctifs\n\n- Corrige un bug.\n\n## 1.0.0 — 2026-10-10\n\n### Nouveautés\n\n- Ajout.\n`
 );
 
 if (failed > 0) {

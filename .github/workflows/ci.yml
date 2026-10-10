@@ -105,6 +105,7 @@ jobs:
           npm run verify:security-headers
           npm run verify:changeset-parsing
           npm run verify:changelog-release
+          npm run verify:changelog-parser
 
       - name: Build
         run: npm run build
