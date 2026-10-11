@@ -33,7 +33,8 @@
   "footer": {
     "tagline": "Discover, follow, and find your movies & shows.",
     "terms": "Terms of use",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "changelog": "What's new"
   },
   "pullToRefresh": {
     "pull": "Pull to reload",
@@ -752,6 +753,11 @@
       "text": "This policy may evolve along with the service, in particular if new tools (audience measurement, crowdfunding...) are added. The date of the last update is shown at the top of this page."
     }
   },
+  "changelogPage": {
+    "eyebrow": "What's new",
+    "title": "Changelog",
+    "empty": "No release yet."
+  },
   "mediaCard": {
     "inTheaters": "In theaters",
     "upcomingTheatrical": "Coming soon to theaters",
@@ -1201,6 +1207,7 @@
     "login": "Sign in",
     "terms": "Terms of use",
     "privacy": "Privacy policy",
+    "changelog": "Changelog",
     "notFound": "Page not found",
     "withYear": "{{title}} ({{year}})"
   }

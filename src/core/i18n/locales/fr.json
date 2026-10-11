@@ -33,7 +33,8 @@
   "footer": {
     "tagline": "Découvrez, suivez et retrouvez vos films & séries.",
     "terms": "Conditions d'utilisation",
-    "privacy": "Confidentialité"
+    "privacy": "Confidentialité",
+    "changelog": "Changelog"
   },
   "pullToRefresh": {
     "pull": "Tirer pour recharger",
@@ -752,6 +753,11 @@
       "text": "Cette politique peut évoluer avec le service, notamment si de nouveaux outils (mesure d'audience, financement participatif...) sont ajoutés. La date de dernière mise à jour est indiquée en haut de cette page."
     }
   },
+  "changelogPage": {
+    "eyebrow": "Nouveautés",
+    "title": "Changelog",
+    "empty": "Aucune release pour le moment."
+  },
   "mediaCard": {
     "inTheaters": "En salles",
     "upcomingTheatrical": "Bientôt au cinéma",
@@ -1201,6 +1207,7 @@
     "login": "Connexion",
     "terms": "Conditions d'utilisation",
     "privacy": "Politique de confidentialité",
+    "changelog": "Changelog",
     "notFound": "Page introuvable",
     "withYear": "{{title}} ({{year}})"
   }
