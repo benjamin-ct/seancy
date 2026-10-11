@@ -6,7 +6,7 @@ import {
   discover,
   getGenres,
   getWatchProvidersList,
-  getDetails,
+  getDrawDetails,
   watchProvidersFromDetails,
   posterUrl,
 } from "../../core/api/tmdb.ts";
@@ -71,7 +71,9 @@ const CATALOG_POOL_MAX = 400;
 // résultat du tirage, voir drawFromCatalog), récupérées uniquement pour
 // peupler le pool visuel du défilement — demande explicite du ticket Trello
 // "Roue aléatoire" ("pool sur l'ensemble des films possibles et
-// imaginables"). Hors chemin critique du tirage (fire-and-forget).
+// imaginables"). Hors chemin critique du tirage (fire-and-forget, priorité
+// "background" sur discover() — voir tmdbClient.ts — pour qu'elles ne
+// retardent jamais la fiche du titre réellement tiré derrière elles).
 const REEL_POOL_EXTRA_PAGES = 4;
 // Attente maximale de l'affiche du titre tiré avant de le révéler : le
 // défilement continue en attendant, et la révélation montre la bonne affiche.
@@ -332,7 +334,7 @@ export default function RandomPage() {
       if (page === 1) {
         continue;
       }
-      discover(type, { ...params, page })
+      discover(type, { ...params, page, priority: "background" })
         .then((data) => !isCancelled() && collectCatalogPosters(type, data.results ?? []))
         .catch(() => {});
     }
@@ -435,7 +437,7 @@ export default function RandomPage() {
     // complètes, chacune coûteuse (append_to_response), enchaînées en
     // séquence faisaient dériver un tirage jusqu'à ~10s).
     const detailsList = await Promise.all(
-      candidates.map((entry) => getDetails(entry.mediaType, entry.id))
+      candidates.map((entry) => getDrawDetails(entry.mediaType, entry.id))
     );
     for (let i = 0; i < candidates.length; i++) {
       const entry = candidates[i];
@@ -513,7 +515,7 @@ export default function RandomPage() {
       };
     }
 
-    return { item: candidate, details: await getDetails(type, candidate.id) };
+    return { item: candidate, details: await getDrawDetails(type, candidate.id) };
   }
 
   async function drawRandom() {
