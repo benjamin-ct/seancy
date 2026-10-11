@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "bobine-dev",
+      "name": "seancy-dev",
       "runtimeExecutable": "dev.cmd",
       "runtimeArgs": [],
       "port": 5173

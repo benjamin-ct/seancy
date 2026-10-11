@@ -22,17 +22,17 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 RUN npm install -g playwright@1.63.0 \
     && playwright install --with-deps chromium \
     && chmod -R a+rX /ms-playwright
-COPY bobine-screenshot.cjs /usr/local/bin/bobine-screenshot
-RUN chmod 755 /usr/local/bin/bobine-screenshot
+COPY seancy-screenshot.cjs /usr/local/bin/seancy-screenshot
+RUN chmod 755 /usr/local/bin/seancy-screenshot
 
 RUN useradd -m -s /bin/bash claudeuser
 
 # Clone de travail dédié de Claude (volume nommé monté sur /workspace, qui hérite à sa
 # création du propriétaire de ce dossier) et script de lancement des exécutions.
 RUN mkdir -p /workspace && chown claudeuser:claudeuser /workspace
-COPY bobine-claude-run.sh /usr/local/bin/bobine-claude-run
-COPY bobine-claude-dev.sh /usr/local/bin/bobine-claude-dev
-RUN chmod 755 /usr/local/bin/bobine-claude-run /usr/local/bin/bobine-claude-dev
+COPY seancy-claude-run.sh /usr/local/bin/seancy-claude-run
+COPY seancy-claude-dev.sh /usr/local/bin/seancy-claude-dev
+RUN chmod 755 /usr/local/bin/seancy-claude-run /usr/local/bin/seancy-claude-dev
 
 RUN (type -p wget >/dev/null || (apt-get update && apt-get install -y wget)) \
     && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg > /tmp/keyring.gpg \

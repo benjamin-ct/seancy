@@ -4,8 +4,7 @@
 //
 // Le plan D1 gratuit limite le compte à 10 bases au total (voir
 // developers.cloudflare.com/d1/platform/limits), prod comprise
-// (`seancy-notifications`, plus l'ancienne `bobine-notifications` tant
-// qu'elle n'est pas supprimée) : une base de preview n'est créée que s'il
+// (`seancy-notifications`) : une base de preview n'est créée que s'il
 // reste une place sur le compte. Au-delà, `provision` patiente qu'une place se libère
 // (fermeture/merge d'une autre PR) plutôt que d'échouer immédiatement, comme
 // demandé sur le ticket.
@@ -25,9 +24,6 @@ const SOURCE_CONFIG_PATH = "wrangler.jsonc";
 const PREVIEW_CONFIG_PATH = "wrangler.preview.generated.jsonc";
 const PROD_DATABASE_NAME = "seancy-notifications";
 const PREVIEW_DATABASE_PREFIX = "seancy-preview-pr-";
-// Bases créées avant le renommage Seancy, encore nettoyées à la fermeture
-// de leur PR.
-const LEGACY_PREVIEW_DATABASE_PREFIX = "bobine-preview-pr-";
 const ACCOUNT_DATABASE_LIMIT = 10; // plan D1 gratuit, toutes bases confondues
 const POLL_INTERVAL_SECONDS = 30;
 const MAX_WAIT_MINUTES = 15;
@@ -182,10 +178,10 @@ function provision(prNumber: string): void {
 }
 
 function cleanup(prNumber: string): void {
-  const dbNames = [dbNameForPr(prNumber), `${LEGACY_PREVIEW_DATABASE_PREFIX}${prNumber}`];
-  const existing = listDatabases().filter((db) => dbNames.includes(db.name));
+  const dbName = dbNameForPr(prNumber);
+  const existing = listDatabases().filter((db) => db.name === dbName);
   if (existing.length === 0) {
-    console.log(`Aucune base de preview à nettoyer pour cette PR ('${dbNames[0]}' n'existe pas).`);
+    console.log(`Aucune base de preview à nettoyer pour cette PR ('${dbName}' n'existe pas).`);
     return;
   }
   for (const { name } of existing) {
