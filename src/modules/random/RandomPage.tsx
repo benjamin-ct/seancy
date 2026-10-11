@@ -10,6 +10,7 @@ import {
   watchProvidersFromDetails,
   posterUrl,
 } from "../../core/api/tmdb.ts";
+import type { DiscoverParams } from "../../core/api/tmdb.ts";
 import { useLibrary } from "../../core/context/LibraryContext.tsx";
 import { useRegion } from "../../core/context/RegionContext.tsx";
 import { useFavoriteProviders } from "../../core/context/FavoriteProvidersContext.tsx";
@@ -42,22 +43,36 @@ import type { WatchProviderOption } from "../../core/api/tmdb.ts";
 import styles from "./RandomPage.module.css";
 
 const MAX_ATTEMPTS = 6;
-// Défilement d'affiches pendant un tirage : une affiche toutes les 350 ms,
+// Défilement d'affiches pendant un tirage : une affiche toutes les 80 ms,
 // piochée parmi au plus REEL_MAX miniatures (w92, quelques Ko chacune) du
 // catalogue, de l'historique et des envies de voir. Elles sont préchargées
 // une seule fois et seules celles déjà chargées défilent : rien n'arrive en
 // retard, rien n'est retéléchargé, même sur une connexion lente.
-// 350 ms : moins de 3 changements par seconde, seuil WCAG 2.3.1 des contenus
-// clignotants (à 90 ms, le défilement flashait à ~11 images/s). Désactivé
-// avec « réduire les animations » (voir useReelPoster).
-const REEL_INTERVAL_MS = 350;
-const REEL_MAX = 16;
+// 80 ms (~12,5 images/s) : effet « bandit manchot » demandé explicitement
+// sur le ticket Trello "Roue aléatoire", au-dessus du seuil WCAG 2.3.1 des
+// contenus clignotants (3 flashs/s) qu'une session précédente avait choisi
+// de respecter à 350 ms — dépassement confirmé par le produit en connaissance
+// de cause. Le filet de sécurité réel reste « réduire les animations », qui
+// désactive entièrement le défilement plutôt que de juste le ralentir (voir
+// useReelPoster) : c'est ce qui protège les utilisateurs photosensibles qui
+// l'ont activé, pas la vitesse du défilement elle-même.
+const REEL_INTERVAL_MS = 80;
+const REEL_MAX = 40;
 // Réserve d'affiches du catalogue dans laquelle le défilement pioche (voir
 // collectCatalogPosters) : plus large que REEL_MAX pour que chaque tirage
 // (nouveau genre, nouveau type) ait une chance d'apporter de la variété
 // fraîche plutôt que de se faire immédiatement écarter par un plafond déjà
-// atteint dès le tout premier lot chargé au montage.
-const CATALOG_POOL_MAX = 64;
+// atteint dès le tout premier lot chargé au montage. Alimentée aussi par des
+// pages aléatoires sur l'ensemble du catalogue (voir REEL_POOL_EXTRA_PAGES),
+// pas seulement par les pages réellement tirées au sort pour le résultat.
+const CATALOG_POOL_MAX = 400;
+// Nombre de pages TMDB supplémentaires, piochées au hasard sur l'ensemble du
+// catalogue (pas seulement les pages les plus pertinentes utilisées pour le
+// résultat du tirage, voir drawFromCatalog), récupérées uniquement pour
+// peupler le pool visuel du défilement — demande explicite du ticket Trello
+// "Roue aléatoire" ("pool sur l'ensemble des films possibles et
+// imaginables"). Hors chemin critique du tirage (fire-and-forget).
+const REEL_POOL_EXTRA_PAGES = 4;
 // Attente maximale de l'affiche du titre tiré avant de le révéler : le
 // défilement continue en attendant, et la révélation montre la bonne affiche.
 const POSTER_WAIT_MS = 2500;
@@ -300,13 +315,47 @@ export default function RandomPage() {
     });
   }
 
+  // Pioche REEL_POOL_EXTRA_PAGES pages aléatoires sur l'ensemble du
+  // catalogue (pas seulement les pages déjà vues) pour peupler
+  // catalogPosters avec une vraie variété de défilement, découplé des pages
+  // utilisées pour choisir le titre tiré lui-même (voir drawFromCatalog, qui
+  // reste borné aux pages les plus pertinentes pour ce choix-là, afin de ne
+  // pas proposer un résultat obscur/mal renseigné).
+  function seedReelPoolFromRandomPages(
+    type: MediaType,
+    params: DiscoverParams,
+    totalPages: number,
+    isCancelled: () => boolean
+  ) {
+    for (let i = 0; i < REEL_POOL_EXTRA_PAGES; i++) {
+      const page = Math.floor(Math.random() * totalPages) + 1;
+      if (page === 1) {
+        continue;
+      }
+      discover(type, { ...params, page })
+        .then((data) => !isCancelled() && collectCatalogPosters(type, data.results ?? []))
+        .catch(() => {});
+    }
+  }
+
   // Affiches populaires du type choisi, pour que le défilement pioche aussi
   // dans le catalogue même quand on tire dans « Mes envies de voir ».
   useEffect(() => {
     let cancelled = false;
     for (const type of drawTypes) {
       discover(type, { page: 1, region })
-        .then((data) => !cancelled && collectCatalogPosters(type, shuffle(data.results ?? [])))
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          collectCatalogPosters(type, shuffle(data.results ?? []));
+          seedReelPoolFromRandomPages(
+            type,
+            { region },
+            Math.min(data.total_pages || 1, 500),
+            () => cancelled
+          );
+        })
         .catch(() => {});
     }
     return () => {
@@ -430,6 +479,10 @@ export default function RandomPage() {
     if (totalPages === 0 || !first.results?.length) {
       return null;
     }
+    // Pool visuel du défilement élargi sur l'ensemble des pages disponibles
+    // (pas seulement les pages pertinentes utilisées pour le choix du titre
+    // ci-dessous) — n'affecte jamais le résultat du tirage.
+    seedReelPoolFromRandomPages(type, discoverParams, totalPages, () => !mountedRef.current);
 
     let candidate: MediaItem | null = null;
     for (let attempt = 0; attempt < MAX_ATTEMPTS && !candidate; attempt++) {
