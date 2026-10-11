@@ -34,6 +34,8 @@
     "verify:changelog-release": "node scripts/verify-changelog-release.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
+    "check:version-untouched": "node scripts/check-version-untouched.ts",
+    "check:pii-fixtures": "node scripts/check-pii-fixtures.ts",
     "release:changelog": "node scripts/changelogRelease.ts",
     "check:dead-code": "knip --include files,dependencies",
     "postinstall": "node scripts/generate-icons.ts",
