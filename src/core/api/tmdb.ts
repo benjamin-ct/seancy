@@ -133,6 +133,9 @@ export interface DiscoverParams {
   includeRegionReleaseDate?: boolean;
   /** Annulation quand la page ou le filtre change (voir tmdbFetch). */
   signal?: AbortSignal;
+  /** Requête décorative (voir TmdbFetchOptions dans tmdbClient.ts) : ne
+   * doit jamais faire patienter une requête critique derrière elle. */
+  priority?: "background";
 }
 
 export function discover(
@@ -161,6 +164,7 @@ export function discover(
     includeProviderBadge,
     includeRegionReleaseDate,
     signal,
+    priority,
   }: DiscoverParams = {}
 ): Promise<PagedResponse<MediaSummary>> {
   const resolvedField: string =
@@ -214,7 +218,7 @@ export function discover(
       region_release_date_region:
         includeRegionReleaseDate && mediaType === "movie" ? region : undefined,
     },
-    { signal }
+    { signal, priority }
   );
 }
 
@@ -379,9 +383,9 @@ export function getDetails(mediaType: MediaType, id: string | number): Promise<M
     // release_dates : sorties par pays (dont FR), pour le statut "au
     // cinéma". watch/providers : plateformes de streaming/achat/location —
     // inclus ici pour ne pas faire un second appel séparé (voir
-    // watchProvidersFromDetails) sur la fiche détail / la roue aléatoire.
-    // Séries : aggregate_credits en plus, `credits` ne donnant que le
-    // casting de la dernière saison (voir castFromDetails).
+    // watchProvidersFromDetails) sur la fiche détail. Séries :
+    // aggregate_credits en plus, `credits` ne donnant que le casting de la
+    // dernière saison (voir castFromDetails).
     append_to_response:
       mediaType === "tv"
         ? "credits,aggregate_credits,videos,recommendations,release_dates,watch/providers"
@@ -396,6 +400,33 @@ export function getDetails(mediaType: MediaType, id: string | number): Promise<M
       throw err;
     });
   detailsCache.set(key, promise);
+  return promise;
+}
+
+// Fiche allégée pour la roue aléatoire (RandomPage) : cet écran n'affiche ni
+// casting, ni recommandations, ni les dates de sortie des autres pays
+// (seulement poster/titre/synopsis/genres/note, déjà dans la réponse de
+// base, plus la bande-annonce et les plateformes de la région en cours).
+// getDetails() les inclut toujours (fiche détail complète), ce qui faisait
+// de ce seul appel, par ailleurs sur le chemin critique du tirage, la
+// requête la plus lourde (~20 Ko) de toute la page — pénible sur une
+// connexion lente (ticket Trello "Roue aléatoire"). Cache séparé de
+// getDetails : une réponse allégée ici ne doit jamais être servie à la
+// fiche détail complète, qui a besoin du reste.
+const drawDetailsCache = new LruCache<string, Promise<MediaDetails>>(20);
+export function getDrawDetails(mediaType: MediaType, id: string | number): Promise<MediaDetails> {
+  const key = detailsKey(mediaType, id);
+  const cached = drawDetailsCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const promise = tmdbFetch<MediaDetails>(`/${mediaType}/${id}`, {
+    append_to_response: "videos,watch/providers",
+  }).catch((err: unknown) => {
+    drawDetailsCache.delete(key);
+    throw err;
+  });
+  drawDetailsCache.set(key, promise);
   return promise;
 }
 
