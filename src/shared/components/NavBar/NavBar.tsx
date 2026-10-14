@@ -6,6 +6,7 @@ import { useAuth } from "../../../core/context/AuthContext.tsx";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
 import { prefersReducedMotion } from "../../lib/motion.ts";
+import { useAvatarSources } from "../../hooks/useAvatarSources.ts";
 import type { SearchMultiResult } from "../../../core/types/tmdb.ts";
 import TicketLogo from "../TicketLogo/TicketLogo.tsx";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
@@ -179,6 +180,9 @@ export default function NavBar() {
   const headerRef = useRef<HTMLElement>(null);
   const { status: authStatus } = useAuth();
   const { region } = useRegion();
+  // Photo de profil à la place de la silhouette générique, quand elle est
+  // disponible (sinon on garde l'icône : repli géré au rendu, pas ici).
+  const { url: avatarUrl, onError: onAvatarError } = useAvatarSources();
   // Pendant la vérification de la session au rechargement ("loading", seulement
   // quand le cookie compagnon est présent), on affiche déjà la navigation
   // d'un membre connecté : sinon « Connexion » puis l'onglet Profil
@@ -450,7 +454,17 @@ export default function NavBar() {
               aria-label={t("navBar.profileAriaLabel")}
               title={t("navBar.profileTitle")}
             >
-              <Icon name="user" strokeWidth={1.8} />
+              {avatarUrl ? (
+                <img
+                  key={avatarUrl}
+                  src={avatarUrl}
+                  alt=""
+                  className={styles.navAvatarImg}
+                  onError={onAvatarError}
+                />
+              ) : (
+                <Icon name="user" strokeWidth={1.8} />
+              )}
             </NavLink>
           ) : (
             <Link to="/connexion" className={styles.loginBtn} onClick={onNavClick}>
@@ -519,7 +533,19 @@ export default function NavBar() {
           >
             {({ isActive }) => (
               <>
-                <Icon name={link.icon} size={isActive ? 20 : 24} strokeWidth={1.9} />
+                {link.key === "profile" && avatarUrl ? (
+                  <img
+                    key={avatarUrl}
+                    src={avatarUrl}
+                    alt=""
+                    width={isActive ? 20 : 24}
+                    height={isActive ? 20 : 24}
+                    className={styles.tabbarAvatarImg}
+                    onError={onAvatarError}
+                  />
+                ) : (
+                  <Icon name={link.icon} size={isActive ? 20 : 24} strokeWidth={1.9} />
+                )}
                 {/* Libellé visible seulement sur l'onglet actif (audit F8) :
                     les autres restent en icône seule, faute de place pour
                     tout étiqueter dans cette largeur de pilule mobile. */}
