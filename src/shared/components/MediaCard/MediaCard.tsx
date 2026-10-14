@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,6 +14,7 @@ import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrary
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { posterAccentFromGenres } from "../../lib/posterAccent.ts";
+import { thumbhashToDataUrl } from "../../lib/thumbhash.ts";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
 import { pop } from "../../lib/motion.ts";
 import type {
@@ -135,6 +136,15 @@ function MediaCard({
   // jamais de son état de chargement réel).
   const [posterLoaded, setPosterLoaded] = useState(false);
 
+  // Aperçu flou (voir migration 0021, scripts/generate-thumbhashes.ts) :
+  // affiché à la place du shimmer gris pendant le chargement, seulement
+  // quand l'item en a un (aujourd'hui, uniquement les recommandations
+  // "Pour toi" — voir worker/recommendations.ts).
+  const posterThumbhashUrl = useMemo(
+    () => (item.poster_thumbhash ? thumbhashToDataUrl(item.poster_thumbhash) : null),
+    [item.poster_thumbhash]
+  );
+
   const [provider, setProvider] = useState<WatchProviderEntry | null>(null);
   // Distingue "pas encore vérifié" de "vérifié, rien trouvé".
   const [providerStatus, setProviderStatus] = useState<"idle" | "loading" | "done">("idle");
@@ -202,7 +212,16 @@ function MediaCard({
     <div className={styles.card}>
       <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
         <div
-          className={`${styles.poster} ${item.poster_path && !posterLoaded ? skeletonStyles.block : ""}`}
+          className={`${styles.poster} ${item.poster_path && !posterLoaded && !posterThumbhashUrl ? skeletonStyles.block : ""}`}
+          style={
+            posterThumbhashUrl && !posterLoaded
+              ? {
+                  backgroundImage: `url(${posterThumbhashUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }
+              : undefined
+          }
           ref={posterRef}
         >
           {item.poster_path ? (

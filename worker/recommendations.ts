@@ -26,6 +26,7 @@ export interface RecommendationCandidate {
   mediaType: RecommendationMediaType;
   title: string;
   posterPath: string | null;
+  posterThumbhash: string | null;
   releaseDate: string | null;
   voteAverage: number | null;
   popularity: number;
@@ -43,6 +44,7 @@ interface PopularTitleRow {
   title: string;
   release_date: string | null;
   poster_path: string | null;
+  poster_thumbhash: string | null;
   popularity: number;
   vote_average: number | null;
   genre_ids: string;
@@ -209,10 +211,12 @@ export async function getRecommendationCandidates(
   limit = 200
 ): Promise<RecommendationCandidate[]> {
   const { results } = await env.DB.prepare(
-    `SELECT tmdb_id, media_type, title, release_date, poster_path, popularity, vote_average, genre_ids
-       FROM popular_titles
-      WHERE media_type = ?
-      ORDER BY popularity DESC
+    `SELECT pt.tmdb_id, pt.media_type, pt.title, pt.release_date, pt.poster_path,
+            pth.thumbhash AS poster_thumbhash, pt.popularity, pt.vote_average, pt.genre_ids
+       FROM popular_titles pt
+       LEFT JOIN poster_thumbhashes pth ON pth.poster_path = pt.poster_path
+      WHERE pt.media_type = ?
+      ORDER BY pt.popularity DESC
       LIMIT ?`
   )
     .bind(mediaType, limit)
@@ -222,6 +226,7 @@ export async function getRecommendationCandidates(
     mediaType: row.media_type as RecommendationMediaType,
     title: row.title,
     posterPath: row.poster_path,
+    posterThumbhash: row.poster_thumbhash,
     releaseDate: row.release_date,
     voteAverage: row.vote_average,
     popularity: row.popularity,
