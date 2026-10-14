@@ -855,21 +855,53 @@ export async function getListMembers(
   db: D1Database,
   ownerId: number,
   listId: string
-): Promise<{ id: number; username: string | null; displayName: string | null }[]> {
+): Promise<
+  { id: number; username: string | null; displayName: string | null; shareSlug: string | null }[]
+> {
   const { results } = await db
     .prepare(
-      `SELECT users.id, users.username, users.display_name
+      `SELECT users.id, users.username, users.display_name, users.share_slug
        FROM list_members JOIN users ON users.id = list_members.member_id
        WHERE list_members.owner_id = ? AND list_members.list_id = ?
        ORDER BY list_members.created_at`
     )
     .bind(ownerId, listId)
-    .all<{ id: number; username: string | null; display_name: string | null }>();
+    .all<{
+      id: number;
+      username: string | null;
+      display_name: string | null;
+      share_slug: string | null;
+    }>();
   return results.map((row) => ({
     id: row.id,
     username: row.username,
     displayName: row.display_name,
+    shareSlug: row.share_slug,
   }));
+}
+
+/** Seules les personnes que `targetUserId` suit peuvent-elles l'ajouter à
+ * une liste commune ? (migration 0022, réglage de profil). */
+export async function getRestrictListInvites(
+  db: D1Database,
+  targetUserId: number
+): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT restrict_list_invites FROM users WHERE id = ?")
+    .bind(targetUserId)
+    .first<{ restrict_list_invites: number }>();
+  return row?.restrict_list_invites === 1;
+}
+
+export async function setRestrictListInvites(
+  db: D1Database,
+  userId: number,
+  enabled: boolean
+): Promise<void> {
+  await db
+    .prepare("UPDATE users SET restrict_list_invites = ? WHERE id = ?")
+    .bind(enabled ? 1 : 0, userId)
+    .run();
 }
 
 export async function countListMembers(

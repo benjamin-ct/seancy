@@ -29,6 +29,8 @@ import {
   isListMember,
   addListMember,
   removeListMember,
+  getRestrictListInvites,
+  setRestrictListInvites,
   getListsSharedWithUser,
   updateDisplayName,
   setShareSlug,
@@ -156,6 +158,7 @@ import { PAGE_META_ROUTE, servePageWithMeta, serveRobots, serveSitemap } from ".
 import {
   follow,
   unfollow,
+  isFollowing,
   getUserIdBySlug,
   getFollowCounts,
   getFollowers,
@@ -844,6 +847,7 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       displayName: user.displayName,
       shareSlug: user.shareSlug,
       username: user.username,
+      restrictListInvites: user.restrictListInvites,
       avatarVersion: await getAvatarVersion(env.DB, user.id),
     },
     200,
@@ -862,6 +866,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
       displayName: user.displayName,
       shareSlug: user.shareSlug,
       username: user.username,
+      restrictListInvites: user.restrictListInvites,
       avatarVersion: await getAvatarVersion(env.DB, user.id),
     },
     200,
@@ -1162,6 +1167,22 @@ async function handleUpdateProfileShare(request: Request, env: Env): Promise<Res
     await setShareSlug(env.DB, user.id, shareSlug);
   }
   return json({ ok: true, shareSlug });
+}
+
+// Restriction d'ajout aux listes communes (ticket "Ma liste commune", retour
+// du 2026-10-11) : actif, seules les personnes que ce compte suit peuvent
+// l'ajouter à une liste commune — vérifié côté handlePostListMember.
+async function handleUpdateListInviteRestriction(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  const body = await readJsonObject(request);
+  if (typeof body?.enabled !== "boolean") {
+    return json({ error: 'Paramètre "enabled" invalide.' }, 400);
+  }
+  await setRestrictListInvites(env.DB, user.id, body.enabled);
+  return json({ ok: true, restrictListInvites: body.enabled });
 }
 
 // Top 5 du profil partagé choisi à la main, façon « films favoris » de
@@ -1926,6 +1947,22 @@ async function handlePostListMember(
   }
   if ((await countListMembers(env.DB, user.id, listId)) >= MAX_LIST_MEMBERS) {
     return json({ error: "Nombre maximal de membres atteint.", reason: "too-many-members" }, 400);
+  }
+  // Réglage de profil de la cible (migration 0022, retour du 2026-10-11) :
+  // si activé, seules les personnes qu'elle suit peuvent l'ajouter à une
+  // liste commune — vérifié ici (pas seulement côté recherche d'invitation)
+  // pour couvrir aussi un appel direct à cette route.
+  if (
+    (await getRestrictListInvites(env.DB, memberId)) &&
+    !(await isFollowing(env.DB, memberId, user.id))
+  ) {
+    return json(
+      {
+        error: "Cette personne n'autorise que les comptes qu'elle suit à l'ajouter à une liste.",
+        reason: "not-followed",
+      },
+      403
+    );
   }
   await addListMember(env.DB, user.id, listId, memberId);
   // Le nouveau membre doit voir apparaître la liste sans recharger la page ;
@@ -2960,6 +2997,9 @@ async function routeRequest(
   }
   if (url.pathname === "/api/account/share" && request.method === "PUT") {
     return handleUpdateProfileShare(request, env);
+  }
+  if (url.pathname === "/api/account/list-invite-restriction" && request.method === "PUT") {
+    return handleUpdateListInviteRestriction(request, env);
   }
   const publicFollowList = url.pathname.match(
     /^\/api\/public-profile\/([^/]+)\/(followers|following)$/

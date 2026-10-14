@@ -988,6 +988,13 @@
     "top5Hint": "Les films et séries mis en avant en haut de votre profil.",
     "top5Link": "Gérer mon top 5 dans Ma liste"
   },
+  "listInviteRestriction": {
+    "groupTitle": "Listes communes",
+    "groupLead": "Qui peut vous ajouter à une liste commune.",
+    "title": "Restreindre aux personnes que vous suivez",
+    "hint": "Activé, seules les personnes que vous suivez peuvent vous ajouter à une de leurs listes communes.",
+    "switchLabel": "Restreindre l'ajout à une liste commune aux personnes suivies"
+  },
   "topPicks": {
     "title": "Mon top 5",
     "addAt": "Ajouter un titre en n° {{rank}}",

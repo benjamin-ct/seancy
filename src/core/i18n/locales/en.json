@@ -988,6 +988,13 @@
     "top5Hint": "The movies and series featured at the top of your profile.",
     "top5Link": "Manage my top 5 in My list"
   },
+  "listInviteRestriction": {
+    "groupTitle": "Shared lists",
+    "groupLead": "Who can add you to a shared list.",
+    "title": "Restrict to people you follow",
+    "hint": "When enabled, only people you follow can add you to one of their shared lists.",
+    "switchLabel": "Restrict being added to a shared list to people you follow"
+  },
   "topPicks": {
     "title": "My top 5",
     "addAt": "Add a title at #{{rank}}",

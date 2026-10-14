@@ -10,6 +10,7 @@ import {
   type InviteCandidate,
   type ListMember,
 } from "../../../core/api/listMembers.ts";
+import MemberAvatar from "./MemberAvatar.tsx";
 import styles from "./ListMembersDialog.module.css";
 
 interface ListMembersDialogProps {
@@ -112,8 +113,11 @@ export default function ListMembersDialog({
       setMembers(next);
       setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
       setQuery("");
-    } catch {
-      setError(t("listMembers.addError"));
+    } catch (err) {
+      // Message précis du serveur quand il y en a un (ex. restriction de
+      // la cible, "not-followed") plutôt qu'un message générique qui le
+      // masquerait — même principe que setProfileShared côté AuthContext.
+      setError(err instanceof Error && err.message ? err.message : t("listMembers.addError"));
     } finally {
       setBusyId(null);
     }
@@ -180,7 +184,10 @@ export default function ListMembersDialog({
             <ul className={styles.memberList}>
               {members.map((member) => (
                 <li key={member.id} className={styles.memberRow}>
-                  <span className={styles.memberName}>{memberLabel(member)}</span>
+                  <span className={styles.memberName}>
+                    <MemberAvatar shareSlug={member.shareSlug} />
+                    {memberLabel(member)}
+                  </span>
                   {isOwner && (
                     <button
                       type="button"

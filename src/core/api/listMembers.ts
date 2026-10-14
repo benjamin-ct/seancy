@@ -7,6 +7,9 @@ export interface ListMember {
   id: number;
   username: string | null;
   displayName: string | null;
+  /** Lien de partage public du membre, `null` si son profil est privé — sa
+   * photo n'est alors jamais récupérable (voir MemberAvatar). */
+  shareSlug: string | null;
 }
 
 export interface InviteCandidate {

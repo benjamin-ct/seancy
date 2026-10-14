@@ -46,6 +46,9 @@ export interface AuthUser {
   shareSlug: string | null;
   /** Pseudo public (migration 0012), `null` tant qu'aucun n'a été choisi. */
   username: string | null;
+  /** Si actif, seules les personnes que ce compte suit peuvent l'ajouter à
+   * une liste commune (migration 0022). */
+  restrictListInvites: boolean;
   sessionToken: string;
   /** Fin de validité de la session (ms depuis l'epoch). */
   expiresAt: number;
@@ -154,11 +157,18 @@ export async function findOrCreateUser(
   displayName: string | null;
   shareSlug: string | null;
   username: string | null;
+  restrictListInvites: boolean;
 }> {
   const existing = await db
-    .prepare("SELECT id, email, display_name, share_slug, username FROM users WHERE email = ?")
+    .prepare(
+      "SELECT id, email, display_name, share_slug, username, restrict_list_invites FROM users WHERE email = ?"
+    )
     .bind(email)
-    .first<Pick<UserRow, "id" | "email" | "display_name" | "share_slug" | "username">>();
+    .first<
+      Pick<UserRow, "id" | "email" | "display_name" | "share_slug" | "username"> & {
+        restrict_list_invites: number;
+      }
+    >();
   if (existing) {
     return {
       id: existing.id,
@@ -166,6 +176,7 @@ export async function findOrCreateUser(
       displayName: existing.display_name,
       shareSlug: existing.share_slug,
       username: existing.username,
+      restrictListInvites: existing.restrict_list_invites === 1,
     };
   }
   const result = await db
@@ -178,6 +189,7 @@ export async function findOrCreateUser(
     displayName: null,
     shareSlug: null,
     username: null,
+    restrictListInvites: false,
   };
 }
 
@@ -243,7 +255,7 @@ export async function getUserFromRequest(
   const row = await db
     .prepare(
       `SELECT users.id, users.email, users.display_name, users.share_slug, users.username,
-              sessions.expires_at, sessions.token
+              users.restrict_list_invites, sessions.expires_at, sessions.token
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token IN (?, ?)`
     )
@@ -255,6 +267,7 @@ export async function getUserFromRequest(
       display_name: string | null;
       share_slug: string | null;
       username: string | null;
+      restrict_list_invites: number;
       expires_at: number;
     }>();
   if (!row || row.expires_at < Date.now()) {
@@ -269,6 +282,7 @@ export async function getUserFromRequest(
     displayName: row.display_name,
     shareSlug: row.share_slug,
     username: row.username,
+    restrictListInvites: row.restrict_list_invites === 1,
     sessionToken: token,
     expiresAt: row.expires_at,
     legacyCookie: !currentToken,

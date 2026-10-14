@@ -7,7 +7,9 @@ import type { IconName } from "../../shared/components/Icon/Icon.tsx";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import MyListContent from "../my-list/index.ts";
 import AccountSettings from "./components/AccountSettings.tsx";
-import PublicProfileSettings from "./components/PublicProfileSettings.tsx";
+import PublicProfileSettings, {
+  ListInviteRestrictionSettings,
+} from "./components/PublicProfileSettings.tsx";
 import CommunityPanel from "./components/CommunityPanel.tsx";
 import NotificationSettings from "./components/NotificationSettings.tsx";
 import FavoriteProvidersSettings from "./components/FavoriteProvidersSettings.tsx";
@@ -96,6 +98,7 @@ export default function ProfilePage() {
           <div className={styles.settings}>
             <AccountSettings />
             <PublicProfileSettings />
+            <ListInviteRestrictionSettings />
           </div>
         );
       // Nouvelle DA 8/10 : tout ce qui décrit le comportement de l'app

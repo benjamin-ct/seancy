@@ -21,7 +21,13 @@ import type { CustomList, LibraryItem } from "../../../core/types/library.ts";
 import { getListMembers, memberLabel, type ListMember } from "../../../core/api/listMembers.ts";
 import ListShareDialog from "./ListShareDialog.tsx";
 import ListMembersDialog from "./ListMembersDialog.tsx";
+import MemberAvatar from "./MemberAvatar.tsx";
 import styles from "./CustomListPanel.module.css";
+
+// Avatars empilés sur l'icône "liste commune" : au-delà, juste un compteur
+// "+N" plutôt que de continuer à empiler (jusqu'à MAX_MEMBERS = 10 dans
+// ListMembersDialog, trop pour rester lisible en petit).
+const MAX_STACKED_AVATARS = 3;
 
 interface CustomListPanelProps {
   list: CustomList;
@@ -182,7 +188,24 @@ export default function CustomListPanel({
               className={`${styles.status} ${styles.statusShared} ${styles.commonBadge}`}
               tabIndex={0}
             >
-              <Icon name="users" />
+              {members.length > 0 ? (
+                <span className={styles.avatarStack}>
+                  {members.slice(0, MAX_STACKED_AVATARS).map((member) => (
+                    <MemberAvatar
+                      key={member.id}
+                      shareSlug={member.shareSlug}
+                      className={styles.stackedAvatar}
+                    />
+                  ))}
+                  {members.length > MAX_STACKED_AVATARS && (
+                    <span className={styles.avatarOverflow}>
+                      +{members.length - MAX_STACKED_AVATARS}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <Icon name="users" />
+              )}
               {t("customListPanel.statusCommon")}
               {members.length > 0 && (
                 <span className={styles.commonTooltip} role="tooltip">

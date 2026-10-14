@@ -79,6 +79,35 @@
   display: block;
 }
 
+.avatarStack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.stackedAvatar {
+  margin-left: -8px;
+  border: 1.5px solid var(--surface);
+}
+
+.stackedAvatar:first-child {
+  margin-left: 0;
+}
+
+.avatarOverflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: -8px;
+  border: 1.5px solid var(--surface);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .headerActions {
   display: flex;
   flex-wrap: wrap;

@@ -52,6 +52,9 @@ interface AuthContextValue {
   // Version (date de mise à jour) de la photo de profil personnelle, `null`
   // sans photo : l'avatar retombe alors sur Gravatar, puis sur l'initiale.
   avatarVersion: number | null;
+  // Si actif, seules les personnes qu'on suit peuvent nous ajouter à une
+  // liste commune (voir ListMembersDialog / handlePostListMember).
+  restrictListInvites: boolean;
   requestLink: (email: string) => Promise<RequestLinkResult>;
   verify: (token: string) => Promise<VerifyResult>;
   verifyCode: (email: string, code: string) => Promise<VerifyResult>;
@@ -64,6 +67,8 @@ interface AuthContextValue {
   // Active/désactive le partage public du profil ; désactiver invalide
   // définitivement le lien existant.
   setProfileShared: (enabled: boolean) => Promise<void>;
+  // Active/désactive la restriction d'ajout aux listes communes.
+  setListInviteRestricted: (enabled: boolean) => Promise<void>;
   // Changement d'adresse email en deux temps (voir AccountCard) : un code
   // est envoyé à la nouvelle adresse, puis sa saisie applique le changement.
   requestEmailChange: (newEmail: string) => Promise<EmailChangeRequestResult>;
@@ -121,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
+  const [restrictListInvites, setRestrictListInvitesState] = useState(false);
 
   // `verify()` (consommation du jeton sur /auth/verify) et `refresh()` (la
   // vérification passive "suis-je déjà connecté" au montage) peuvent
@@ -147,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(null);
       setUsername(null);
       setAvatarVersion(null);
+      setRestrictListInvitesState(false);
       setStatus("anonymous");
       return Promise.resolve();
     }
@@ -160,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           displayName: string | null;
           shareSlug: string | null;
           username: string | null;
+          restrictListInvites: boolean;
           avatarVersion: number | null;
         }>;
       })
@@ -168,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setDisplayName(data.displayName ?? null);
         setShareSlug(data.shareSlug ?? null);
         setUsername(data.username ?? null);
+        setRestrictListInvitesState(data.restrictListInvites ?? false);
         setAvatarVersion(data.avatarVersion ?? null);
         setStatus("authenticated");
         pinnedRef.current = true;
@@ -259,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDisplayName(data.displayName ?? null);
       setShareSlug(data.shareSlug ?? null);
       setUsername(data.username ?? null);
+      setRestrictListInvitesState(data.restrictListInvites ?? false);
       setAvatarVersion(data.avatarVersion ?? null);
       setStatus("authenticated");
       return data;
@@ -327,6 +337,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || t("auth.updateShareError"));
       }
       setShareSlug(data.shareSlug ?? null);
+    },
+    [t]
+  );
+
+  const setListInviteRestricted = useCallback(
+    async (enabled: boolean): Promise<void> => {
+      const res = await fetch("/api/account/list-invite-restriction", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t("auth.updateShareError"));
+      }
+      setRestrictListInvitesState(data.restrictListInvites ?? enabled);
     },
     [t]
   );
@@ -452,6 +478,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      restrictListInvites,
       requestLink,
       verify,
       verifyCode,
@@ -459,6 +486,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logoutAll,
       updateDisplayName: updateDisplayNameCallback,
       setProfileShared,
+      setListInviteRestricted,
       requestEmailChange,
       confirmEmailChange,
       updateUsername,
@@ -474,6 +502,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      restrictListInvites,
       requestLink,
       verify,
       verifyCode,
@@ -481,6 +510,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logoutAll,
       updateDisplayNameCallback,
       setProfileShared,
+      setListInviteRestricted,
       requestEmailChange,
       confirmEmailChange,
       updateUsername,
