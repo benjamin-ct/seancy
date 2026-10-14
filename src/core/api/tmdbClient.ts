@@ -76,6 +76,18 @@ export type TmdbParams = Record<string, string | number | boolean | undefined | 
 // plutôt que d'échouer.
 const tmdbRequestLimiter = createConcurrencyLimiter(6);
 
+// Plafond séparé, bien plus bas, pour les requêtes purement décoratives
+// (ex. pages supplémentaires piochées au hasard pour peupler le défilement
+// d'affiches de la roue aléatoire, voir seedReelPoolFromRandomPages) :
+// partager la même file que les requêtes critiques (celle qui doit afficher
+// le titre tiré) leur permettait de s'y mettre en travers — sur une connexion
+// lente, quelques requêtes décoratives lancées juste avant la requête
+// critique suffisaient à repousser celle-ci de plusieurs dizaines de
+// secondes derrière elles dans la file à 6 places (ticket Trello "Roue
+// aléatoire"). Un budget dédié, séparé, les empêche structurellement de
+// jamais prendre une place qu'une requête critique attend.
+const tmdbBackgroundLimiter = createConcurrencyLimiter(2);
+
 // 429 (plafond du proxy TMDB, voir worker/index.ts, ou quota TMDB relayé) :
 // réessai automatique après le délai annoncé plutôt qu'une « Erreur TMDB
 // (429) » affichée à la place d'une grille (ticket « Un peu trop souvent
@@ -96,12 +108,17 @@ export interface TmdbFetchOptions {
    * ou est interrompue si elle était déjà en cours. À ne pas passer pour
    * une promesse partagée entre plusieurs appelants (cache de getDetails…). */
   signal?: AbortSignal;
+  /** Requête décorative, dont rien à l'écran n'attend la résolution (ex.
+   * pages supplémentaires pour le pool d'affiches de la roue aléatoire) :
+   * passe par tmdbBackgroundLimiter plutôt que le plafond partagé par les
+   * requêtes critiques. */
+  priority?: "background";
 }
 
 export async function tmdbFetch<T>(
   path: string,
   params: TmdbParams = {},
-  { signal }: TmdbFetchOptions = {}
+  { signal, priority }: TmdbFetchOptions = {}
 ): Promise<T> {
   if (IS_DEV && (!API_KEY || API_KEY === "REMPLACE_MOI_AVEC_TA_CLE_TMDB")) {
     throw new TmdbConfigError(
@@ -126,7 +143,7 @@ export async function tmdbFetch<T>(
       await sleep(pause);
     }
     signal?.throwIfAborted();
-    const result = await fetchOnce<T>(url, signal);
+    const result = await fetchOnce<T>(url, signal, priority);
     if (result.status !== RATE_LIMITED) {
       return result.data;
     }
@@ -143,8 +160,13 @@ export async function tmdbFetch<T>(
 type FetchOnceResult<T> =
   { status: "ok"; data: T } | { status: typeof RATE_LIMITED; retryAfter: string | null };
 
-function fetchOnce<T>(url: URL, signal?: AbortSignal): Promise<FetchOnceResult<T>> {
-  return tmdbRequestLimiter.run(async () => {
+function fetchOnce<T>(
+  url: URL,
+  signal?: AbortSignal,
+  priority?: "background"
+): Promise<FetchOnceResult<T>> {
+  const limiter = priority === "background" ? tmdbBackgroundLimiter : tmdbRequestLimiter;
+  return limiter.run(async () => {
     // Annulée pendant qu'elle attendait son tour : on libère la place.
     signal?.throwIfAborted();
     let res: Response;

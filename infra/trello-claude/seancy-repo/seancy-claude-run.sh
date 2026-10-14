@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 # Lance une exécution `claude -p` dans le clone de travail dédié de Claude.
-# Appelé par le listener : docker exec --user claudeuser bobine-repo bobine-claude-run "<prompt>"
+# Appelé par le listener : docker exec --user claudeuser seancy-repo seancy-claude-run "<prompt>"
 #
-# - Claude ne travaille jamais dans le checkout du serveur (monté en $BOBINE_STACK_REPO) : il a
-#   son propre clone ($BOBINE_WORKSPACE, volume Docker), qu'il peut changer de branche à volonté
-#   sans empêcher un humain de faire `bobine-pull` / `bobine-rebuild` côté serveur.
+# - Claude ne travaille jamais dans le checkout du serveur (monté en $SEANCY_STACK_REPO) : il a
+#   son propre clone ($SEANCY_WORKSPACE, volume Docker), qu'il peut changer de branche à volonté
+#   sans empêcher un humain de faire `seancy-pull` / `seancy-rebuild` côté serveur.
 # - Une seule exécution à la fois : verrou flock, libéré automatiquement à la fin du processus
-#   (même en cas de crash). Code de sortie 75 si une exécution est déjà en cours ; bobine-shell.sh
+#   (même en cas de crash). Code de sortie 75 si une exécution est déjà en cours ; seancy-shell.sh
 #   teste ce même verrou avant de recréer le conteneur.
 set -euo pipefail
 
-WORKSPACE="${BOBINE_WORKSPACE:-/workspace}"
-STACK_REPO="${BOBINE_STACK_REPO:-/srv/bobine}"
-LOCK_FILE="${BOBINE_CLAUDE_LOCK:-/tmp/bobine-claude-run.lock}"
+WORKSPACE="${SEANCY_WORKSPACE:-/workspace}"
+STACK_REPO="${SEANCY_STACK_REPO:-/srv/seancy}"
+LOCK_FILE="${SEANCY_CLAUDE_LOCK:-/tmp/seancy-claude-run.lock}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-5}"
 CLAUDE_EFFORT="${CLAUDE_EFFORT:-medium}"
-TOKEN_FILE="${BOBINE_CLAUDE_TOKEN_FILE:-$HOME/.bobine-claude-token}"
+TOKEN_FILE="${SEANCY_CLAUDE_TOKEN_FILE:-$HOME/.seancy-claude-token}"
 
 if [ $# -ne 1 ] || [ -z "$1" ]; then
-  echo "Usage : bobine-claude-run \"<prompt>\"" >&2
+  echo "Usage : seancy-claude-run \"<prompt>\"" >&2
   exit 64
 fi
 prompt="$1"
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
-  echo "Une execution Claude est deja en cours dans bobine-repo." >&2
+  echo "Une execution Claude est deja en cours dans seancy-repo." >&2
   exit 75
 fi
 
@@ -45,7 +45,7 @@ resume_notes=()
 branch=$(git branch --show-current || true)
 if [ -n "$(git status --porcelain)" ]; then
   git stash push --quiet --include-untracked \
-    -m "bobine-claude-run $(date -u +%Y-%m-%dT%H:%M:%SZ) (${branch:-HEAD détachée})"
+    -m "seancy-claude-run $(date -u +%Y-%m-%dT%H:%M:%SZ) (${branch:-HEAD détachée})"
   stash_msg=$(git stash list -1 --format=%gs)
   echo "Modifications non committées mises de côté : $stash_msg" >&2
   resume_notes+=("modifications non committées mises de côté dans stash@{0} ($stash_msg) : les relire avec git stash show -p stash@{0} et les réappliquer (git stash pop) sur la bonne branche si elles servent encore")
@@ -63,7 +63,7 @@ if [ -n "$branch" ] && [ "$branch" != main ]; then
   fi
 fi
 
-# Jeton OAuth pour le développeur délégué (bobine-claude-dev) : Claude Code le retire de
+# Jeton OAuth pour le développeur délégué (seancy-claude-dev) : Claude Code le retire de
 # l'environnement des commandes qu'il lance. Réécrit à chaque exécution (suit le .env).
 if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
   (umask 077 && printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" >"$TOKEN_FILE.tmp")

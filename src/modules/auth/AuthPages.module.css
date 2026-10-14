@@ -88,6 +88,50 @@
   font-weight: 600;
 }
 
+/* Connexion avec Google / Apple (OAuthButtons). */
+.oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.oauthBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: #fff;
+  color: #1f1f1f;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.oauthApple {
+  border-color: #000;
+  background: #000;
+  color: #fff;
+}
+
+.oauthSeparator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 -8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.oauthSeparator::before,
+.oauthSeparator::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
 /* Visible seulement sur mobile (audit M15) : sur desktop, la barre flottante
    LegalLinks reste affichée (LegalLinks.module.css, même seuil 860px) et ce
    doublon a été jugé redondant (retour review). */

@@ -20,11 +20,10 @@ let sentry: SentryModule | null = null;
 // "production" par défaut — voir ticket Trello "Dashboard de suivis de
 // Claude".
 const PRODUCTION_HOSTNAME = "seancy.com";
-const LEGACY_PRODUCTION_HOSTNAME = "bobine.creusatbenjamin.workers.dev";
 const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
 
 function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
-  if (hostname === PRODUCTION_HOSTNAME || hostname === LEGACY_PRODUCTION_HOSTNAME) {
+  if (hostname === PRODUCTION_HOSTNAME) {
     return "production";
   }
   if (hostname === PREPROD_HOSTNAME) {

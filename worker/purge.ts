@@ -24,6 +24,7 @@ export async function purgeExpiredRows(db: D1Database, now = Date.now()): Promis
     // Un lien ou un code expiré est refusé de toute façon (voir auth.ts).
     ["magic_links", db.prepare("DELETE FROM magic_links WHERE expires_at < ?").bind(now)],
     ["email_changes", db.prepare("DELETE FROM email_changes WHERE expires_at < ?").bind(now)],
+    ["oauth_states", db.prepare("DELETE FROM oauth_states WHERE expires_at < ?").bind(now)],
     ["sessions", db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(now)],
     [
       "notified_releases",

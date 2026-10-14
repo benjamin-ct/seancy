@@ -4,13 +4,13 @@ const fs = require("fs");
 const sentryLog = require("./sentry-log");
 
 const PORT = process.env.PORT || 8080;
-const DOCKER_CONTAINER = process.env.DOCKER_CONTAINER || "bobine-repo";
+const DOCKER_CONTAINER = process.env.DOCKER_CONTAINER || "seancy-repo";
 const LOCK_FILE = "/tmp/claude-trello.lock";
 const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
 const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
 const CLAUDE_EFFORT = process.env.CLAUDE_EFFORT || "medium";
-// Code de sortie de bobine-claude-run quand une exécution tourne déjà dans bobine-repo.
+// Code de sortie de seancy-claude-run quand une exécution tourne déjà dans seancy-repo.
 const EXIT_BUSY = 75;
 
 // Relance automatique après la limite d'usage Claude. L'état vit dans /tmp, monté depuis l'hôte :
@@ -147,7 +147,7 @@ function runClaude(label, prompt, notify, relaunch = 0) {
   const onError = (errorMsg) => notifyError(notify, errorMsg);
   const runPrompt = relaunch ? `${prompt} ${relaunchNote(relaunch)}` : prompt;
 
-  // bobine-claude-run (voir bobine-repo/) prépare le clone de travail dédié de Claude puis lance
+  // seancy-claude-run (voir seancy-repo/) prépare le clone de travail dédié de Claude puis lance
   // `claude -p`. execFile : le prompt (payload Sentry compris) est passé tel quel, sans shell.
   const args = [
     "exec",
@@ -158,7 +158,7 @@ function runClaude(label, prompt, notify, relaunch = 0) {
     "--env",
     `CLAUDE_EFFORT=${CLAUDE_EFFORT}`,
     DOCKER_CONTAINER,
-    "bobine-claude-run",
+    "seancy-claude-run",
     runPrompt,
   ];
 
@@ -463,7 +463,7 @@ async function handleUsageLimit({ label, prompt, notify, relaunch, output }) {
 
   if (relaunch >= MAX_AUTO_RELAUNCHES) {
     clearResumeState();
-    const msg = `🚨 Limite d'usage Claude toujours atteinte après ${MAX_AUTO_RELAUNCHES} relances automatiques consécutives (${label}). Abandon : relancer à la main (déplacer une carte ou bobine-logs pour le détail).`;
+    const msg = `🚨 Limite d'usage Claude toujours atteinte après ${MAX_AUTO_RELAUNCHES} relances automatiques consécutives (${label}). Abandon : relancer à la main (déplacer une carte ou seancy-logs pour le détail).`;
     console.error(`[${ts()}] ${msg}`);
     sentryLog.logError(msg);
     await discord(msg);

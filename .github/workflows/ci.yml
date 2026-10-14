@@ -149,15 +149,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/preview-d1.ts provision ${{ github.event.pull_request.number }}
 
-      # Bascule Bobine → Seancy : version provisoire du Worker seancy tant
-      # qu'il n'a jamais été déployé, sinon ses réglages restent grisés dans
-      # le dashboard. Sans effet ensuite (voir scripts/seancy-bootstrap-worker.ts).
-      - name: Bootstrap Worker seancy (once)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/seancy-bootstrap-worker.ts
-
       - name: Generate branch slug for preview name
         id: branch-slug
         run: |
@@ -281,16 +272,6 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-
-      # Bascule Bobine → Seancy : copie unique de bobine-notifications vers
-      # seancy-notifications tant que celle-ci est vide, puis retrait de la
-      # tâche planifiée du Worker bobine dès que seancy a la sienne. Sans
-      # effet ensuite (voir scripts/seancy-copy-d1.ts).
-      - name: Copy bobine-notifications → seancy-notifications (once)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/seancy-copy-d1.ts
 
       # Applique toute migration ajoutée sous migrations/ pas encore jouée
       # sur la base D1 distante (voir migrations/README implicite : fichiers

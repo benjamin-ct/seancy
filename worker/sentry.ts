@@ -11,11 +11,6 @@ import type { Env } from "./types.ts";
 // deploy-preview) — tout le reste (dev local compris) est traité comme
 // non-prod.
 export const PRODUCTION_HOSTNAME = "seancy.com";
-// Ancienne URL de prod (avant Seancy), servie par l'ancien Worker `bobine`
-// (resté en place avec l'ancienne base) : ses pages redirigent vers
-// PRODUCTION_HOSTNAME (voir index.ts et src/main.tsx), mais ses appels /api
-// restent servis pour les onglets encore ouverts, donc traités comme la prod.
-export const LEGACY_PRODUCTION_HOSTNAME = "bobine.creusatbenjamin.workers.dev";
 // Autres adresses du Worker `seancy` qui ne doivent jamais servir le site :
 // tout y part en 301 vers PRODUCTION_HOSTNAME, /api compris (voir index.ts ;
 // les pages, servies en assets sans passer par le Worker, sont redirigées
@@ -27,7 +22,7 @@ export const REDIRECTED_TO_PRODUCTION_HOSTNAMES: readonly string[] = [
 ];
 
 export function isProductionHostname(hostname: string): boolean {
-  return hostname === PRODUCTION_HOSTNAME || hostname === LEGACY_PRODUCTION_HOSTNAME;
+  return hostname === PRODUCTION_HOSTNAME;
 }
 
 // Hostname de l'environnement `develop` persistant (voir ticket Trello

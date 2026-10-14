@@ -26,14 +26,10 @@ import type { Env } from "./types.ts";
 // En-tête posé par le client sur ses propres écritures (voir
 // src/core/sync/liveSync.ts, syncClientHeaders) : l'appareil à l'origine
 // d'un changement ne reçoit pas son propre événement en écho.
-// L'ancien nom (avant Seancy) reste accepté pour les onglets qui tournent
-// encore sur un bundle d'avant le renommage.
 export const SYNC_CLIENT_HEADER = "x-seancy-client";
-const LEGACY_SYNC_CLIENT_HEADER = "x-bobine-client";
 
 function syncClientIdOf(request: Request): string | null {
-  const header =
-    request.headers.get(SYNC_CLIENT_HEADER) ?? request.headers.get(LEGACY_SYNC_CLIENT_HEADER);
+  const header = request.headers.get(SYNC_CLIENT_HEADER);
   return header && CLIENT_ID_PATTERN.test(header) ? header : null;
 }
 

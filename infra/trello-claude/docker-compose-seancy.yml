@@ -25,18 +25,18 @@ services:
       - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
     restart: unless-stopped
 
-  bobine-repo:
-    build: ./bobine-repo
-    container_name: bobine-repo
+  seancy-repo:
+    build: ./seancy-repo
+    container_name: seancy-repo
     command: sleep infinity
     user: claudeuser
-    # Chromium (bobine-screenshot) plante avec les 64 Mo de /dev/shm par défaut.
+    # Chromium (seancy-screenshot) plante avec les 64 Mo de /dev/shm par défaut.
     shm_size: "1gb"
     volumes:
-      # Checkout du serveur (celui que met à jour bobine-pull) : Claude n'y travaille jamais,
+      # Checkout du serveur (celui que met à jour seancy-pull) : Claude n'y travaille jamais,
       # il reste sur main.
-      - ../../:/srv/bobine
-      # Clone de travail dédié de Claude (créé au premier lancement de bobine-claude-run).
+      - ../../:/srv/seancy
+      # Clone de travail dédié de Claude (créé au premier lancement de seancy-claude-run).
       # Monté sur /workspace pour conserver la mémoire Claude liée à ce chemin.
       - claude-workspace:/workspace
       - ./ssh-keys:/home/claudeuser/.ssh

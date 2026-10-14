@@ -35,6 +35,19 @@ export interface Env {
   // (conçu pour être exposé côté client), mais il vit en Secret ici comme
   // TMDB_API_KEY par cohérence avec le reste des identifiants tiers.
   SENTRY_DSN?: string;
+  // Connexion avec Google / Apple (voir worker/oauth.ts) : un fournisseur
+  // n'est proposé que si tous ses identifiants sont définis. Tous en
+  // Secret, même les identifiants publics (client ID, Team ID, Key ID) :
+  // une variable ajoutée au dashboard hors wrangler.jsonc disparaîtrait au
+  // déploiement suivant.
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  /** Services ID « Sign in with Apple » (ex. com.seancy.web). */
+  APPLE_CLIENT_ID?: string;
+  APPLE_TEAM_ID?: string;
+  APPLE_KEY_ID?: string;
+  /** Clé privée .p8 (PEM PKCS#8 ; les « \n » littéraux sont acceptés). */
+  APPLE_PRIVATE_KEY?: string;
 
   // Variables non sensibles (commitées dans wrangler.jsonc, voir vars).
   VAPID_PUBLIC_KEY: string;

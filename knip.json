@@ -3,7 +3,7 @@
   "entry": [
     "scripts/*.ts",
     "infra/trello-claude/listener/server.js",
-    "infra/trello-claude/bobine-repo/*.cjs",
+    "infra/trello-claude/seancy-repo/*.cjs",
     "public/theme-init.js"
   ],
   "project": ["src/**/*.{ts,tsx}", "worker/**/*.ts", "scripts/**/*.ts"]
