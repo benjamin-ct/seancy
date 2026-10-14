@@ -86,12 +86,6 @@
   font-size: 17px;
 }
 
-.avatarImg {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 /* Choix / suppression de la photo, juste sous l'aperçu. */
 .avatarActions {
   display: flex;

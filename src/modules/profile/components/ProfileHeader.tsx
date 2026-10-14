@@ -4,8 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../core/context/AuthContext.tsx";
 import { useLibrary } from "../../../core/context/LibraryContext.tsx";
 import { getFollowList } from "../../../core/api/follows.ts";
-import { Icon } from "../../../shared/components/index.ts";
-import { AccountAvatar } from "./AccountSettings.tsx";
+import { AccountAvatar, Icon } from "../../../shared/components/index.ts";
 import styles from "./ProfileHeader.module.css";
 
 /** Ancre du réglage « Lien public » (PublicProfileSettings, onglet Compte). */

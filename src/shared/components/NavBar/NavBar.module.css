@@ -258,6 +258,23 @@
   height: 18px;
 }
 
+/* Photo de profil à la place de la silhouette générique, quand elle est
+   disponible (NavBar.tsx, useAvatarSources). Même gabarit que l'icône
+   qu'elle remplace, juste ronde et recadrée en cover. */
+.navAvatarImg {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: none;
+}
+
+.tabbarAvatarImg {
+  border-radius: 999px;
+  object-fit: cover;
+  flex: none;
+}
+
 /* « Connexion » : action principale d'un visiteur, donc en corail. */
 .loginBtn {
   display: inline-flex;
