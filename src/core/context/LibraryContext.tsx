@@ -15,6 +15,7 @@ import { useMembersOnly } from "./MembersOnlyContext.tsx";
 import { getDetails } from "../api/tmdb.ts";
 import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncEvent } from "../sync/liveSync.ts";
+import { leaveList as leaveListApi } from "../api/listMembers.ts";
 import {
   LIBRARY_STORAGE_KEY,
   loadInitialLibraryState,
@@ -117,15 +118,40 @@ interface LibraryContextValue {
   /** Glisser-déposer dans "Envie de voir" (tri manuel) — voir modules/my-list. */
   reorderWatchlist: (fromKey: string, toKey: string, insertAfter: boolean) => void;
   customLists: CustomList[];
+  /** Listes communes (ticket "Ma liste commune") dont le viewer est membre
+   * sans en être propriétaire — chacune porte `ownerId` (voir CustomList).
+   * Toujours à passer en dernier argument des fonctions ci-dessous pour agir
+   * sur une de ces listes plutôt que sur les siennes propres. */
+  sharedLists: CustomList[];
   createList: (name: string) => string | null;
-  renameList: (listId: string, name: string) => void;
-  deleteList: (listId: string) => void;
-  addToList: (listId: string, item: LibraryItemInput) => void;
-  removeFromList: (listId: string, mediaType: MediaType, id: number | string) => void;
-  isInList: (listId: string, mediaType: MediaType, id: number | string) => boolean;
-  getListItems: (listId: string) => LibraryItem[];
+  renameList: (listId: string, name: string, ownerId?: number) => void;
+  deleteList: (listId: string, ownerId?: number) => void;
+  /** Retire le viewer d'une liste commune sans la supprimer pour les autres
+   * membres (toujours possible, même pour une liste dont on n'a pas la
+   * gestion des membres) — voir ListMembersDialog. */
+  leaveSharedList: (listId: string, ownerId: number) => void;
+  addToList: (listId: string, item: LibraryItemInput, ownerId?: number) => void;
+  removeFromList: (
+    listId: string,
+    mediaType: MediaType,
+    id: number | string,
+    ownerId?: number
+  ) => void;
+  isInList: (
+    listId: string,
+    mediaType: MediaType,
+    id: number | string,
+    ownerId?: number
+  ) => boolean;
+  getListItems: (listId: string, ownerId?: number) => LibraryItem[];
   /** Glisser-déposer dans une liste perso (tri manuel) — voir modules/my-list. */
-  reorderList: (listId: string, fromKey: string, toKey: string, insertAfter: boolean) => void;
+  reorderList: (
+    listId: string,
+    fromKey: string,
+    toKey: string,
+    insertAfter: boolean,
+    ownerId?: number
+  ) => void;
 }
 
 // Actions des cartes (MediaCard, rangées de listes) séparées du reste :
@@ -717,6 +743,31 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       .catch((err) => logWarn("Seancy : actualisation des listes personnalisées impossible.", err));
   });
 
+  // Listes communes dont on est membre (ticket "Ma liste commune") : par
+  // choix, pas de mirroir hors-ligne ni de file d'opérations en attente
+  // comme pour `customLists` ci-dessus — une liste commune implique d'autres
+  // comptes, donc un mécanisme toujours en ligne (reposer sur le serveur à
+  // chaque lecture/écriture) plutôt que de faire entrer la collaboration
+  // multi-compte dans la synchro hors-ligne pensée pour un seul compte.
+  const [sharedLists, setSharedLists] = useState<CustomListMap>({});
+
+  const refreshSharedLists = useCallback(() => {
+    fetch("/api/shared-lists")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("fetch failed"))))
+      .then((remote: CustomListMap) => setSharedLists(remote || {}))
+      .catch((err) => logWarn("Seancy : chargement des listes communes impossible.", err));
+  }, []);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") {
+      setSharedLists({});
+      return;
+    }
+    refreshSharedLists();
+  }, [authStatus, refreshSharedLists]);
+
+  useLiveSyncEvent("shared-lists", refreshSharedLists);
+
   const toggleWatched = useCallback((item: LibraryItemInput, watchedAt?: number) => {
     const key = makeKey(item.mediaType, item.id);
     setState((prev) => {
@@ -1070,10 +1121,79 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [markCustomListDirty]
   );
 
+  // Listes communes (ticket "Ma liste commune") : clé composite dans
+  // `sharedLists`, voir getListsSharedWithUser côté Worker — l'id de liste
+  // seul n'est unique que par propriétaire.
+  const sharedKey = (ownerId: number, listId: string) => `shared:${ownerId}:${listId}`;
+
+  const putSharedList = useCallback((ownerId: number, list: CustomList) => {
+    fetch(`/api/shared-lists/${ownerId}/${encodeURIComponent(list.id)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...syncClientHeaders() },
+      body: JSON.stringify({ name: list.name, items: list.items, createdAt: list.createdAt }),
+    }).catch((err) =>
+      logWarn(`Seancy : écriture sur la liste commune "${list.id}" impossible.`, err)
+    );
+  }, []);
+
+  // Lit `sharedLists` par fermeture (voir dépendances) plutôt que par
+  // updater fonctionnel : la requête réseau qui suit a besoin de la valeur
+  // calculée, un updater `setState` doit lui rester pur.
+  const updateSharedList = useCallback(
+    (ownerId: number, listId: string, updater: (list: CustomList) => CustomList) => {
+      const key = sharedKey(ownerId, listId);
+      const current = sharedLists[key];
+      if (!current) {
+        return;
+      }
+      const next = updater(current);
+      setSharedLists((prev) => ({ ...prev, [key]: next }));
+      putSharedList(ownerId, next);
+    },
+    [sharedLists, putSharedList]
+  );
+
+  const deleteSharedList = useCallback((ownerId: number, listId: string) => {
+    const key = sharedKey(ownerId, listId);
+    setSharedLists((prev) => {
+      if (!prev[key]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    fetch(`/api/shared-lists/${ownerId}/${encodeURIComponent(listId)}`, {
+      method: "DELETE",
+      headers: syncClientHeaders(),
+    }).catch((err) =>
+      logWarn(`Seancy : suppression de la liste commune "${listId}" impossible.`, err)
+    );
+  }, []);
+
+  const leaveSharedList = useCallback((listId: string, ownerId: number) => {
+    const key = sharedKey(ownerId, listId);
+    setSharedLists((prev) => {
+      if (!prev[key]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    leaveListApi(listId, ownerId).catch((err) =>
+      logWarn(`Seancy : impossible de quitter la liste commune "${listId}".`, err)
+    );
+  }, []);
+
   const renameList = useCallback(
-    (listId: string, name: string) => {
+    (listId: string, name: string, ownerId?: number) => {
       const trimmed = name.trim();
       if (!trimmed) {
+        return;
+      }
+      if (ownerId !== undefined) {
+        updateSharedList(ownerId, listId, (list) => ({ ...list, name: trimmed }));
         return;
       }
       setCustomLists((prev) =>
@@ -1081,11 +1201,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       );
       markCustomListDirty(listId, "upsert");
     },
-    [markCustomListDirty]
+    [markCustomListDirty, updateSharedList]
   );
 
   const deleteList = useCallback(
-    (listId: string) => {
+    (listId: string, ownerId?: number) => {
+      if (ownerId !== undefined) {
+        deleteSharedList(ownerId, listId);
+        return;
+      }
       setCustomLists((prev) => {
         if (!prev[listId]) {
           return prev;
@@ -1096,7 +1220,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       });
       markCustomListDirty(listId, "delete");
     },
-    [markCustomListDirty]
+    [markCustomListDirty, deleteSharedList]
   );
 
   // Stocke l'item complet directement dans la liste perso (pas juste sa
@@ -1104,8 +1228,18 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   // utilisable pour un titre qui n'est dans aucune des deux (cf. bug #32 —
   // "Ajouter à…" n'implique ni "vu" ni "envie de voir").
   const addToList = useCallback(
-    (listId: string, item: LibraryItemInput) => {
+    (listId: string, item: LibraryItemInput, ownerId?: number) => {
       const key = makeKey(item.mediaType, item.id);
+      if (ownerId !== undefined) {
+        updateSharedList(ownerId, listId, (list) => {
+          if (list.items.some((existing) => makeKey(existing.mediaType, existing.id) === key)) {
+            return list;
+          }
+          const newItem: LibraryItem = { ...item, addedAt: Date.now(), updatedAt: Date.now() };
+          return { ...list, items: [...list.items, newItem] };
+        });
+        return;
+      }
       setCustomLists((prev) => {
         const list = prev[listId];
         if (
@@ -1119,12 +1253,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       });
       markCustomListDirty(listId, "upsert");
     },
-    [markCustomListDirty]
+    [markCustomListDirty, updateSharedList]
   );
 
   const removeFromList = useCallback(
-    (listId: string, mediaType: MediaType, id: number | string) => {
+    (listId: string, mediaType: MediaType, id: number | string, ownerId?: number) => {
       const key = makeKey(mediaType, id);
+      if (ownerId !== undefined) {
+        updateSharedList(ownerId, listId, (list) => ({
+          ...list,
+          items: list.items.filter((item) => makeKey(item.mediaType, item.id) !== key),
+        }));
+        return;
+      }
       setCustomLists((prev) => {
         const list = prev[listId];
         if (!list) {
@@ -1140,22 +1281,24 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       });
       markCustomListDirty(listId, "upsert");
     },
-    [markCustomListDirty]
+    [markCustomListDirty, updateSharedList]
   );
 
   const isInList = useCallback(
-    (listId: string, mediaType: MediaType, id: number | string) => {
+    (listId: string, mediaType: MediaType, id: number | string, ownerId?: number) => {
       const key = makeKey(mediaType, id);
-      return Boolean(
-        customLists[listId]?.items.some((item) => makeKey(item.mediaType, item.id) === key)
-      );
+      const list =
+        ownerId !== undefined ? sharedLists[sharedKey(ownerId, listId)] : customLists[listId];
+      return Boolean(list?.items.some((item) => makeKey(item.mediaType, item.id) === key));
     },
-    [customLists]
+    [customLists, sharedLists]
   );
 
   const getListItems = useCallback(
-    (listId: string): LibraryItem[] => customLists[listId]?.items || [],
-    [customLists]
+    (listId: string, ownerId?: number): LibraryItem[] =>
+      (ownerId !== undefined ? sharedLists[sharedKey(ownerId, listId)] : customLists[listId])
+        ?.items || [],
+    [customLists, sharedLists]
   );
 
   // Glisser-déposer dans une liste perso : déplace `fromKey` juste avant ou
@@ -1163,19 +1306,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   // manuel (pas besoin d'un artefact d'ordre séparé comme pour "Envie de
   // voir", qui doit lui composer avec une fusion serveur).
   const reorderList = useCallback(
-    (listId: string, fromKey: string, toKey: string, insertAfter: boolean) => {
-      setCustomLists((prev) => {
-        const list = prev[listId];
-        if (!list) {
-          return prev;
-        }
-        const fromIndex = list.items.findIndex(
-          (item) => makeKey(item.mediaType, item.id) === fromKey
-        );
+    (listId: string, fromKey: string, toKey: string, insertAfter: boolean, ownerId?: number) => {
+      const reorderItems = (items: LibraryItem[]): LibraryItem[] | null => {
+        const fromIndex = items.findIndex((item) => makeKey(item.mediaType, item.id) === fromKey);
         if (fromIndex < 0) {
-          return prev;
+          return null;
         }
-        const withoutFrom = list.items.filter((_, i) => i !== fromIndex);
+        const withoutFrom = items.filter((_, i) => i !== fromIndex);
         let targetIndex = withoutFrom.findIndex(
           (item) => makeKey(item.mediaType, item.id) === toKey
         );
@@ -1184,17 +1321,37 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         }
         const insertAt = insertAfter ? targetIndex + 1 : targetIndex;
         const nextItems = [...withoutFrom];
-        nextItems.splice(insertAt, 0, list.items[fromIndex]);
-        return { ...prev, [listId]: { ...list, items: nextItems } };
+        nextItems.splice(insertAt, 0, items[fromIndex]);
+        return nextItems;
+      };
+      if (ownerId !== undefined) {
+        updateSharedList(ownerId, listId, (list) => {
+          const nextItems = reorderItems(list.items);
+          return nextItems ? { ...list, items: nextItems } : list;
+        });
+        return;
+      }
+      setCustomLists((prev) => {
+        const list = prev[listId];
+        if (!list) {
+          return prev;
+        }
+        const nextItems = reorderItems(list.items);
+        return nextItems ? { ...prev, [listId]: { ...list, items: nextItems } } : prev;
       });
       markCustomListDirty(listId, "upsert");
     },
-    [markCustomListDirty]
+    [markCustomListDirty, updateSharedList]
   );
 
   const customListsArray = useMemo(
     () => Object.values(customLists).sort((a, b) => a.createdAt - b.createdAt),
     [customLists]
+  );
+
+  const sharedListsArray = useMemo(
+    () => Object.values(sharedLists).sort((a, b) => a.createdAt - b.createdAt),
+    [sharedLists]
   );
 
   const orderedWatchlist = useMemo(() => {
@@ -1255,9 +1412,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       markSeriesWatched: gated(markSeriesWatched, undefined),
       reorderWatchlist: gated(reorderWatchlist, undefined),
       customLists: customListsArray,
+      sharedLists: sharedListsArray,
       createList: gated(createList, null),
       renameList: gated(renameList, undefined),
       deleteList: gated(deleteList, undefined),
+      leaveSharedList: gated(leaveSharedList, undefined),
       addToList: gated(addToList, undefined),
       removeFromList: gated(removeFromList, undefined),
       isInList,
@@ -1282,9 +1441,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     markSeriesWatched,
     reorderWatchlist,
     customListsArray,
+    sharedListsArray,
     createList,
     renameList,
     deleteList,
+    leaveSharedList,
     addToList,
     removeFromList,
     isInList,

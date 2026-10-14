@@ -10,15 +10,29 @@ import StatsPanel from "./components/StatsPanel.tsx";
 import WatchlistPanel from "./components/WatchlistPanel.tsx";
 import CustomListPanel from "./components/CustomListPanel.tsx";
 import TopPicksPanel from "./components/TopPicksPanel.tsx";
+import type { CustomList } from "../../core/types/library.ts";
 import styles from "./MyListPage.module.css";
 
 type Tab = "seen" | "want" | "progress" | string; // string = id de liste personnalisée
 const FIXED_TABS: Tab[] = ["seen", "want", "progress"];
+// Une liste commune (ownerId défini) a besoin d'un id d'onglet composite
+// (voir allLists ci-dessous) : l'id de liste seul n'est unique que par compte.
+type ListTab = CustomList & { tabId?: string };
 
 export default function MyListContent() {
   const { t } = useTranslation();
-  const { watched, watchlist, customLists, createList } = useLibrary();
+  const { watched, watchlist, customLists, sharedLists, createList } = useLibrary();
   const { status: authStatus } = useAuth();
+  // Listes perso ("miennes") et listes communes dont je suis seulement
+  // membre (ticket "Ma liste commune") partagent les mêmes onglets, mais pas
+  // le même id d'onglet : un id de liste seul n'est unique que par compte,
+  // donc une liste commune utilise une clé composite (voir sharedListTabId)
+  // pour ne jamais entrer en collision avec une de mes propres listes.
+  const sharedListTabId = (listId: string, ownerId: number) => `shared:${ownerId}:${listId}`;
+  const allLists: ListTab[] = [
+    ...customLists,
+    ...sharedLists.map((l) => ({ ...l, tabId: sharedListTabId(l.id, l.ownerId!) })),
+  ];
   // Chaque liste perso a sa propre URL (/profil?tab=ma-liste&liste=<id>) :
   // c'est aussi là qu'est renvoyé le propriétaire qui ouvre le lien public de
   // sa propre liste (voir SharedListPage). Les onglets fixes gardent un état
@@ -27,7 +41,9 @@ export default function MyListContent() {
   const [localTab, setLocalTab] = useState<Tab>("seen");
   const requestedList = searchParams.get("liste");
   const tab: Tab =
-    requestedList && customLists.some((l) => l.id === requestedList) ? requestedList : localTab;
+    requestedList && allLists.some((l) => (l.tabId ?? l.id) === requestedList)
+      ? requestedList
+      : localTab;
 
   function setTab(next: Tab) {
     setLocalTab(next);
@@ -84,10 +100,10 @@ export default function MyListContent() {
   const [newListName, setNewListName] = useState("");
 
   const continuingSeries = useResumableSeries(watchlist);
-  const activeCustomList = customLists.find((l) => l.id === tab);
+  const activeCustomList = allLists.find((l) => (l.tabId ?? l.id) === tab);
 
   // Onglets dans l'ordre d'affichage, pour la navigation au clavier.
-  const tabIds: Tab[] = ["want", "seen", "progress", ...customLists.map((l) => l.id)];
+  const tabIds: Tab[] = ["want", "seen", "progress", ...allLists.map((l) => l.tabId ?? l.id)];
   const idPrefix = useId();
   const tabDomId = (id: Tab) => `${idPrefix}-tab-${id}`;
   const panelDomId = `${idPrefix}-panel`;
@@ -182,15 +198,22 @@ export default function MyListContent() {
             {t("myListPage.tabProgress")}{" "}
             <span className={styles.count}>{continuingSeries.length}</span>
           </button>
-          {customLists.map((list) => (
-            <button key={list.id} {...tabProps(list.id)}>
-              {shares[list.id] && <Icon name="link" className={styles.sharedIcon} />}
-              {list.name} <span className={styles.count}>{list.items.length}</span>
-              {shares[list.id] && (
-                <span className={styles.srOnly}>{t("myListPage.sharedTab")}</span>
-              )}
-            </button>
-          ))}
+          {allLists.map((list) => {
+            const id = list.tabId ?? list.id;
+            return (
+              <button key={id} {...tabProps(id)}>
+                {list.ownerId !== undefined ? (
+                  <Icon name="users" className={styles.sharedIcon} />
+                ) : (
+                  shares[list.id] && <Icon name="link" className={styles.sharedIcon} />
+                )}
+                {list.name} <span className={styles.count}>{list.items.length}</span>
+                {(list.ownerId !== undefined || shares[list.id]) && (
+                  <span className={styles.srOnly}>{t("myListPage.sharedTab")}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <button
           type="button"
@@ -247,7 +270,7 @@ export default function MyListContent() {
           <CustomListPanel
             list={activeCustomList}
             onDeleted={() => setTab("want")}
-            canShare={authStatus === "authenticated"}
+            canShare={authStatus === "authenticated" && activeCustomList.ownerId === undefined}
             shareSlug={shares[activeCustomList.id] ?? null}
             onShareChange={(slug) => setShare(activeCustomList.id, slug)}
           />

@@ -232,3 +232,49 @@ export default function PublicProfileSettings() {
     </SettingsGroup>
   );
 }
+
+// Groupe séparé (ticket "Ma liste commune", retour du 2026-10-11) : qui peut
+// nous ajouter à une liste commune. Indépendant du partage du profil
+// ci-dessus (ça fonctionne même profil privé, listes communes pas liées à
+// /u/<slug>).
+export function ListInviteRestrictionSettings() {
+  const { t } = useTranslation();
+  const { restrictListInvites, setListInviteRestricted } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(enabled: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await setListInviteRestricted(enabled);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("profileShare.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SettingsGroup
+      title={t("listInviteRestriction.groupTitle")}
+      description={t("listInviteRestriction.groupLead")}
+    >
+      <SettingsRow
+        label={t("listInviteRestriction.title")}
+        description={t("listInviteRestriction.hint")}
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={restrictListInvites}
+          aria-label={t("listInviteRestriction.switchLabel")}
+          className={`${styles.switch} ${restrictListInvites ? styles.switchOn : ""}`}
+          onClick={() => toggle(!restrictListInvites)}
+          disabled={busy}
+        />
+        {error && <p className={styles.errorHint}>{error}</p>}
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}

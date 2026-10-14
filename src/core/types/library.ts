@@ -57,6 +57,12 @@ export interface CustomList {
    * "envie de voir". L'ordre du tableau porte aussi le tri manuel. */
   items: LibraryItem[];
   createdAt: number;
+  /** Présent seulement pour une liste commune (ticket "Ma liste commune")
+   * dont le viewer est membre mais pas propriétaire : id du propriétaire
+   * réel, nécessaire pour cibler /api/shared-lists/:ownerId/:listId plutôt
+   * que les routes /api/custom-lists/:id (réservées à ses propres listes).
+   * Absent pour une liste perso normale, même si elle a des membres. */
+  ownerId?: number;
 }
 
 export type CustomListMap = Record<string, CustomList>;
