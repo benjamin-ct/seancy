@@ -22,6 +22,10 @@ export interface DiscoverFilters {
   sortField: DiscoverSortField;
   sortDirection: SortDirection;
   advanced: AdvancedFiltersState;
+  /** Films actuellement en salle (region_release_date résolu par le Worker,
+   * même indicateur que le badge "Salles" de MediaCard) — sans effet pour
+   * les séries, qui n'ont pas de notion de sortie ciné. */
+  inTheatersOnly: boolean;
 }
 
 // Noms des paramètres d'URL, en français comme les routes (?liste=… dans Ma
@@ -34,6 +38,7 @@ const PARAM = {
   useMyPlatforms: "mesPlateformes",
   sortField: "tri",
   sortDirection: "ordre",
+  inTheatersOnly: "enSalle",
 } as const;
 
 const ADVANCED_PARAMS: Record<keyof AdvancedFiltersState, string> = {
@@ -83,6 +88,7 @@ export function parseDiscoverFilters(params: URLSearchParams): DiscoverFilters {
         ? (params.get(PARAM.sortDirection) as SortDirection)
         : DEFAULT_SORT_DIRECTION,
     advanced,
+    inTheatersOnly: params.get(PARAM.inTheatersOnly) === "1",
   };
 }
 
@@ -106,6 +112,7 @@ export function writeDiscoverFilters(
   set(PARAM.useMyPlatforms, filters.useMyPlatforms ? "1" : "");
   set(PARAM.sortField, filters.sortField, DEFAULT_SORT_FIELD);
   set(PARAM.sortDirection, filters.sortDirection, DEFAULT_SORT_DIRECTION);
+  set(PARAM.inTheatersOnly, filters.inTheatersOnly ? "1" : "");
   for (const [key, name] of Object.entries(ADVANCED_PARAMS) as [
     keyof AdvancedFiltersState,
     string,
@@ -149,9 +156,12 @@ export function useDiscoverFilters() {
   const setters = useMemo(
     () => ({
       // Changer de type (Films/Séries) vide les genres : leurs ids diffèrent
-      // entre films et séries.
+      // entre films et séries. "En salle" n'a pas de sens pour les séries
+      // (pas de notion de sortie ciné), donc il repart à zéro aussi.
       setMediaType: (mediaType: MediaType) =>
-        update((current) => (current.mediaType === mediaType ? {} : { mediaType, genreIds: [] })),
+        update((current) =>
+          current.mediaType === mediaType ? {} : { mediaType, genreIds: [], inTheatersOnly: false }
+        ),
       setGenreIds: (genreIds: number[]) => update(() => ({ genreIds })),
       setProviderIds: (providerIds: string[]) => update(() => ({ providerIds })),
       setUseMyPlatforms: (useMyPlatforms: boolean) => update(() => ({ useMyPlatforms })),
@@ -159,6 +169,7 @@ export function useDiscoverFilters() {
       setSortDirection: (sortDirection: SortDirection) => update(() => ({ sortDirection })),
       setAdvanced: (updater: (prev: AdvancedFiltersState) => AdvancedFiltersState) =>
         update((current) => ({ advanced: updater(current.advanced) })),
+      setInTheatersOnly: (inTheatersOnly: boolean) => update(() => ({ inTheatersOnly })),
     }),
     [update]
   );

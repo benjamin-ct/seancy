@@ -1,7 +1,9 @@
 import { useId, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../../core/context/AuthContext.tsx";
+import OAuthButtons from "./OAuthButtons.tsx";
 import styles from "./AuthPages.module.css";
 
 // Audit M15 : sur mobile, la barre légale flottante (LegalLinks) est masquée
@@ -21,6 +23,7 @@ function LegalLine() {
 }
 
 // Formulaire de connexion par lien magique (email, puis code de repli),
+// précédé des boutons Google / Apple quand ils sont configurés,
 // partagé entre la page /connexion et la modale "action réservée aux
 // membres" (voir MembersOnlyDialog). La suite (redirection, fermeture de la
 // modale) est pilotée par l'appelant via le statut d'auth, qui passe à
@@ -29,6 +32,13 @@ export default function LoginForm() {
   const { t } = useTranslation();
   const { requestLink, verifyCode } = useAuth();
   const idPrefix = useId();
+  const location = useLocation();
+  // Page où revenir après une connexion Google / Apple : celle d'origine
+  // pour /connexion (voir LoginPage), la page courante pour la modale.
+  const returnTo =
+    location.pathname === "/connexion"
+      ? (location.state as { from?: string } | null)?.from
+      : `${location.pathname}${location.search}`;
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -128,28 +138,31 @@ export default function LoginForm() {
   }
 
   return (
-    <form className={styles.card} onSubmit={onSubmit}>
-      <label htmlFor={`${idPrefix}-email`}>{t("loginPage.emailLabel")}</label>
-      <input
-        id={`${idPrefix}-email`}
-        type="email"
-        required
-        autoComplete="email"
-        placeholder={t("loginPage.emailPlaceholder")}
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${idPrefix}-email-error` : undefined}
-      />
-      {error && (
-        <p id={`${idPrefix}-email-error`} className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
-      <button className={styles.primaryBtn} type="submit" disabled={sending}>
-        {sending ? t("loginPage.sending") : t("loginPage.submitEmail")}
-      </button>
-      <LegalLine />
-    </form>
+    <>
+      <OAuthButtons returnTo={returnTo} />
+      <form className={styles.card} onSubmit={onSubmit}>
+        <label htmlFor={`${idPrefix}-email`}>{t("loginPage.emailLabel")}</label>
+        <input
+          id={`${idPrefix}-email`}
+          type="email"
+          required
+          autoComplete="email"
+          placeholder={t("loginPage.emailPlaceholder")}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${idPrefix}-email-error` : undefined}
+        />
+        {error && (
+          <p id={`${idPrefix}-email-error`} className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+        <button className={styles.primaryBtn} type="submit" disabled={sending}>
+          {sending ? t("loginPage.sending") : t("loginPage.submitEmail")}
+        </button>
+        <LegalLine />
+      </form>
+    </>
   );
 }

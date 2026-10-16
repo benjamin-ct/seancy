@@ -37,9 +37,16 @@ self.addEventListener("activate", () => self.clients.claim());
 // *) : le service worker refait donc la requête en CORS, ce qui donne une
 // vraie réponse 200 à mettre en cache, sans toucher aux <img>. Si le CORS
 // venait à échouer, repli sur la requête d'origine (non mise en cache).
+// L'en-tête Accept de l'<img> est recopié : image.tmdb.org choisit le format
+// d'après lui, et la nouvelle requête (Accept: */* par défaut) recevait du
+// JPEG au lieu du WebP, environ 30 % plus lourd.
 const corsImages: WorkboxPlugin = {
   requestWillFetch: async ({ request }) =>
-    new Request(request.url, { mode: "cors", credentials: "omit" }),
+    new Request(request.url, {
+      mode: "cors",
+      credentials: "omit",
+      headers: { Accept: request.headers.get("Accept") ?? "image/webp,image/*" },
+    }),
   cacheWillUpdate: async ({ response }) => (response.status === 200 ? response : null),
   handlerDidError: async ({ request }) => fetch(request),
 };

@@ -4,16 +4,16 @@
 #
 # Claude Code retire CLAUDE_CODE_OAUTH_TOKEN de l'environnement des commandes qu'il lance : un
 # `claude -p` lancé depuis l'outil Bash retomberait sur ~/.claude/.credentials.json, expiré.
-# bobine-claude-run écrit donc le jeton dans un fichier (chmod 600) avant chaque exécution, et ce
+# seancy-claude-run écrit donc le jeton dans un fichier (chmod 600) avant chaque exécution, et ce
 # script le relit. Choix assumé (carte Trello « test », option 1) : le jeton devient lisible par
 # les commandes lancées par Claude.
 set -euo pipefail
 
-TOKEN_FILE="${BOBINE_CLAUDE_TOKEN_FILE:-$HOME/.bobine-claude-token}"
+TOKEN_FILE="${SEANCY_CLAUDE_TOKEN_FILE:-$HOME/.seancy-claude-token}"
 
 if [ ! -s "$TOKEN_FILE" ]; then
-  echo "bobine-claude-dev : jeton introuvable ($TOKEN_FILE). Il est écrit par bobine-claude-run ;" \
-    "vérifier CLAUDE_CODE_OAUTH_TOKEN dans le .env du serveur puis bobine-rebuild claude." >&2
+  echo "seancy-claude-dev : jeton introuvable ($TOKEN_FILE). Il est écrit par seancy-claude-run ;" \
+    "vérifier CLAUDE_CODE_OAUTH_TOKEN dans le .env du serveur puis seancy-rebuild claude." >&2
   exit 78
 fi
 

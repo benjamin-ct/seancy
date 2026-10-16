@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../core/context/AuthContext.tsx";
-import { gravatarUrl } from "../../../shared/lib/gravatar.ts";
 import {
   loadAvatarSource,
   renderAvatarImage,
   type AvatarCrop,
 } from "../../../shared/lib/avatarImage.ts";
-import { Icon } from "../../../shared/components/index.ts";
+import { AccountAvatar, Icon } from "../../../shared/components/index.ts";
 import AvatarCropDialog from "./AvatarCropDialog.tsx";
 import EmailChangeForm from "./EmailChangeForm.tsx";
+import SignInMethods from "./SignInMethods.tsx";
 import { SettingsGroup, SettingsRow } from "./SettingsGroup.tsx";
 import styles from "./AccountSettings.module.css";
 
@@ -23,51 +23,6 @@ function normalizeUsername(value: string): string {
 }
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid" | "error";
-
-/** Initiale affichée dans l'avatar quand il n'y a aucune photo. */
-function initial(name: string, fallback: string): string {
-  return (name.trim() || fallback).charAt(0).toUpperCase() || "?";
-}
-
-/**
- * Avatar du compte : photo personnelle si elle existe, sinon photo Gravatar,
- * sinon l'initiale. Chaque image qui ne se charge pas (404 Gravatar, photo
- * supprimée depuis un autre appareil) laisse la place à la suivante.
- */
-export function AccountAvatar({ name, className }: { name: string; className: string }) {
-  const { email, avatarVersion } = useAuth();
-  const sources = useMemo(
-    () =>
-      [
-        avatarVersion !== null ? `/api/account/avatar?v=${avatarVersion}` : null,
-        email ? gravatarUrl(email) : null,
-      ].filter((url): url is string => url !== null),
-    [email, avatarVersion]
-  );
-  const [failedCount, setFailedCount] = useState(0);
-  // Repart de la première source quand elles changent (nouvelle photo,
-  // connexion avec un autre compte), sinon un précédent échec resterait
-  // collé.
-  useEffect(() => {
-    setFailedCount(0);
-  }, [sources]);
-  const url = sources[failedCount];
-  return (
-    <div className={className} aria-hidden="true">
-      {url ? (
-        <img
-          key={url}
-          className={styles.avatarImg}
-          src={url}
-          alt=""
-          onError={() => setFailedCount((n) => n + 1)}
-        />
-      ) : (
-        initial(name, email || "?")
-      )}
-    </div>
-  );
-}
 
 // Choix / suppression de la photo personnelle, sous l'aperçu de l'identité.
 // La photo choisie s'ouvre d'abord dans la modale de recadrage, puis est
@@ -451,6 +406,8 @@ export default function AccountSettings() {
         )}
         {emailChanged && <p className={styles.okHint}>{t("accountCard.emailChange.done")}</p>}
       </SettingsRow>
+
+      <SignInMethods />
 
       <SettingsRow label={t("accountCard.session")} description={t("accountCard.sessionHint")}>
         <button type="button" className={styles.secondaryBtn} onClick={logout}>

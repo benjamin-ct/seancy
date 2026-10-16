@@ -34,6 +34,10 @@ export default function PrivacyPolicyPage() {
             {t("privacyPolicyPage.dataCollected.account.text")}
           </li>
           <li>
+            <strong>{t("privacyPolicyPage.dataCollected.signInProviders.label")}</strong>
+            {t("privacyPolicyPage.dataCollected.signInProviders.text")}
+          </li>
+          <li>
             <strong>{t("privacyPolicyPage.dataCollected.library.label")}</strong>
             {t("privacyPolicyPage.dataCollected.library.text")}
           </li>
@@ -86,6 +90,14 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>{t("privacyPolicyPage.sharing.recaptcha.label")}</strong>
             {t("privacyPolicyPage.sharing.recaptcha.text")}
+          </li>
+          <li>
+            <strong>{t("privacyPolicyPage.sharing.google.label")}</strong>
+            {t("privacyPolicyPage.sharing.google.text")}
+          </li>
+          <li>
+            <strong>{t("privacyPolicyPage.sharing.apple.label")}</strong>
+            {t("privacyPolicyPage.sharing.apple.text")}
           </li>
           <li>
             <strong>{t("privacyPolicyPage.sharing.cloudflare.label")}</strong>

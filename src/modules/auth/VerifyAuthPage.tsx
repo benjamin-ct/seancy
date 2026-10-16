@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import { Loading } from "../../shared/components/index.ts";
+import { safeInternalPath } from "./oauth.ts";
 import styles from "./AuthPages.module.css";
 
 export default function VerifyAuthPage() {
@@ -14,6 +15,8 @@ export default function VerifyAuthPage() {
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [error, setError] = useState<string | null>(null);
   const attempted = useRef(false);
+  // Connexion Google / Apple : page d'origine où revenir directement.
+  const next = safeInternalPath(searchParams.get("next"));
 
   useEffect(() => {
     const token = searchParams.get("token");
@@ -37,6 +40,10 @@ export default function VerifyAuthPage() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, verify]);
+
+  if (status === "success" && next) {
+    return <Navigate to={next} replace />;
+  }
 
   return (
     <div className={styles.page}>

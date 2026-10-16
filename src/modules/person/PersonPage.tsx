@@ -20,6 +20,7 @@ import {
 } from "../../shared/components/index.ts";
 import FrequentCollaborators from "./components/FrequentCollaborators.tsx";
 import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
+import { toMediaItem } from "../../shared/lib/mediaItem.ts";
 import posterStyles from "../../shared/styles/posterAccents.module.css";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
 import type {
@@ -140,7 +141,7 @@ function CreditsSection({
           {visible.map((item) => (
             <MediaCard
               key={`${item.media_type}:${item.id}`}
-              item={{ ...item, mediaType: item.media_type }}
+              item={toMediaItem(item, item.media_type)}
             />
           ))}
         </div>

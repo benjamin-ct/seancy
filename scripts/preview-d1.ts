@@ -6,9 +6,8 @@
 // supprimée, réutilisée à chaque push sur la branche `develop`.
 //
 // Le plan D1 gratuit limite le compte à 10 bases au total (voir
-// developers.cloudflare.com/d1/platform/limits) : prod (`seancy-notifications`,
-// plus l'ancienne `bobine-notifications` tant qu'elle n'est pas supprimée) et
-// `seancy-develop` comptent dedans en permanence, donc au plus 8 previews de
+// developers.cloudflare.com/d1/platform/limits) : prod (`seancy-notifications`)
+// et `seancy-develop` comptent dedans en permanence, donc au plus 8 previews de
 // PR simultanées sur le reste du quota. `provision`/`provisionDevelop`
 // patientent qu'une place se libère (fermeture/merge d'une autre PR) plutôt
 // que d'échouer immédiatement, comme demandé sur le ticket D1 isolée par PR.
@@ -28,10 +27,6 @@ const SOURCE_CONFIG_PATH = "wrangler.jsonc";
 const PREVIEW_CONFIG_PATH = "wrangler.preview.generated.jsonc";
 const PROD_DATABASE_NAME = "seancy-notifications";
 const PREVIEW_DATABASE_PREFIX = "seancy-preview-pr-";
-// Bases créées avant le renommage Seancy, encore nettoyées à la fermeture
-// de leur PR.
-const LEGACY_PREVIEW_DATABASE_PREFIX = "bobine-preview-pr-";
-
 const DEVELOP_DATABASE_NAME = "seancy-develop";
 const DEVELOP_CONFIG_PATH = "wrangler.develop.generated.jsonc";
 const DEVELOP_SEED_PATH = "scripts/fixtures/develop-seed.sql";
@@ -284,10 +279,10 @@ function resetDevelop(): void {
 }
 
 function cleanup(prNumber: string): void {
-  const dbNames = [dbNameForPr(prNumber), `${LEGACY_PREVIEW_DATABASE_PREFIX}${prNumber}`];
-  const existing = listDatabases().filter((db) => dbNames.includes(db.name));
+  const dbName = dbNameForPr(prNumber);
+  const existing = listDatabases().filter((db) => db.name === dbName);
   if (existing.length === 0) {
-    console.log(`Aucune base de preview à nettoyer pour cette PR ('${dbNames[0]}' n'existe pas).`);
+    console.log(`Aucune base de preview à nettoyer pour cette PR ('${dbName}' n'existe pas).`);
     return;
   }
   for (const { name } of existing) {

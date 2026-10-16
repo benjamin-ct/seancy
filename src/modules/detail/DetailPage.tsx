@@ -43,6 +43,7 @@ import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
 import { STAR_LABEL_KEYS } from "../../shared/lib/ratingTier.ts";
 import { pop } from "../../shared/lib/motion.ts";
 import { getMediaPreview, type MediaPreview } from "../../shared/lib/mediaPreviewCache.ts";
+import { toMediaItem } from "../../shared/lib/mediaItem.ts";
 import posterStyles from "../../shared/styles/posterAccents.module.css";
 import dropdownStyles from "../../shared/components/Dropdown/Dropdown.module.css";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
@@ -956,10 +957,7 @@ export default function DetailPage() {
           </div>
           <div className={gridStyles.grid}>
             {recommendations.slice(0, 12).map((item) => (
-              <MediaCard
-                key={item.id}
-                item={{ ...item, mediaType: item.media_type || mediaType }}
-              />
+              <MediaCard key={item.id} item={toMediaItem(item, mediaType)} />
             ))}
           </div>
         </section>

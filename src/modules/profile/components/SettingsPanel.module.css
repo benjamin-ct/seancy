@@ -73,11 +73,16 @@
   outline: none;
 }
 
+/* 5 lignes visibles avant scroll sur desktop (2 colonnes = 10 entrées, puis
+   scroll) : 5 * 48px (hauteur de ligne, voir .provider) + 4 * 8px (gap). Sur
+   mobile, 1 seule colonne : la hauteur d'origine (420px) revient dans le
+   media query ci-dessous, pour ne pas réduire la liste visible là où elle
+   n'a jamais posé de problème. */
 .providerGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  max-height: 420px;
+  max-height: 272px;
   overflow-y: auto;
   /* Sans ça, une fois cette liste scrollée jusqu'à son bord, le geste de
      scroll (molette/trackpad/tactile) continue dans la page : sur
@@ -92,6 +97,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+  min-height: 48px;
   padding: 9px 14px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -149,6 +155,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  /* Même traitement que .providerGrid ci-dessus : 5 lignes visibles avant
+     scroll sur desktop (demande de review sur les listes Pays/Langue,
+     étendue à Genres à exclure par cohérence). */
+  max-height: 272px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .genreCheckbox {
@@ -498,9 +510,12 @@
 }
 
 @media (max-width: 860px) {
+  /* En une colonne sur mobile, la hauteur « 5 lignes » du desktop (272px,
+     voir plus haut) est trop courte — on retrouve la hauteur d'origine. */
   .providerGrid,
   .genreGrid {
     grid-template-columns: minmax(0, 1fr);
+    max-height: 420px;
   }
 
   /* Retour de review : en une colonne, la trentaine de genres fait une
@@ -508,12 +523,6 @@
      plateformes (voir le commentaire d'overscroll-behavior plus haut). */
   .genresLoading {
     min-height: 480px;
-  }
-
-  .genreGrid {
-    max-height: 420px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
   }
 
   .segmented {

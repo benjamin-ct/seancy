@@ -1,6 +1,6 @@
 # ssh-keys/
 
-Ce dossier est monté dans le conteneur `bobine-repo` sur `/home/claudeuser/.ssh`, pour lui
+Ce dossier est monté dans le conteneur `seancy-repo` sur `/home/claudeuser/.ssh`, pour lui
 permettre de cloner/pousser sur GitHub via SSH.
 
 Il ne doit **jamais** contenir de clé privée versionnée dans git (voir `.gitignore` à la racine

@@ -9,7 +9,8 @@ import {
   formatFullDate,
 } from "../../../core/api/tmdb.ts";
 import { useNearViewport } from "../../hooks/useNearViewport.ts";
-import { useLibrary } from "../../../core/context/LibraryContext.tsx";
+import { useLibraryActions } from "../../../core/context/LibraryContext.tsx";
+import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrarySelectors.ts";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { posterAccentFromGenres } from "../../lib/posterAccent.ts";
@@ -22,6 +23,7 @@ import type {
 } from "../../../core/types/tmdb.ts";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
 import posterStyles from "../../styles/posterAccents.module.css";
+import skeletonStyles from "../../styles/skeleton.module.css";
 import styles from "./MediaCard.module.css";
 
 interface MediaCardProps {
@@ -49,6 +51,11 @@ interface MediaCardProps {
   /** Opt-in (liste publique, tri « Ordre de X ») : numéro « 01 », « 02 »…
    * à la place du badge Film / Série. */
   position?: number;
+  /** Opt-in (grille "Pour toi", voir DiscoverPage) : 3e pastille qui
+   * masque la carte et enregistre un signal négatif pour les
+   * recommandations. Absent ailleurs — un visiteur de Nouveautés ou de Ma
+   * liste n'a pas cette action. */
+  onNotInterested?: (item: MediaItem) => void;
 }
 
 // Largeur affichée des affiches de la grille (voir mediaGrid.module.css : 2,
@@ -68,9 +75,10 @@ function MediaCard({
   genreName,
   ownerRating,
   position,
+  onNotInterested,
 }: MediaCardProps) {
   const { t } = useTranslation();
-  const { isWatched, isInWatchlist, toggleWatched, toggleWatchlist } = useLibrary();
+  const { toggleWatched, toggleWatchlist } = useLibraryActions();
   const { getTheatricalStatus, region } = useRegion();
   const { locale } = useLocale();
   const theatricalBadges: Record<string, string> = {
@@ -87,8 +95,8 @@ function MediaCard({
   // enrichDiscoverResultsWithRegionDate). `null` (enrichi, rien trouvé pour
   // cette région) retombe correctement sur item.release_date via `||`.
   const date = item.region_release_date || item.release_date || item.first_air_date;
-  const watched = isWatched(mediaType, item.id);
-  const inWatchlist = isInWatchlist(mediaType, item.id);
+  const watched = useIsWatched(mediaType, item.id);
+  const inWatchlist = useIsInWatchlist(mediaType, item.id);
 
   // Alimente le cache de préview (voir mediaPreviewCache) pour que la fiche
   // (DetailPage) puisse préafficher affiche/titre/date pendant son propre
@@ -120,6 +128,12 @@ function MediaCard({
   // hors écran — pic qui épuise le quota de la clé TMDB partagée.
   const posterRef = useRef<HTMLDivElement>(null);
   const isNearViewport = useNearViewport(posterRef, showProviderBadge);
+
+  // Shimmer tant que l'affiche n'a pas fini de charger (retour de review sur
+  // #296 : le shimmer restait affiché en permanence, même une fois l'image
+  // chargée, car la classe ne dépendait que de la présence d'un poster_path,
+  // jamais de son état de chargement réel).
+  const [posterLoaded, setPosterLoaded] = useState(false);
 
   const [provider, setProvider] = useState<WatchProviderEntry | null>(null);
   // Distingue "pas encore vérifié" de "vérifié, rien trouvé".
@@ -187,7 +201,10 @@ function MediaCard({
   return (
     <div className={styles.card}>
       <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
-        <div className={styles.poster} ref={posterRef}>
+        <div
+          className={`${styles.poster} ${item.poster_path && !posterLoaded ? skeletonStyles.block : ""}`}
+          ref={posterRef}
+        >
           {item.poster_path ? (
             <img
               src={posterUrl(item.poster_path) ?? undefined}
@@ -197,6 +214,8 @@ function MediaCard({
               alt=""
               loading="lazy"
               decoding="async"
+              onLoad={() => setPosterLoaded(true)}
+              onError={() => setPosterLoaded(true)}
             />
           ) : (
             <div className={`${styles.noPoster} ${posterStyles[accentKey]}`} aria-hidden="true">
@@ -289,6 +308,17 @@ function MediaCard({
             title={t("mediaCard.markAsWatched")}
           >
             <Icon name="check" size={16} strokeWidth={watched ? 3 : 1.5} />
+          </button>
+        )}
+        {onNotInterested && (
+          <button
+            type="button"
+            className={styles.pastille}
+            onClick={() => onNotInterested(item)}
+            aria-label={t("mediaCard.notInterestedNamed", { title })}
+            title={t("mediaCard.notInterested")}
+          >
+            <Icon name="eyeOff" size={16} strokeWidth={1.5} />
           </button>
         )}
       </div>

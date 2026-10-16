@@ -14,6 +14,10 @@ import {
   applyLibraryChanges,
   getCustomListsForUser,
   replaceCustomListsForUser,
+  upsertCustomListForUser,
+  deleteCustomListForUser,
+  countCustomListsForUser,
+  customListExistsForUser,
   getListSharesForUser,
   shareListForUser,
   unshareListForUser,
@@ -29,6 +33,10 @@ import {
   TOP_PICKS_MAX,
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
+  getNotInterestedForUser,
+  addNotInterested,
+  getRecommendationCache,
+  setRecommendationCache,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -49,6 +57,13 @@ import {
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
+import {
+  buildTasteProfile,
+  getRecommendationCandidates,
+  rankRecommendations,
+  type RecommendationMediaType,
+} from "./recommendations.ts";
+import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
   isValidEmail,
@@ -70,6 +85,19 @@ import {
   type EmailLocale,
   type AuthUser,
 } from "./auth.ts";
+import {
+  configuredProviders,
+  consumeOAuthState,
+  exchangeCode,
+  findIdentityUser,
+  isOAuthProvider,
+  linkIdentity,
+  listIdentities,
+  sanitizeReturnTo,
+  startOAuth,
+  unlinkIdentity,
+  type OAuthProvider,
+} from "./oauth.ts";
 
 const EMAIL_LOCALES: EmailLocale[] = ["fr", "en"];
 
@@ -87,17 +115,20 @@ import {
   sanitizeGenrePrefs,
   sanitizeKeyList,
   sanitizeCustomListsPayload,
+  sanitizeSingleCustomList,
+  MAX_CUSTOM_LISTS,
   sanitizeDisplayName,
   sanitizeIdList,
   sanitizeIsoCodeList,
   LANGUAGE_CODE_PATTERN,
   COUNTRY_CODE_PATTERN,
   sanitizeReminder,
+  isAllowedPushEndpoint,
+  isValidPushKeys,
 } from "./validate.ts";
 import { verifyRecaptcha } from "./recaptcha.ts";
 import { getTheatricalIndex } from "./tmdb.ts";
 import {
-  LEGACY_PRODUCTION_HOSTNAME,
   PRODUCTION_HOSTNAME,
   REDIRECTED_TO_PRODUCTION_HOSTNAMES,
   isProductionHostname,
@@ -253,6 +284,19 @@ const SEARCH_INDEX_SYNC_CRON = "30 7 * * *";
 const RATE_LIMIT_RESPONSE = (): Response =>
   json({ error: "Trop de requêtes. Réessayez dans quelques minutes." }, 429);
 
+// Audit M4 : plafond de taille de corps pour les écritures authentifiées à
+// fort volume potentiel (library, library/sync, custom-lists, excluded-genres,
+// favorite-providers) — large marge au-dessus d'un payload légitime (ex.
+// 1000 items de liste perso, voir MAX_CUSTOM_LIST_ITEMS), mais qui écarte
+// avant même `request.json()` un corps disproportionné.
+const MAX_WRITE_BODY_BYTES = 1_000_000;
+
+function writeBodyTooLarge(request: Request): boolean {
+  return Number(request.headers.get("content-length") ?? 0) > MAX_WRITE_BODY_BYTES;
+}
+
+const BODY_TOO_LARGE_RESPONSE = (): Response => json({ error: "Requête trop volumineuse." }, 413);
+
 // Variante du proxy TMDB : `retry-after` (fin de la fenêtre d'une minute de
 // ses plafonds) permet à tmdbFetch de réessayer tout seul au bon moment
 // plutôt que d'afficher une erreur.
@@ -312,17 +356,16 @@ async function handleSubscribe(request: Request, env: Env): Promise<Response> {
   };
   if (
     typeof endpoint !== "string" ||
-    !endpoint.startsWith("https://") ||
-    !keys?.p256dh ||
-    !keys?.auth
+    !isAllowedPushEndpoint(endpoint) ||
+    !isValidPushKeys(keys?.p256dh, keys?.auth)
   ) {
     return json({ error: "Abonnement push incomplet ou invalide (endpoint/keys manquants)." }, 400);
   }
 
   const subscriptionId = await upsertSubscription(env.DB, {
     endpoint,
-    p256dh: String(keys.p256dh),
-    auth: String(keys.auth),
+    p256dh: String(keys?.p256dh),
+    auth: String(keys?.auth),
     locale: sanitizeSubscriptionLocale(locale),
     account: await subscriptionAccountOf(request, env),
   });
@@ -816,23 +859,144 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  return json(
-    {
-      email: user.email,
-      displayName: user.displayName,
-      shareSlug: user.shareSlug,
-      username: user.username,
-      avatarVersion: await getAvatarVersion(env.DB, user.id),
-    },
-    200,
-    // Session ouverte sous les anciens noms de cookies (bobine_*) : appelé à
-    // chaque démarrage de l'app, c'est ici qu'elle passe aux nouveaux noms.
-    user.legacyCookie
-      ? { "set-cookie": sessionCookieHeaders(request, user.sessionToken, user.expiresAt) }
-      : undefined
+  return json({
+    email: user.email,
+    displayName: user.displayName,
+    shareSlug: user.shareSlug,
+    username: user.username,
+    avatarVersion: await getAvatarVersion(env.DB, user.id),
+  });
+}
+
+// Connexion avec Google / Apple (voir worker/oauth.ts) ----------------------
+
+// Redirection sans cache : chaque retour du fournisseur est à usage unique.
+function redirectTo(location: string): Response {
+  return new Response(null, { status: 303, headers: { location, "cache-control": "no-store" } });
+}
+
+function handleOAuthProviders(env: Env): Response {
+  return json({ providers: configuredProviders(env) });
+}
+
+async function handleOAuthStart(request: Request, env: Env, url: URL): Promise<Response> {
+  const provider = url.searchParams.get("provider");
+  const linking = url.searchParams.get("mode") === "link";
+  const failure = (reason: string) =>
+    redirectTo(linking ? `/profil?oauth=${reason}` : `/connexion?oauth=${reason}`);
+  if (!isOAuthProvider(provider) || !configuredProviders(env).includes(provider)) {
+    return failure("unavailable");
+  }
+  if (
+    !checkRateLimitInMemory(`oauth:ip:${getClientIp(request)}`, { limit: 20, windowMs: 60_000 })
+  ) {
+    return failure("rate-limited");
+  }
+  let userId: number | null = null;
+  if (linking) {
+    const user = await getUserFromRequest(env.DB, request);
+    if (!user) {
+      return redirectTo("/connexion");
+    }
+    userId = user.id;
+  }
+  return redirectTo(
+    await startOAuth(
+      env.DB,
+      env,
+      url.origin,
+      provider,
+      userId,
+      sanitizeReturnTo(url.searchParams.get("returnTo"))
+    )
   );
 }
 
+// GET (Google) ou POST form_post (Apple, requête inter-sites : pas de
+// cookie de session attendu ici, tout vient du parcours enregistré).
+async function handleOAuthCallback(
+  request: Request,
+  env: Env,
+  url: URL,
+  provider: OAuthProvider
+): Promise<Response> {
+  const params =
+    request.method === "POST"
+      ? new URLSearchParams(await request.text().catch(() => ""))
+      : url.searchParams;
+  const state = await consumeOAuthState(env.DB, provider, params.get("state"));
+  if (!state) {
+    return redirectTo("/connexion?oauth=expired");
+  }
+  const failure = (reason: string) =>
+    redirectTo(state.userId ? `/profil?oauth=${reason}` : `/connexion?oauth=${reason}`);
+  const code = params.get("code");
+  if (!code) {
+    // Refus ou abandon chez le fournisseur (error=access_denied,
+    // user_cancelled_authorize…).
+    return failure("cancelled");
+  }
+
+  let identity;
+  try {
+    identity = await exchangeCode(env, url.origin, provider, code, state);
+  } catch (err) {
+    logError(`Connexion ${provider} en échec :`, err);
+    return failure("failed");
+  }
+
+  if (state.userId) {
+    const result = await linkIdentity(env.DB, state.userId, provider, identity);
+    return redirectTo(
+      `/profil?oauth=${result === "already-linked" ? "linked" : result}&provider=${provider}`
+    );
+  }
+
+  let email = (await findIdentityUser(env.DB, provider, identity.subject))?.email ?? null;
+  if (!email) {
+    if (!identity.email) {
+      return failure("no-email");
+    }
+    // Compte de même email vérifié (créé s'il n'existe pas) : le fournisseur
+    // atteste le contrôle de cette adresse, comme le ferait le lien magique.
+    const user = await findOrCreateUser(env.DB, identity.email);
+    const result = await linkIdentity(env.DB, user.id, provider, identity);
+    if (result === "provider-taken") {
+      // Le compte est déjà associé à un autre compte de ce fournisseur : on
+      // ne remplace pas l'association en silence.
+      return failure("provider-taken");
+    }
+    email = user.email;
+  }
+  const { token } = await createMagicLink(env.DB, email);
+  // Même destination par défaut que LoginPage.
+  const next = encodeURIComponent(state.returnTo ?? "/profil?tab=ma-liste");
+  return redirectTo(`/auth/verify?token=${token}&next=${next}`);
+}
+
+async function handleListIdentities(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  return json({
+    identities: await listIdentities(env.DB, user.id),
+    providers: configuredProviders(env),
+  });
+}
+
+async function handleUnlinkIdentity(request: Request, env: Env, url: URL): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  const provider = url.searchParams.get("provider");
+  if (!isOAuthProvider(provider)) {
+    return json({ error: "Fournisseur inconnu." }, 400);
+  }
+  await unlinkIdentity(env.DB, user.id, provider);
+  return json({ ok: true });
+}
 // Photo de profil personnelle (ticket « Ajouter son propre avatar ») --------
 //
 // Même garde IDOR que le reste : le compte vient uniquement du cookie. Le
@@ -1536,6 +1700,12 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
+  if (!(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library:user:${user.id}` })).success) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -1567,6 +1737,14 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library-sync:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1601,15 +1779,26 @@ async function handleGetCustomLists(request: Request, env: Env): Promise<Respons
   return json(customLists);
 }
 
-// Remplacement complet à chaque appel (voir LibraryContext : anti-rebond côté
-// client, un PUT par salve de changements) — pas de synchronisation
-// incrémentale ici, contrairement à /api/library/sync : une liste perso
-// change par opérations multi-lignes (création, renommage, glisser-déposer)
-// qu'un diff incrémental compliquerait pour un gain nul à cette échelle.
+// Remplacement complet de TOUTES les listes perso — réservé depuis l'audit
+// M4 à la fusion initiale d'un nouvel appareil (voir LibraryContext,
+// CUSTOM_LISTS_SYNCED_FOR_KEY), un vrai remplacement complet y est correct
+// et rare. Toute modification normale passe désormais par
+// handlePutCustomList/handleDeleteCustomList ci-dessous (une seule liste à
+// la fois) : avant, éditer un item d'une liste réécrivait aussi toutes les
+// autres listes du compte en D1 (amplification déjà observée, voir ticket
+// "Milliers de calls workers").
 async function handlePutCustomLists(request: Request, env: Env): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-lists:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1618,6 +1807,68 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
     return json({ error: "JSON invalide." }, 400);
   }
   await replaceCustomListsForUser(env.DB, user.id, sanitizeCustomListsPayload(body));
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+// Remplacement d'UNE SEULE liste perso (audit M4, « synchro incrémentale ») :
+// chemin normal pour toute création/modification (création, renommage,
+// ajout/retrait d'item, glisser-déposer) une fois la fusion initiale faite.
+// Toujours un remplacement complet DE CETTE LISTE (pas de diff item par
+// item) : une liste change par opérations multi-lignes, comme documenté sur
+// replaceCustomListsForUser — seule la granularité change, pas la stratégie.
+async function handlePutCustomList(request: Request, env: Env, listId: string): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const list = sanitizeSingleCustomList(listId, body);
+  if (!list) {
+    return json({ error: "Liste invalide." }, 400);
+  }
+  // Le plafond total (MAX_CUSTOM_LISTS) ne peut être vérifié qu'ici, pas dans
+  // le sanitizer : celui-ci ne voit qu'une liste à la fois, pas le total déjà
+  // en base. Un ré-envoi d'une liste déjà existante (simple édition) reste
+  // toujours accepté, seule la création d'une liste EN PLUS du plafond est
+  // refusée.
+  const alreadyExists = await customListExistsForUser(env.DB, user.id, list.id);
+  if (!alreadyExists && (await countCustomListsForUser(env.DB, user.id)) >= MAX_CUSTOM_LISTS) {
+    return json({ error: "Nombre maximal de listes atteint.", reason: "too-many-lists" }, 400);
+  }
+  await upsertCustomListForUser(env.DB, user.id, list);
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+async function handleDeleteCustomList(
+  request: Request,
+  env: Env,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await deleteCustomListForUser(env.DB, user.id, listId);
   publishToUser(request, user.id, { type: "custom-lists" });
   return json({ ok: true });
 }
@@ -1702,6 +1953,15 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   if (user instanceof Response) {
     return user;
   }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `excluded-genres:user:${user.id}` }))
+      .success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -1712,6 +1972,119 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   const merge = (body as { merge?: unknown })?.merge === true;
   await replaceExcludedGenresForUser(env.DB, user.id, genreIds, merge);
   publishToUser(request, user.id, { type: "excluded-genres" });
+  return json({ ok: true });
+}
+
+// Recommandations personnalisées "Pour toi" ------------------------------
+// Tout le calcul (profil de goûts, scoring, diversité) vit dans
+// recommendations.ts ; ce handler ne fait que rassembler les signaux
+// stockés (bibliothèque, genres exclus, "pas intéressé") et renvoyer le
+// résultat. Réservé aux comptes connectés : un visiteur anonyme reste sur
+// le comportement existant (discover() classique) côté client, voir
+// DiscoverPage.tsx.
+const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
+// Retour de review sur la carte Trello : relire toute la bibliothèque et
+// rescorer les candidats à chaque ouverture de la page d'accueil est trop
+// coûteux (quota TMDB/CPU du Worker). Le résultat est donc précalculé par
+// lot et mis en cache (migration 0020, voir db.ts) ; on ne recalcule que si
+// le cache a dépassé sa durée de vie ou s'il ne couvre pas la page demandée
+// (`offset` + `limit`, voir scroll infini côté DiscoverPage.tsx). La taille
+// du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
+// pages suivantes soient servies par le même lot sans recalcul.
+const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const RECOMMENDATION_CACHE_SIZE = 96;
+
+async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (!checkRateLimitInMemory(`recommendations:user:${user.id}`, RECOMMENDATIONS_RATE_LIMIT)) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  const url = new URL(request.url);
+  const typeParam = url.searchParams.get("type") || "all";
+  const mediaTypes: RecommendationMediaType[] =
+    typeParam === "movie" || typeParam === "tv" ? [typeParam] : ["movie", "tv"];
+  const limitParam = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 40) : 20;
+  const offsetParam = Number(url.searchParams.get("offset"));
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
+
+  const cached = await getRecommendationCache(env.DB, user.id, typeParam);
+  const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
+  if (cached && isFresh && cached.items.length >= offset + limit) {
+    const pageItems = cached.items.slice(offset, offset + limit);
+    return json({
+      items: pageItems,
+      coldStart: cached.coldStart,
+      hasMore: offset + pageItems.length < cached.items.length,
+    });
+  }
+
+  const [library, excludedGenreIds, notInterested] = await Promise.all([
+    getLibraryForUser(env.DB, user.id),
+    getExcludedGenresForUser(env.DB, user.id),
+    getNotInterestedForUser(env.DB, user.id),
+  ]);
+  const watched = Object.values(library.watched);
+  const watchlist = Object.values(library.watchlist);
+  const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
+
+  const candidateLists = await Promise.all(
+    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+  );
+  const candidates = candidateLists.flat();
+  const items = rankRecommendations(candidates, profile, {
+    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
+  });
+  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  const pageItems = items.slice(offset, offset + limit);
+  return json({
+    items: pageItems,
+    coldStart: profile.isColdStart,
+    hasMore: offset + pageItems.length < items.length,
+  });
+}
+
+async function handlePostNotInterested(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `not-interested:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const r = body as {
+    mediaType?: unknown;
+    tmdbId?: unknown;
+    genreIds?: unknown;
+    releaseDate?: unknown;
+  };
+  if (!isMediaType(r.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(r.tmdbId);
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  const genreIds = sanitizeIdList(r.genreIds);
+  const releaseDate =
+    typeof r.releaseDate === "string" && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(r.releaseDate)
+      ? r.releaseDate.slice(0, 10)
+      : null;
+  await addNotInterested(env.DB, user.id, r.mediaType, tmdbId, genreIds, releaseDate);
   return json({ ok: true });
 }
 
@@ -1732,6 +2105,15 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `favorite-providers:user:${user.id}` }))
+      .success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -2213,14 +2595,6 @@ export default withSentry({
     // profil, liste), qui passent par ici pour leurs balises de partage
     // (voir page-meta.ts). Réponses reconstruites, d'où withSecurityHeaders.
     if (!url.pathname.startsWith("/api/")) {
-      // Ancienne URL de prod : liens partagés, robots et sitemap renvoient
-      // définitivement vers seancy.com. Les autres pages sont des assets
-      // servis sans passer par ici, redirigés côté client (src/main.tsx).
-      // /api/* reste servi pour les onglets encore ouverts sur l'ancienne
-      // URL, le temps qu'ils se rechargent.
-      if (url.hostname === LEGACY_PRODUCTION_HOSTNAME) {
-        return Response.redirect(`https://${PRODUCTION_HOSTNAME}${url.pathname}${url.search}`, 301);
-      }
       if (url.pathname === "/robots.txt") {
         return withSecurityHeaders(serveRobots(url));
       }
@@ -2376,6 +2750,28 @@ async function routeRequest(
     return handleMe(request, env);
   }
 
+  if (url.pathname === "/api/auth/providers" && request.method === "GET") {
+    return handleOAuthProviders(env);
+  }
+
+  if (url.pathname === "/api/auth/oauth/start" && request.method === "GET") {
+    return handleOAuthStart(request, env, url);
+  }
+
+  if (url.pathname.startsWith("/api/auth/oauth/callback/")) {
+    const provider = url.pathname.slice("/api/auth/oauth/callback/".length);
+    if (isOAuthProvider(provider) && (request.method === "GET" || request.method === "POST")) {
+      return handleOAuthCallback(request, env, url, provider);
+    }
+  }
+
+  if (url.pathname === "/api/account/identities" && request.method === "GET") {
+    return handleListIdentities(request, env);
+  }
+  if (url.pathname === "/api/account/identities" && request.method === "DELETE") {
+    return handleUnlinkIdentity(request, env, url);
+  }
+
   if (url.pathname === "/api/auth/logout" && request.method === "POST") {
     return handleLogout(request, env);
   }
@@ -2498,6 +2894,14 @@ async function routeRequest(
     return handlePutCustomLists(request, env);
   }
 
+  const singleCustomListMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)$/);
+  if (singleCustomListMatch && request.method === "PUT") {
+    return handlePutCustomList(request, env, singleCustomListMatch[1]);
+  }
+  if (singleCustomListMatch && request.method === "DELETE") {
+    return handleDeleteCustomList(request, env, singleCustomListMatch[1]);
+  }
+
   if (url.pathname === "/api/list-shares" && request.method === "GET") {
     return handleGetListShares(request, env);
   }
@@ -2513,6 +2917,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/excluded-genres" && request.method === "PUT") {
     return handlePutExcludedGenres(request, env);
+  }
+
+  if (url.pathname === "/api/recommendations" && request.method === "GET") {
+    return handleGetRecommendations(request, env);
+  }
+
+  if (url.pathname === "/api/not-interested" && request.method === "POST") {
+    return handlePostNotInterested(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

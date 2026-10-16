@@ -80,6 +80,11 @@
       "name": "AVATAR_RATE_LIMITER",
       "namespace_id": "1002",
       "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "LIBRARY_WRITE_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 60, "period": 60 }
     }
   ],
   // Synchro temps réel multi-appareils (voir worker/sync.ts) : un Durable
