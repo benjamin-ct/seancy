@@ -101,8 +101,12 @@ async function storePosterThumbhash(env: Env, posterPath: string, hash: string):
 // survit pas à un redémarrage d'isolate (pas de garantie globale), mais un
 // isolate Workers reste chaud sur de nombreuses requêtes : ça borne le
 // gaspillage à "au plus une fois par affiche manquante et par isolate",
-// au lieu d'une fois par requête. Taille négligeable : au plus la poignée
-// d'affiches de `popular_titles` (~200) pas encore couvertes par le batch CI.
+// au lieu d'une fois par requête. Couvre depuis (voir
+// enrichResponseWithPosterThumbhashes, worker/index.ts) toute affiche TMDB
+// proxée — plus seulement `popular_titles` — donc ce Set peut croître
+// au-delà de la poignée de titres d'origine sur la durée de vie d'un
+// isolate ; des chaînes de poster_path (~25 caractères), mémoire toujours
+// négligeable.
 const scheduledOrDone = new Set<string>();
 
 // Point d'entrée pour un appel `ctx.waitUntil` : ne lève jamais, une

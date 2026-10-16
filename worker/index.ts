@@ -2531,7 +2531,19 @@ async function refreshCachedPosterThumbhashes(
       ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
     }
   }
-  return new Response(JSON.stringify(data), { status: response.status, headers: response.headers });
+  // En-têtes reconstruits à la main plutôt que copiés depuis `response.headers` :
+  // le corps change de taille dès qu'une affiche passe de `null` à un hash (ou
+  // l'inverse), et on ne sait pas si le Cache API de Cloudflare matérialise un
+  // `content-length` (ou un `age`) sur la représentation qu'il renvoie — ne
+  // garder que ce dont ce proxy a vraiment besoin évite tout risque d'en-tête
+  // devenu incohérent avec le nouveau corps.
+  return new Response(JSON.stringify(data), {
+    status: response.status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": response.headers.get("cache-control") || "public, max-age=300",
+    },
+  });
 }
 
 // Proxy TMDB : la clé API TMDB n'est plus exposée côté client (elle
