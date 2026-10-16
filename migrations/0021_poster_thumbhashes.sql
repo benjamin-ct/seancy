@@ -7,11 +7,14 @@
 -- identifie la même image quel que soit le titre qui la référence, donc un
 -- seul calcul par affiche suffit, réutilisable partout où elle apparaît.
 --
--- Rempli uniquement par scripts/generate-thumbhashes.ts, en CI (voir
--- .github/workflows/thumbhash-sync.yml) : décoder un JPEG et calculer le
--- ThumbHash dépasse largement le budget CPU du plan Workers gratuit
--- (10 ms/requête) sur lequel tourne seancy aujourd'hui, donc jamais fait
--- depuis le Worker lui-même (ni à la requête, ni dans un cron).
+-- Rempli par deux voies : le batch quotidien scripts/generate-thumbhashes.ts
+-- en CI (voir .github/workflows/thumbhash-sync.yml, décodage via `sharp`,
+-- réservé au CI car `sharp` dépend de bindings natifs indisponibles dans le
+-- runtime Workers), et depuis le Worker lui-même en fire-and-forget
+-- (`ctx.waitUntil`, voir worker/images/posterThumbhash.ts) pour les affiches
+-- pas encore connues de ce batch (ex. nouvelle entrée dans `popular_titles`
+-- avant le prochain run) — décodage WASM pur (`@jsquash/*`) dans ce second
+-- cas, jamais `sharp`.
 CREATE TABLE IF NOT EXISTS poster_thumbhashes (
   poster_path TEXT PRIMARY KEY,
   thumbhash TEXT NOT NULL,

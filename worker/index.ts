@@ -61,8 +61,10 @@ import {
   buildTasteProfile,
   getRecommendationCandidates,
   rankRecommendations,
+  type RecommendationItem,
   type RecommendationMediaType,
 } from "./recommendations.ts";
+import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
 import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
@@ -1994,7 +1996,28 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const RECOMMENDATION_CACHE_SIZE = 96;
 
-async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
+// Affiches sans ThumbHash connu parmi la page réellement servie : calcul en
+// arrière-plan (jamais dans le chemin synchrone de la réponse), voir
+// worker/images/posterThumbhash.ts. Ne couvre que la page retournée, pas
+// tout le pool de candidats, pour ne consommer le budget `waitUntil` que
+// pour les affiches effectivement vues par un utilisateur actif.
+function scheduleMissingThumbhashes(
+  ctx: ExecutionContext,
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): void {
+  for (const item of items) {
+    if (item.posterPath && !item.posterThumbhash) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, item.posterPath));
+    }
+  }
+}
+
+async function handleGetRecommendations(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
@@ -2014,7 +2037,8 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
   if (cached && isFresh && cached.items.length >= offset + limit) {
-    const pageItems = cached.items.slice(offset, offset + limit);
+    const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
+    scheduleMissingThumbhashes(ctx, env, pageItems);
     return json({
       items: pageItems,
       coldStart: cached.coldStart,
@@ -2040,6 +2064,7 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   });
   await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
   const pageItems = items.slice(offset, offset + limit);
+  scheduleMissingThumbhashes(ctx, env, pageItems);
   return json({
     items: pageItems,
     coldStart: profile.isColdStart,
@@ -2920,7 +2945,7 @@ async function routeRequest(
   }
 
   if (url.pathname === "/api/recommendations" && request.method === "GET") {
-    return handleGetRecommendations(request, env);
+    return handleGetRecommendations(request, env, ctx);
   }
 
   if (url.pathname === "/api/not-interested" && request.method === "POST") {
