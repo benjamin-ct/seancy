@@ -22,6 +22,7 @@ import decodeJpeg, { init as initJpegDecoder } from "@jsquash/jpeg/decode.js";
 import resizeImage, { initResize } from "@jsquash/resize/index.js";
 import { rgbaToThumbHash } from "thumbhash";
 import type { Env } from "../types.ts";
+import { logError } from "../logger.ts";
 import JPEG_DECODER_WASM from "@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm";
 // @ts-expect-error - ce .wasm a son propre .d.ts fourni par le paquet
 // (squoosh_resize_bg.wasm.d.ts, généré par wasm-bindgen pour un tout autre
@@ -89,16 +90,41 @@ async function storePosterThumbhash(env: Env, posterPath: string, hash: string):
     .run();
 }
 
+// Déduplique les calculs concurrents/répétés pour le même poster_path au
+// sein d'un même isolate (voir revue pré-merge) : sans ça, chaque requête
+// qui retombe sur `recommendation_cache` (jusqu'à 24h, voir
+// RECOMMENDATION_CACHE_TTL_MS dans worker/index.ts) replanifie un calcul
+// déjà résolu, puisque le JSON mis en cache garde `posterThumbhash: null`
+// pour les affiches qui l'étaient au moment du calcul du cache — et deux
+// requêtes simultanées sur la même affiche manquante partaient chacune sur
+// leur propre fetch TMDB + décodage + resize. Un `Set` en mémoire ne
+// survit pas à un redémarrage d'isolate (pas de garantie globale), mais un
+// isolate Workers reste chaud sur de nombreuses requêtes : ça borne le
+// gaspillage à "au plus une fois par affiche manquante et par isolate",
+// au lieu d'une fois par requête. Taille négligeable : au plus la poignée
+// d'affiches de `popular_titles` (~200) pas encore couvertes par le batch CI.
+const scheduledOrDone = new Set<string>();
+
 // Point d'entrée pour un appel `ctx.waitUntil` : ne lève jamais, une
 // affiche qui échoue à se calculer reste simplement sur le shimmer
 // existant côté client jusqu'à la prochaine tentative.
 export async function computeAndStorePosterThumbhash(env: Env, posterPath: string): Promise<void> {
+  if (scheduledOrDone.has(posterPath)) {
+    return;
+  }
+  scheduledOrDone.add(posterPath);
   try {
     const hash = await computePosterThumbhash(posterPath);
     if (hash) {
       await storePosterThumbhash(env, posterPath, hash);
+      return;
     }
   } catch (err) {
-    console.warn(`ThumbHash à la demande échoué pour ${posterPath} :`, err);
+    logError(`ThumbHash à la demande échoué pour ${posterPath}`, err);
   }
+  // Pas de hash obtenu (échec réseau/décodage, ou affiche inaccessible) :
+  // on retire l'affiche du Set pour permettre une vraie nouvelle tentative
+  // à la prochaine vue, plutôt que de la blacklister pour le reste de la
+  // vie de l'isolate — seul un calcul réussi reste marqué définitivement.
+  scheduledOrDone.delete(posterPath);
 }
