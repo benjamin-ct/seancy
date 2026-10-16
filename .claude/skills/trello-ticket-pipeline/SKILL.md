@@ -43,6 +43,36 @@ ce comportement par défaut est le label `Bloqué — action requise` (voir plus
 Label existant sur le board : **`Bloqué — action requise`**. Ne jamais en créer un autre équivalent ; toujours
 réutiliser exactement celui-ci.
 
+## Branches : feature vs hotfix
+
+Par défaut, un ticket est une **feature** au sens git-flow — y compris les cartes labellisées `Bug` sur le board : un
+bug non urgent passe par `develop` comme n'importe quelle autre carte, seule l'urgence prod change le flux ci-dessous.
+
+- Branche basée sur `develop`, nommée comme aujourd'hui (`<type>/<description-courte>`, voir 2c.1).
+- PR ouverte contre `develop` (jamais contre `main` directement).
+- Fusionnée dans `develop` quand la carte arrive en `To merge`, exactement comme pour toute PR aujourd'hui — seule la
+  base change.
+
+Un ticket est un **hotfix** (bug urgent en prod, à livrer sans attendre la prochaine release `develop` → `main`) si, et
+seulement si :
+
+- la carte porte un label `Hotfix` (à créer sur le board s'il n'existe pas encore ; ne pas réutiliser `Bug`, qui reste
+  un bug normal passant par `develop`), **ou**
+- une ligne `Hotfix: oui` est présente dans la description (même mécanique que `Modèle:`/`Effort:`, voir « Modèle et
+  effort par ticket », mais indépendante : un hotfix peut aussi être délégué).
+
+Aucun des deux signaux présents : ticket feature par défaut. Ne jamais déduire un hotfix du seul texte de la carte (un
+titre contenant « urgent » ne suffit pas) — sans label ni ligne explicite, traiter comme une feature normale.
+
+Pour un hotfix :
+
+- Branche basée sur `main`, nommée `hotfix/<description-courte>` (jamais `feature/`/`fix/`, pour rester identifiable
+  dans la liste des branches et l'URL de preview), ex. `hotfix/paiement-stripe-bloque`.
+- PR ouverte directement contre `main`.
+- Fusionnée dans `main` quand la carte arrive en `To merge`, exactement comme aujourd'hui.
+- **Backport automatique vers `develop` juste après** (étape 1.7) : un hotfix corrige la prod, mais doit aussi
+  atterrir sur `develop` pour ne pas être silencieusement perdu à la prochaine release.
+
 ## Règle d'or : toujours reprendre l'historique, jamais redévelopper de zéro
 
 Une carte peut arriver dans `En cours` de trois façons différentes : nouveau ticket pris depuis `A faire`, reprise après
@@ -104,15 +134,22 @@ Traiter **toutes** les cartes de `To merge`, une par une, dans l'ordre, sans s'a
   laisser la carte dans `To merge`, ajouter un commentaire décrivant le problème, et passer à la carte suivante (ne pas
   bloquer les autres cartes de la liste pour ça).
 
-3. Merger la PR (squash merge par défaut, sauf convention contraire du dépôt).
+3. Merger la PR (squash merge par défaut, sauf convention contraire du dépôt) — contre `develop` pour un ticket
+   feature, contre `main` pour un hotfix (déterminé à l'ouverture de la PR, voir « Branches : feature vs hotfix »).
 4. Déplacer la carte vers `Done`.
 5. Supprimer la branche mergée (systématiquement, dès le merge fait).
-6. **Vérifier la pipeline post-merge** avant de passer à la carte suivante :
-   - Récupérer le SHA du commit créé sur `main` par ce merge.
-   - Interroger les check-runs de ce commit (`gh api repos/<owner>/<repo>/commits/<sha>/check-runs`) : ils couvrent à la
-     fois les jobs GitHub Actions déclenchés par le push sur `main` (build/lint/typecheck, scan de secrets, migrations
-     D1) et le déploiement en prod, posté automatiquement comme check-run par l'intégration Git Cloudflare Workers
-     (`Workers Builds: <nom du projet>`).
+6. **Vérifier la pipeline post-merge** avant de passer à la carte suivante — le détail attendu diffère selon la branche
+   cible du merge :
+   - Récupérer le SHA du commit créé par ce merge (sur `develop` ou `main` selon le cas).
+   - Interroger les check-runs de ce commit (`gh api repos/<owner>/<repo>/commits/<sha>/check-runs`) :
+     - **Merge sur `develop`** : `verify` (lint/typecheck/build), `secrets-scan`, `deploy-develop` (déploiement de
+       l'environnement develop persistant). Pas de migration D1 prod, pas de déploiement Cloudflare Workers Builds, pas
+       de compilation de changelog — ces trois-là restent strictement réservés à `main` (voir
+       `.github/workflows/ci.yml`).
+     - **Merge sur `main`** (hotfix, ou release `develop` → `main` faite par un humain) : `verify`, `secrets-scan`,
+       `apply-d1-migrations` (migrations D1 prod), `release-changelog` (compilation du changelog + bump SemVer), et le
+       déploiement en prod posté automatiquement comme check-run par l'intégration Git Cloudflare Workers
+       (`Workers Builds: <nom du projet>`).
    - Attendre que tous les check-runs concernés soient `completed` (ils peuvent démarrer `queued`/`in_progress` ;
      réinterroger après un court délai plutôt que conclure trop tôt).
    - Si tous se terminent avec la conclusion `success` : rien à signaler individuellement, ce succès sera mentionné dans
@@ -121,7 +158,18 @@ Traiter **toutes** les cartes de `To merge`, une par une, dans l'ordre, sans s'a
      poster immédiatement une alerte Discord (préfixée 🚨) précisant le ticket concerné, le check-run en échec et le
      lien vers le run/commit — sans attendre le résumé de fin d'exécution, et sans bloquer le traitement des autres
      cartes de `To merge`.
-7. Passer à la carte suivante de `To merge`, jusqu'à ce que la liste soit vide (ou ne contienne plus que des cartes en
+7. **Backport hotfix → `develop`** (uniquement si la carte mergée à l'étape 3 était un hotfix, et seulement une fois
+   l'étape 6 terminée avec tous les check-runs `success` sur `main`) :
+   - `git fetch origin main develop`, basculer sur `develop`, fusionner `main` dedans (`git merge origin/main` — jamais
+     de rebase, `develop` doit rester un historique réel de ce qui a été intégré), puis pousser.
+   - Fast-forward possible (aucune divergence depuis le dernier backport) : le merge se résout sans commit
+     supplémentaire, rien de plus à faire.
+   - Conflit : ne jamais le résoudre à l'aveugle. Le hotfix reste livré en prod (étape 3 déjà faite) ; seul le backport
+     est en attente. Rouvrir la carte en `En cours` avec le label `Bloqué — action requise`, y commenter le détail du
+     conflit, et assigner un humain.
+   - Backport poussé sans conflit : vérifier les check-runs du commit résultant sur `develop` comme à l'étape 6 (cas
+     `develop`), même traitement des anomalies.
+8. Passer à la carte suivante de `To merge`, jusqu'à ce que la liste soit vide (ou ne contienne plus que des cartes en
    échec CI déjà signalées).
 
 ### 2. Recenser l'état de `En cours`
@@ -161,7 +209,9 @@ précédente s'est arrêtée en cours de route) et continuer le développement (
    juste l'ID du ticket) : c'est ce nom qui se retrouve dans l'URL de preview, donc il doit rester compréhensible une
    fois là-dedans. Format : `<type>/<description-courte-en-mots-clés>`, ex. `feature/watchlist-films`,
    `fix/filtre-plateformes-streaming`. Éviter les IDs/hash illisibles ; le numéro de ticket peut être ajouté en suffixe
-   si utile (`feature/watchlist-films-42`), mais jamais en tête ou seul.
+   si utile (`feature/watchlist-films-42`), mais jamais en tête ou seul. Base de la branche et type forcé si le ticket
+   est un hotfix (voir « Branches : feature vs hotfix ») : `hotfix/<description-courte>` basée sur `main` ; sinon,
+   basée sur `develop` comme toute feature.
 2. Développer ce qui est demandé, commiter au fur et à mesure. Si la carte demande un modèle ou un effort précis
    (voir « Modèle et effort par ticket »), cette étape — et elle seule — est déléguée à un `claude -p` dédié.
    - **Vérification visuelle** (tout changement d’interface) : le conteneur fournit
@@ -186,13 +236,20 @@ précédente s'est arrêtée en cours de route) et continuer le développement (
 4. Si le développement se termine sans blocage :
    1. Ouvrir une nouvelle Pull Request (cas d'un ticket neuf) ou pousser les nouveaux commits sur la PR existante (cas
       d'une reprise après review KO), avec dans la description un lien vers la carte Trello si ce n'est pas déjà fait.
-   2. Récupérer l'URL de preview :
+      PR ouverte contre `develop` (ticket feature) ou contre `main` (hotfix), voir « Branches : feature vs hotfix ».
+   2. **Fragment de changelog** (voir `.changeset/README.md`) : si cette PR modifie un fichier sous `src/`, `worker/`
+      ou `migrations/`, ajouter un fichier `.changeset/<slug>.md` dans le même commit, avec un `bump` (`patch` pour un
+      correctif sans nouveau comportement visible, `minor` pour une fonctionnalité/amélioration visible et
+      rétrocompatible, `major` pour un changement cassant) et une description courte orientée utilisateur (pas un
+      résumé technique de la PR). PR purement infra/outillage/doc (rien sous ces trois dossiers) : rien à ajouter, la
+      CI ne le demande pas.
+   3. Récupérer l'URL de preview :
       - si un bot de déploiement (Cloudflare Workers, Netlify, Vercel…) l'a postée en commentaire sur la PR, la
         reprendre
         depuis là ;
       - sinon, la chercher dans les checks/deployments de la PR sur GitHub.
-   3. Déplacer la carte vers `A valider`.
-   4. Ajouter un commentaire sur la carte avec le lien de la preview (et le lien de la PR).
+   4. Déplacer la carte vers `A valider`.
+   5. Ajouter un commentaire sur la carte avec le lien de la preview (et le lien de la PR).
       **Toujours préfixer le commentaire par `🤖 [Claude]`** pour indiquer clairement qu'il s'agit d'un message
       automatisé. Si le développement a été délégué, y indiquer le modèle et l'effort réellement utilisés.
 5. **Vérifier la fraîcheur des CGU / politique de confidentialité** (`src/modules/legal/`, routes
@@ -281,11 +338,12 @@ garde tout le reste : branche (2c.1), lecture de la carte, PR, attente CI, previ
      développer dans la session courante, et dire dans le commentaire et le Discord que la délégation a échoué
      (erreur exacte, modèle réellement utilisé) ;
    - **ligne `BLOCAGE:`** : appliquer 2c.3 ;
-   - **sinon** : relire le diff (`git log` / `git diff origin/main...`), refaire au besoin les contrôles, puis
-     reprendre à 2c.4 (PR, preview, carte en `A valider`).
+   - **sinon** : relire le diff (`git log` / `git diff origin/<base>...`, où `<base>` est `develop` ou `main` selon le
+     type de ticket, voir « Branches : feature vs hotfix »), refaire au besoin les contrôles, puis reprendre à 2c.4
+     (PR, preview, carte en `A valider`).
 
 6. Indiquer le modèle (id complet lu dans le journal) et l'effort utilisés dans le commentaire de fin de ticket
-   (2c.4.4) et dans le résumé Discord.
+   (2c.4.5) et dans le résumé Discord.
 
 ## Limite d'usage atteinte
 
