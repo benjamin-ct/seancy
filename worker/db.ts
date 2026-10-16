@@ -1061,6 +1061,32 @@ export async function setRecommendationCache(
     .run();
 }
 
+// `recommendation_cache.items` fige `posterThumbhash` tel qu'il était au
+// moment du calcul (voir setRecommendationCache) : un ThumbHash calculé à
+// la demande après coup (voir worker/images/posterThumbhash.ts) n'y
+// apparaît donc jamais tant que le cache (24h, RECOMMENDATION_CACHE_TTL_MS)
+// n'est pas recalculé de zéro. Permet de relire l'état courant pour une
+// poignée de poster_path, sans payer le coût d'un recalcul complet du
+// classement, afin que les affiches servies par le cache affichent le
+// ThumbHash dès qu'il existe plutôt que de rester en silhouette pendant
+// jusqu'à 24h.
+export async function getThumbhashesForPosterPaths(
+  db: D1Database,
+  posterPaths: string[]
+): Promise<Map<string, string>> {
+  if (posterPaths.length === 0) {
+    return new Map();
+  }
+  const placeholders = posterPaths.map(() => "?").join(", ");
+  const { results } = await db
+    .prepare(
+      `SELECT poster_path, thumbhash FROM poster_thumbhashes WHERE poster_path IN (${placeholders})`
+    )
+    .bind(...posterPaths)
+    .all<{ poster_path: string; thumbhash: string }>();
+  return new Map((results || []).map((row) => [row.poster_path, row.thumbhash]));
+}
+
 export async function getFavoriteProvidersForUser(
   db: D1Database,
   userId: number

@@ -37,6 +37,7 @@ import {
   addNotInterested,
   getRecommendationCache,
   setRecommendationCache,
+  getThumbhashesForPosterPaths,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -2013,6 +2014,38 @@ function scheduleMissingThumbhashes(
   }
 }
 
+// `recommendation_cache` fige `posterThumbhash` au moment du calcul (voir
+// RECOMMENDATION_CACHE_TTL_MS, 24h) : un ThumbHash calculé à la demande
+// après coup (scheduleMissingThumbhashes) n'apparaîtrait donc jamais tant
+// que le cache n'expire pas, même une fois stocké en base — bug remonté en
+// review (carte Trello "ThumbHash affiches", page Découvrir toujours en
+// silhouette malgré plusieurs rechargements). Mute les items en place avec
+// la valeur actuelle de `poster_thumbhashes` pour les affiches encore
+// marquées `null` dans le cache.
+async function refreshMissingThumbhashes(
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): Promise<void> {
+  const missingPaths = items
+    .filter((item) => item.posterPath && !item.posterThumbhash)
+    .map((item) => item.posterPath as string);
+  if (missingPaths.length === 0) {
+    return;
+  }
+  const fresh = await getThumbhashesForPosterPaths(env.DB, [...new Set(missingPaths)]);
+  if (fresh.size === 0) {
+    return;
+  }
+  for (const item of items) {
+    if (item.posterPath && !item.posterThumbhash) {
+      const hash = fresh.get(item.posterPath);
+      if (hash) {
+        item.posterThumbhash = hash;
+      }
+    }
+  }
+}
+
 async function handleGetRecommendations(
   request: Request,
   env: Env,
@@ -2038,6 +2071,7 @@ async function handleGetRecommendations(
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
   if (cached && isFresh && cached.items.length >= offset + limit) {
     const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
+    await refreshMissingThumbhashes(env, pageItems);
     scheduleMissingThumbhashes(ctx, env, pageItems);
     return json({
       items: pageItems,
