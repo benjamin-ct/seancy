@@ -11,13 +11,14 @@ export function SettingsGroup({
   children,
 }: {
   id?: string;
-  title: ReactNode;
+  /** Omis quand la ligne unique du groupe porte déjà son propre titre. */
+  title?: ReactNode;
   description?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section id={id} className={styles.group}>
-      <h2 className={styles.title}>{title}</h2>
+      {title && <h2 className={styles.title}>{title}</h2>}
       {description && <p className={styles.description}>{description}</p>}
       <div className={styles.panel}>{children}</div>
     </section>

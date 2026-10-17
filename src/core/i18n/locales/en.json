@@ -99,11 +99,6 @@
     "groupTitle": "My data",
     "groupLead": "Export a copy of your data or delete your account."
   },
-  "settingsPages": {
-    "plateformes": {
-      "lead": "The streaming platforms you use, to know where to watch and get release alerts."
-    }
-  },
   "aboutPage": {
     "lead": "Seancy, a personal project to keep track of movies and shows.",
     "brandLabel": "App",

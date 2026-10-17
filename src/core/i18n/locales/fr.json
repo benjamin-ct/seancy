@@ -99,11 +99,6 @@
     "groupTitle": "Mes données",
     "groupLead": "Exportez une copie de vos données ou supprimez votre compte."
   },
-  "settingsPages": {
-    "plateformes": {
-      "lead": "Les plateformes de streaming que vous utilisez, pour savoir où regarder et vous notifier des sorties."
-    }
-  },
   "aboutPage": {
     "lead": "Seancy, un projet personnel pour suivre ses films et séries.",
     "brandLabel": "Application",
