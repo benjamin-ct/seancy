@@ -2,7 +2,7 @@
 // scripts/generate-thumbhashes.ts, MediaCard.tsx) : transforme le ThumbHash
 // base64 renvoyé par l'API en data URL affichable pendant le chargement de
 // la vraie affiche.
-import { useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import { thumbHashToDataURL } from "thumbhash";
 
 export function thumbhashToDataUrl(base64: string): string {
@@ -24,6 +24,22 @@ export function thumbhashToDataUrl(base64: string): string {
 export function usePosterThumbhash(thumbhash?: string | null) {
   const [loaded, setLoaded] = useState(false);
   const dataUrl = useMemo(() => (thumbhash ? thumbhashToDataUrl(thumbhash) : null), [thumbhash]);
+  const markLoaded = useCallback(() => setLoaded(true), []);
+  // Ref posée sur l'<img> : couvre le cas où elle est déjà en cache
+  // navigateur au moment du montage. Dans ce cas, certains navigateurs
+  // (Safari notamment) ne redéclenchent pas l'évènement `load` une fois le
+  // décodage déjà terminé avant que React n'attache l'écouteur — sans ce
+  // filet, l'<img> resterait masquée (opacity 0) indéfiniment, un résultat
+  // pire que le bug d'origine (retour revue, carte Trello "ThumbHash
+  // affiches").
+  const imgRef = useCallback(
+    (img: HTMLImageElement | null) => {
+      if (img?.complete) {
+        markLoaded();
+      }
+    },
+    [markLoaded]
+  );
   const backgroundStyle: CSSProperties | undefined =
     dataUrl && !loaded
       ? {
@@ -36,7 +52,8 @@ export function usePosterThumbhash(thumbhash?: string | null) {
     hasThumbhash: dataUrl != null,
     loaded,
     backgroundStyle,
-    onLoad: () => setLoaded(true),
-    onError: () => setLoaded(true),
+    imgRef,
+    onLoad: markLoaded,
+    onError: markLoaded,
   };
 }

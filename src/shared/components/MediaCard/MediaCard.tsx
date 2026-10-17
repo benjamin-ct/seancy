@@ -141,6 +141,7 @@ function MediaCard({
     hasThumbhash,
     loaded: posterLoaded,
     backgroundStyle: posterThumbhashStyle,
+    imgRef: posterImgRef,
     onLoad: handlePosterLoad,
     onError: handlePosterError,
   } = usePosterThumbhash(item.poster_thumbhash);
@@ -218,6 +219,7 @@ function MediaCard({
         >
           {item.poster_path ? (
             <img
+              ref={posterImgRef}
               src={posterUrl(item.poster_path) ?? undefined}
               srcSet={posterSrcSet(item.poster_path)}
               sizes={CARD_POSTER_SIZES}

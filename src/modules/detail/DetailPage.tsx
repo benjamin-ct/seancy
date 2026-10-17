@@ -175,6 +175,7 @@ export default function DetailPage() {
     hasThumbhash: posterHasThumbhash,
     loaded: posterLoaded,
     backgroundStyle: posterThumbhashStyle,
+    imgRef: posterImgRef,
     onLoad: handlePosterLoad,
     onError: handlePosterError,
   } = usePosterThumbhash(details?.poster_thumbhash);
@@ -584,6 +585,7 @@ export default function DetailPage() {
             {details.poster_path ? (
               <div className={styles.posterFrame} style={posterThumbhashStyle}>
                 <img
+                  ref={posterImgRef}
                   src={posterUrl(details.poster_path, "w342") ?? undefined}
                   srcSet={posterSrcSet(details.poster_path)}
                   sizes={DETAIL_POSTER_SIZES}

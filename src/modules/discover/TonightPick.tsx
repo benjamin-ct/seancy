@@ -114,6 +114,7 @@ export default function TonightPick() {
     hasThumbhash: pickHasThumbhash,
     loaded: pickPosterLoaded,
     backgroundStyle: pickPosterThumbhashStyle,
+    imgRef: pickPosterImgRef,
     onLoad: handlePickPosterLoad,
     onError: handlePickPosterError,
   } = usePosterThumbhash(pick?.poster_thumbhash);
@@ -164,6 +165,7 @@ export default function TonightPick() {
       >
         {pick.poster_path ? (
           <img
+            ref={pickPosterImgRef}
             src={posterUrl(pick.poster_path) ?? undefined}
             srcSet={posterSrcSet(pick.poster_path)}
             sizes="(max-width: 860px) 87px, 180px"
