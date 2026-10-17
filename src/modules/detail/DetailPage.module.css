@@ -158,7 +158,7 @@
   grid-area: poster;
 }
 
-.poster {
+.posterFrame {
   aspect-ratio: 2 / 3;
   border-radius: var(--radius);
   overflow: hidden;
@@ -166,7 +166,27 @@
   box-shadow: var(--shadow-lift);
   width: 100%;
   display: block;
+  background-size: cover;
+  background-position: center;
+}
+
+.poster {
+  width: 100%;
+  height: 100%;
+  display: block;
   object-fit: cover;
+}
+
+/* Masquée tant qu'elle n'a pas fini de charger, seulement quand un
+   ThumbHash existe dessous (voir usePosterThumbhash) : sinon le rendu
+   progressif du navigateur se peint par-dessus le flou encore visible. */
+.posterLoading {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.posterLoaded {
+  opacity: 1;
 }
 
 .posterEmpty {

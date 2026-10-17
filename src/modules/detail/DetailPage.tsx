@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "r
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
+import { usePosterThumbhash } from "../../shared/lib/thumbhash.ts";
 import type { TFunction } from "i18next";
 import {
   backdropUrl,
@@ -170,6 +171,13 @@ export default function DetailPage() {
   const { isExcludedTitle, toggleExcludedTitle } = useExcludedTitles();
   const { requireMember } = useMembersOnly();
   const recommendationsRef = useRef<HTMLElement>(null);
+  const {
+    hasThumbhash: posterHasThumbhash,
+    loaded: posterLoaded,
+    backgroundStyle: posterThumbhashStyle,
+    onLoad: handlePosterLoad,
+    onError: handlePosterError,
+  } = usePosterThumbhash(details?.poster_thumbhash);
 
   useEffect(() => {
     if (!mediaType || !id) {
@@ -574,16 +582,22 @@ export default function DetailPage() {
           {backLink(styles.back)}
           <div className={styles.posterWrap}>
             {details.poster_path ? (
-              <img
-                src={posterUrl(details.poster_path, "w342") ?? undefined}
-                srcSet={posterSrcSet(details.poster_path)}
-                sizes={DETAIL_POSTER_SIZES}
-                alt={title}
-                className={styles.poster}
-                fetchPriority="high"
-              />
+              <div className={styles.posterFrame} style={posterThumbhashStyle}>
+                <img
+                  src={posterUrl(details.poster_path, "w342") ?? undefined}
+                  srcSet={posterSrcSet(details.poster_path)}
+                  sizes={DETAIL_POSTER_SIZES}
+                  alt={title}
+                  className={`${styles.poster} ${posterHasThumbhash ? (posterLoaded ? styles.posterLoaded : styles.posterLoading) : ""}`}
+                  fetchPriority="high"
+                  onLoad={handlePosterLoad}
+                  onError={handlePosterError}
+                />
+              </div>
             ) : (
-              <div className={`${styles.poster} ${styles.posterEmpty} ${posterStyles[accentKey]}`}>
+              <div
+                className={`${styles.posterFrame} ${styles.posterEmpty} ${posterStyles[accentKey]}`}
+              >
                 {title}
               </div>
             )}

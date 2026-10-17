@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,7 +14,7 @@ import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrary
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { posterAccentFromGenres } from "../../lib/posterAccent.ts";
-import { thumbhashToDataUrl } from "../../lib/thumbhash.ts";
+import { usePosterThumbhash } from "../../lib/thumbhash.ts";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
 import { pop } from "../../lib/motion.ts";
 import type {
@@ -134,16 +134,16 @@ function MediaCard({
   // #296 : le shimmer restait affiché en permanence, même une fois l'image
   // chargée, car la classe ne dépendait que de la présence d'un poster_path,
   // jamais de son état de chargement réel).
-  const [posterLoaded, setPosterLoaded] = useState(false);
-
   // Aperçu flou (voir migration 0021, scripts/generate-thumbhashes.ts) :
-  // affiché à la place du shimmer gris pendant le chargement, seulement
-  // quand l'item en a un (aujourd'hui, uniquement les recommandations
-  // "Pour toi" — voir worker/recommendations.ts).
-  const posterThumbhashUrl = useMemo(
-    () => (item.poster_thumbhash ? thumbhashToDataUrl(item.poster_thumbhash) : null),
-    [item.poster_thumbhash]
-  );
+  // affiché à la place du shimmer gris pendant le chargement, quand l'item
+  // en a un (voir worker/index.ts, enrichResponseWithPosterThumbhashes).
+  const {
+    hasThumbhash,
+    loaded: posterLoaded,
+    backgroundStyle: posterThumbhashStyle,
+    onLoad: handlePosterLoad,
+    onError: handlePosterError,
+  } = usePosterThumbhash(item.poster_thumbhash);
 
   const [provider, setProvider] = useState<WatchProviderEntry | null>(null);
   // Distingue "pas encore vérifié" de "vérifié, rien trouvé".
@@ -212,16 +212,8 @@ function MediaCard({
     <div className={styles.card}>
       <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
         <div
-          className={`${styles.poster} ${item.poster_path && !posterLoaded && !posterThumbhashUrl ? skeletonStyles.block : ""}`}
-          style={
-            posterThumbhashUrl && !posterLoaded
-              ? {
-                  backgroundImage: `url(${posterThumbhashUrl})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : undefined
-          }
+          className={`${styles.poster} ${item.poster_path && !posterLoaded && !posterThumbhashStyle ? skeletonStyles.block : ""}`}
+          style={posterThumbhashStyle}
           ref={posterRef}
         >
           {item.poster_path ? (
@@ -233,8 +225,20 @@ function MediaCard({
               alt=""
               loading="lazy"
               decoding="async"
-              onLoad={() => setPosterLoaded(true)}
-              onError={() => setPosterLoaded(true)}
+              // Masquée tant qu'elle n'a pas fini de charger, seulement
+              // quand un ThumbHash existe dessous : sinon le navigateur
+              // peint l'image au fil du téléchargement par-dessus le flou
+              // encore visible, d'où le rendu mi-net mi-flou remonté sur
+              // la carte Trello "ThumbHash affiches" le 2026-10-17.
+              className={
+                hasThumbhash
+                  ? posterLoaded
+                    ? styles.posterImgLoaded
+                    : styles.posterImg
+                  : undefined
+              }
+              onLoad={handlePosterLoad}
+              onError={handlePosterError}
             />
           ) : (
             <div className={`${styles.noPoster} ${posterStyles[accentKey]}`} aria-hidden="true">

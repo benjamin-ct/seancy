@@ -2,6 +2,7 @@
 // scripts/generate-thumbhashes.ts, MediaCard.tsx) : transforme le ThumbHash
 // base64 renvoyé par l'API en data URL affichable pendant le chargement de
 // la vraie affiche.
+import { useMemo, useState, type CSSProperties } from "react";
 import { thumbHashToDataURL } from "thumbhash";
 
 export function thumbhashToDataUrl(base64: string): string {
@@ -11,4 +12,31 @@ export function thumbhashToDataUrl(base64: string): string {
     bytes[i] = binary.charCodeAt(i);
   }
   return thumbHashToDataURL(bytes);
+}
+
+/** État partagé par tout composant qui affiche un ThumbHash flou en fond
+ * pendant le chargement de l'affiche réelle (MediaCard, DetailPage,
+ * TonightPick) : décode le hash une seule fois, et expose `loaded` pour
+ * garder l'<img> masquée (opacity 0) tant qu'elle n'a pas fini de charger.
+ * Sans ça, le navigateur peint l'image au fur et à mesure du téléchargement
+ * par-dessus le flou encore visible dessous — rendu mi-net mi-flou signalé
+ * sur la carte Trello "ThumbHash affiches" (retour du 2026-10-17). */
+export function usePosterThumbhash(thumbhash?: string | null) {
+  const [loaded, setLoaded] = useState(false);
+  const dataUrl = useMemo(() => (thumbhash ? thumbhashToDataUrl(thumbhash) : null), [thumbhash]);
+  const backgroundStyle: CSSProperties | undefined =
+    dataUrl && !loaded
+      ? {
+          backgroundImage: `url(${dataUrl})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }
+      : undefined;
+  return {
+    hasThumbhash: dataUrl != null,
+    loaded,
+    backgroundStyle,
+    onLoad: () => setLoaded(true),
+    onError: () => setLoaded(true),
+  };
 }
