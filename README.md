@@ -1,10 +1,31 @@
 # Seancy 🎬
 
+[![CI](https://github.com/benjamin-ct/seancy/actions/workflows/ci.yml/badge.svg)](https://github.com/benjamin-ct/seancy/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)
+![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+
 > En ligne sur **https://seancy.com** (previews de PR sur `<slug>.dev.seancy.com`).
 
 Application pour découvrir des films et séries, savoir où les regarder en streaming (France), tirer un titre au hasard, et suivre ce que tu as déjà vu.
 
 Les données (catalogue, affiches, plateformes de streaming) viennent de [TMDB](https://www.themoviedb.org/) (The Movie Database), qui agrège aussi les disponibilités JustWatch.
+
+## Sommaire
+
+- [Stack technique](#stack-technique)
+- [Structure du projet](#structure-du-projet)
+- [Lancer le projet en local](#lancer-le-projet-en-local)
+- [Convention de fetch API](#convention-de-fetch-api)
+- [Style et CSS](#style-et-css)
+- [Comptes et synchronisation (optionnel)](#comptes-et-synchronisation-optionnel)
+- [Notifications push (optionnel)](#notifications-push-optionnel)
+- [Déploiement (Cloudflare Workers)](#déploiement-cloudflare-workers)
+- [Observabilité](#observabilité)
+- [Sécurité](#sécurité)
+- [Hooks Git locaux (Husky)](#hooks-git-locaux-husky)
+- [Fonctionnalités en stub](#fonctionnalités-en-stub)
+- [Fonctionnalités](#fonctionnalités)
+- [Licence](#licence)
 
 ## Stack technique
 
@@ -174,6 +195,7 @@ Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.
 
 - **Isolation entre comptes** : `PUT`/`GET /api/library` déterminent toujours le compte à partir du cookie de session (jointure `sessions` ↔ `users` en base), jamais d'un identifiant fourni par le client. Voir le commentaire au-dessus de `handleGetLibrary`/`handlePutLibrary` dans `worker/index.ts`.
 - **Rate-limiting, validation de schéma, en-têtes HTTP, proxy TMDB** : voir `worker/rate-limit.ts`, `worker/validate.ts`, `public/_headers`.
+- **Scan de secrets** : [gitleaks](https://github.com/gitleaks/gitleaks) tourne sur chaque PR (`.github/workflows/ci.yml`, job `secrets-scan`). Les quelques faux positifs connus (clé "site" reCAPTCHA, publique par conception ; clés `localStorage` type `seancy.*` ; valeurs d'exemple du README) sont documentés et exclus dans `.gitleaks.toml`.
 - Détail complet des mécanismes vérifiés après la migration TypeScript : voir le debrief de migration (fourni séparément, pas commité dans ce README pour rester concis).
 
 ## Hooks Git locaux (Husky)
@@ -200,3 +222,8 @@ Tout le reste (saga/collection, statistiques et collaborateur·rices fréquent·
 - **Ma liste** : Déjà vu (statistiques visuelles : répartition films/séries, temps de visionnage, genres préférés, vus par année), Envie de voir (tri + réordonnancement manuel par glisser-déposer), En cours (séries entamées), listes personnalisées.
 - **Profil** : compte, notifications push, plateformes favorites, genres exclus, titres exclus.
 - **PWA installable**, thème clair/sombre, comptes optionnels avec synchronisation multi-appareils.
+
+## Licence
+
+Code source propriétaire — voir [`LICENSE`](./LICENSE). Le dépôt est public à des fins de
+transparence uniquement ; cela n'accorde aucun droit de réutilisation, copie ou distribution.
