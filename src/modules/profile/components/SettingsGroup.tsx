@@ -33,7 +33,7 @@ export function SettingsRow({
 }: {
   label: ReactNode;
   description?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <div className={styles.row}>
@@ -41,7 +41,7 @@ export function SettingsRow({
         <h3 className={styles.rowLabel}>{label}</h3>
         {description && <p className={styles.rowDescription}>{description}</p>}
       </div>
-      <div className={styles.rowControl}>{children}</div>
+      {children && <div className={styles.rowControl}>{children}</div>}
     </div>
   );
 }

@@ -52,8 +52,6 @@
     "notificationsHint": "Get notified when a title on your watchlist lands on a platform, for your favourite genres and big releases.",
     "recommendations": "Recommendations",
     "display": "Display",
-    "tabAccount": "Account",
-    "tabPreferences": "Preferences",
     "tabMyList": "My list",
     "tabCommunity": "Community",
     "recommendationsLead": "What Seancy suggests to you, and what it should leave out.",
@@ -72,6 +70,47 @@
     "statLists_other": "lists",
     "statFollowers_one": "follower",
     "statFollowers_other": "followers"
+  },
+  "settings": {
+    "title": "Settings",
+    "navLabel": "Settings sections",
+    "backToSummary": "Back to settings",
+    "pickSection": "Choose a section from the list.",
+    "summaryProviders_one": "{{count}} platform selected",
+    "summaryProviders_other": "{{count}} platforms selected",
+    "sections": {
+      "compte": { "title": "Account", "summary": "Name, username, email, sign-in" },
+      "confidentialite": {
+        "title": "Privacy",
+        "summary": "Who can see your profile"
+      },
+      "plateformes": { "title": "My platforms", "summary": "Your streaming services" },
+      "recommandations": {
+        "title": "Recommendations",
+        "summary": "Languages, countries, excluded genres"
+      },
+      "notifications": { "title": "Notifications", "summary": "Release and new content alerts" },
+      "affichage": { "title": "Display", "summary": "Language, region, theme" },
+      "donnees": { "title": "My data", "summary": "Export and delete your account" },
+      "a-propos": { "title": "About", "summary": "Legal notices and contact" }
+    }
+  },
+  "dataSettings": {
+    "groupTitle": "My data",
+    "groupLead": "Export a copy of your data or delete your account."
+  },
+  "settingsPages": {
+    "plateformes": {
+      "lead": "The streaming platforms you use, to know where to watch and get release alerts."
+    }
+  },
+  "aboutPage": {
+    "lead": "Seancy, a personal project to keep track of movies and shows.",
+    "brandLabel": "App",
+    "catalogLabel": "Catalog",
+    "catalogText": "Listings, posters and streaming availability provided by TMDB (The Movie Database) and JustWatch.",
+    "legalLabel": "Legal notices",
+    "contactLabel": "Contact us"
   },
   "providerBadges": {
     "unavailable": "Not available to stream in {{region}} right now.",
@@ -137,7 +176,7 @@
       "expired": "The sign-in has expired or was already used. Please start again.",
       "cancelled": "Sign-in cancelled.",
       "failed": "Sign-in didn't go through. Try again, or get a link by email.",
-      "no-email": "This account didn't share a verified email address with us: sign in with an email link, then link it from Profile → Account.",
+      "no-email": "This account didn't share a verified email address with us: sign in with an email link, then link it from Profile → Settings → Account.",
       "provider-taken": "Your Seancy account is already linked to another account from this provider. Sign in with that one or with an email link."
     }
   },
@@ -688,7 +727,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "October 8, 2026",
+    "lastUpdatedValue": "October 17, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -787,12 +826,12 @@
     },
     "retention": {
       "title": "Retention period",
-      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Account (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
+      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Settings → My data (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
       "textAfter": "."
     },
     "rights": {
       "title": "Your rights",
-      "textBefore": "Under the GDPR, you have the right to access, rectify, erase, restrict, port, and object with regard to your data. You can export a copy of your data at any time from Profile → Account (\"Export my data\" button), or exercise all of these rights ",
+      "textBefore": "Under the GDPR, you have the right to access, rectify, erase, restrict, port, and object with regard to your data. You can export a copy of your data at any time from Profile → Settings → My data (\"Export my data\" button), or exercise all of these rights ",
       "textAfter": ", and lodge a complaint with the CNIL if you believe your rights are not being respected."
     },
     "changes": {
@@ -1248,6 +1287,7 @@
     "comingSoon": "Coming soon",
     "random": "Random",
     "profile": "Profile",
+    "settings": "Settings",
     "search": "Search",
     "searchQuery": "Search: {{query}}",
     "login": "Sign in",
