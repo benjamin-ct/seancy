@@ -56,6 +56,8 @@
   overflow: hidden;
   border: 1px solid var(--border-2);
   box-shadow: var(--shadow-lift);
+  background-size: cover;
+  background-position: center;
 }
 
 .poster img,
@@ -64,6 +66,18 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* Masquée tant qu'elle n'a pas fini de charger, seulement quand un
+   ThumbHash existe dessous (voir usePosterThumbhash) : sinon le rendu
+   progressif du navigateur se peint par-dessus le flou encore visible. */
+.posterLoading {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.posterLoaded {
+  opacity: 1;
 }
 
 .body {

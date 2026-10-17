@@ -13,6 +13,7 @@ interface RecommendationApiItem {
   mediaType: MediaType;
   title: string;
   posterPath: string | null;
+  posterThumbhash: string | null;
   releaseDate: string | null;
   voteAverage: number | null;
   popularity: number;
@@ -34,6 +35,7 @@ function toMediaItem(item: RecommendationApiItem): RecommendationMediaItem {
     release_date: item.mediaType === "movie" ? (item.releaseDate ?? undefined) : undefined,
     first_air_date: item.mediaType === "tv" ? (item.releaseDate ?? undefined) : undefined,
     poster_path: item.posterPath,
+    poster_thumbhash: item.posterThumbhash ?? undefined,
     vote_average: item.voteAverage ?? undefined,
     popularity: item.popularity,
     genre_ids: item.genreIds,
