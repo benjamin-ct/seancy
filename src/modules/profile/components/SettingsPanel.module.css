@@ -162,7 +162,7 @@
   /* Même traitement que .providerGrid ci-dessus : 5 lignes visibles avant
      scroll sur desktop (demande de review sur les listes Pays/Langue,
      étendue à Genres à exclure par cohérence). */
-  max-height: 272px;
+  max-height: 312px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -514,7 +514,7 @@
 }
 
 @media (max-width: 860px) {
-  /* En une colonne sur mobile, la hauteur « 5 lignes » du desktop (272px,
+  /* En une colonne sur mobile, la hauteur « 5 lignes » du desktop (312px,
      voir plus haut) est trop courte — on retrouve la hauteur d'origine. */
   .providerGrid,
   .genreGrid {
