@@ -63,6 +63,11 @@ services:
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
       - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
+      # Auth Cloudflare (`wrangler whoami`) pour le benchmark Workers AI (carte
+      # "Worker AI pour l'algo V2"). Scope minimal : Account > Workers AI Read/Edit.
+      # Optionnels : no-op (wrangler reste non authentifié) tant qu'absents.
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
     restart: unless-stopped
 
 volumes:
