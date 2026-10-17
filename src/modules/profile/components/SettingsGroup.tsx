@@ -39,17 +39,20 @@ export function SettingsRow({
   wide,
   children,
 }: {
-  label: ReactNode;
+  /** Omis quand le titre du groupe porte déjà l'intitulé de cette unique ligne. */
+  label?: ReactNode;
   description?: ReactNode;
   wide?: boolean;
   children?: ReactNode;
 }) {
   return (
     <div className={`${styles.row} ${wide ? styles.rowWide : ""}`}>
-      <div className={styles.rowHead}>
-        <h3 className={styles.rowLabel}>{label}</h3>
-        {description && <p className={styles.rowDescription}>{description}</p>}
-      </div>
+      {(label || description) && (
+        <div className={styles.rowHead}>
+          {label && <h3 className={styles.rowLabel}>{label}</h3>}
+          {description && <p className={styles.rowDescription}>{description}</p>}
+        </div>
+      )}
       {children && <div className={styles.rowControl}>{children}</div>}
     </div>
   );
