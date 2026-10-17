@@ -9,6 +9,6 @@ regexTarget = "secret"
 regexes = [
   '''^d627aa22e73c4390952ff06afcc1f076$''',
   '''^(seancy|bobine)\.[A-Za-z]+(\.[A-Za-z]+)*(\.v\d+)?$''',
-  '''^6L[0-9a-zA-Z_-]{38,40}$''',
+  '''^6Ldgj4ctAAAAACH345AamgXKs4vXMlF1D1p1HHxz$''',
   '''^ta_valeur_de_[A-Za-z_]+$''',
 ]
