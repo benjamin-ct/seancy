@@ -118,6 +118,11 @@
     grid-column: 1 / -1;
   }
 
+  .nav {
+    position: sticky;
+    top: calc(var(--topnav-height, var(--header-height)) + 28px);
+  }
+
   .detail {
     margin-top: 0;
   }
