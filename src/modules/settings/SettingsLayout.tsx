@@ -11,8 +11,15 @@ function SettingsSectionRow({ id, icon }: { id: string; icon: IconName }) {
   const summary = useSettingsSummary(id);
   const match = useMatch(`/reglages/${id}/*`);
   return (
+    // Chemin absolu, pas relatif (`to={id}`) : `/reglages/*` est une route
+    // splat (voir App.tsx), donc un `to` relatif se résout par rapport à
+    // l'URL courante entière plutôt qu'au segment de route — en repartant
+    // d'une sous-page déjà ouverte (ex. /reglages/compte), il pointait vers
+    // /reglages/compte/confidentialite (aucune route ne matche, retour au
+    // sommaire par le `path="*"` plus bas), d'où le clic qui ne marchait
+    // qu'une fois sur deux (retour de review).
     <Link
-      to={id}
+      to={`/reglages/${id}`}
       className={`${styles.row} ${match ? styles.rowActive : ""}`}
       aria-current={match ? "page" : undefined}
     >

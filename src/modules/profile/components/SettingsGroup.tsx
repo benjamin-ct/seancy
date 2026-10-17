@@ -27,17 +27,25 @@ export function SettingsGroup({
 
 // Une ligne : libellé et description à gauche (300 px) et contrôle à droite
 // sur desktop ; description au-dessus du contrôle sur mobile.
+// `wide` : le contrôle a besoin de toute la largeur du panneau plutôt que du
+// 1fr restant à côté de la colonne de libellé de 300px (ex. grille de cases
+// à cocher 2 colonnes — plateformes, langues, pays, genres à exclure — dont
+// les 354px habituels tronquaient les noms, retour de review). Libellé et
+// description passent au-dessus du contrôle, en pleine largeur, comme déjà
+// le cas sur mobile.
 export function SettingsRow({
   label,
   description,
+  wide,
   children,
 }: {
   label: ReactNode;
   description?: ReactNode;
+  wide?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <div className={styles.row}>
+    <div className={`${styles.row} ${wide ? styles.rowWide : ""}`}>
       <div className={styles.rowHead}>
         <h3 className={styles.rowLabel}>{label}</h3>
         {description && <p className={styles.rowDescription}>{description}</p>}

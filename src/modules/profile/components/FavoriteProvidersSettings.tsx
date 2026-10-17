@@ -60,6 +60,7 @@ export default function FavoriteProvidersSettings() {
     <SettingsRow
       label={t("favoriteProvidersSettings.title")}
       description={t("favoriteProvidersSettings.description")}
+      wide
     >
       <span className={styles.meta}>
         {t("favoriteProvidersSettings.activeCount", { count: favoriteProviderIds.length })}
