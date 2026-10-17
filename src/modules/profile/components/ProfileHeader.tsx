@@ -7,18 +7,12 @@ import { getFollowList } from "../../../core/api/follows.ts";
 import { AccountAvatar, Icon } from "../../../shared/components/index.ts";
 import styles from "./ProfileHeader.module.css";
 
-/** Ancre du réglage « Lien public » (PublicProfileSettings, onglet Compte). */
-export const PUBLIC_LINK_ANCHOR = "lien-public";
-
 // Nouvelle DA · Profil : en-tête personnel (avatar, nom, badge « Public »,
 // @pseudo, compteurs) à la place de l'ancien bloc « Réglages / Profil ».
-// Sans profil public, « Voir mon profil public » mène au réglage « Lien
-// public » de l'onglet Compte (`onOpenPublicLinkSetting`).
-export default function ProfileHeader({
-  onOpenPublicLinkSetting,
-}: {
-  onOpenPublicLinkSetting: () => void;
-}) {
+// Sans profil public, « Voir mon profil public » mène au réglage
+// Confidentialité de la page Réglages (/reglages/confidentialite). L'icône
+// crantée ouvre le sommaire de Réglages (refonte Profil/Préférences).
+export default function ProfileHeader() {
   const { t } = useTranslation();
   const { email, displayName, username, shareSlug } = useAuth();
   const { watched, watchlist, customLists } = useLibrary();
@@ -115,16 +109,15 @@ export default function ProfileHeader({
             <span className={styles.actionLabel}>{viewLabel}</span>
           </Link>
         ) : (
-          <button
-            type="button"
+          <Link
+            to="/reglages/confidentialite"
             className={styles.action}
             aria-label={viewLabel}
             title={viewLabel}
-            onClick={onOpenPublicLinkSetting}
           >
             <Icon name="eye" size={18} />
             <span className={styles.actionLabel}>{viewLabel}</span>
-          </button>
+          </Link>
         )}
         {sharePath && (
           <button
@@ -138,6 +131,15 @@ export default function ProfileHeader({
             </span>
           </button>
         )}
+        <Link
+          to="/reglages"
+          className={styles.action}
+          aria-label={t("settings.title")}
+          title={t("settings.title")}
+        >
+          <Icon name="settings" size={18} />
+          <span className={styles.actionLabel}>{t("settings.title")}</span>
+        </Link>
       </div>
     </header>
   );

@@ -42,6 +42,7 @@ export default function FavoriteLanguagesSettings() {
     <SettingsRow
       label={t("favoriteLanguagesSettings.title")}
       description={t("favoriteLanguagesSettings.description")}
+      wide
     >
       <span className={styles.meta}>
         {t("favoriteLanguagesSettings.activeCount", { count: favoriteLanguageCodes.length })}

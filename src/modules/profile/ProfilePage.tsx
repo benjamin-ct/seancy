@@ -6,26 +6,15 @@ import { Icon, Loading } from "../../shared/components/index.ts";
 import type { IconName } from "../../shared/components/Icon/Icon.tsx";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import MyListContent from "../my-list/index.ts";
-import AccountSettings from "./components/AccountSettings.tsx";
-import PublicProfileSettings from "./components/PublicProfileSettings.tsx";
 import CommunityPanel from "./components/CommunityPanel.tsx";
-import NotificationSettings from "./components/NotificationSettings.tsx";
-import FavoriteProvidersSettings from "./components/FavoriteProvidersSettings.tsx";
-import FavoriteLanguagesSettings from "./components/FavoriteLanguagesSettings.tsx";
-import FavoriteCountriesSettings from "./components/FavoriteCountriesSettings.tsx";
-import ExcludedGenresSettings from "./components/ExcludedGenresSettings.tsx";
-import ExcludedTitlesSettings from "./components/ExcludedTitlesSettings.tsx";
-import RegionSettings from "./components/RegionSettings.tsx";
-import LanguageSettings from "./components/LanguageSettings.tsx";
-import ThemeSettings from "./components/ThemeSettings.tsx";
-import { SettingsGroup } from "./components/SettingsGroup.tsx";
-import ProfileHeader, { PUBLIC_LINK_ANCHOR } from "./components/ProfileHeader.tsx";
+import ProfileHeader from "./components/ProfileHeader.tsx";
 import styles from "./ProfilePage.module.css";
 
-type Tab = "compte" | "preferences" | "ma-liste" | "communaute";
+// Compte et Préférences ont migré vers la page Réglages séparée
+// (/reglages, voir src/modules/settings/) : Profil ne garde plus que Ma
+// liste et Communauté, ouverts par l'icône crantée de l'en-tête.
+type Tab = "ma-liste" | "communaute";
 const TABS: { id: Tab; icon: IconName; labelKey: string }[] = [
-  { id: "compte", icon: "user", labelKey: "profile.tabAccount" },
-  { id: "preferences", icon: "sliders", labelKey: "profile.tabPreferences" },
   { id: "ma-liste", icon: "bookmark", labelKey: "profile.tabMyList" },
   { id: "communaute", icon: "users", labelKey: "profile.tabCommunity" },
 ];
@@ -41,7 +30,7 @@ export default function ProfilePage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const tab: Tab = TAB_IDS.includes(requestedTab as Tab) ? (requestedTab as Tab) : "compte";
+  const tab: Tab = TAB_IDS.includes(requestedTab as Tab) ? (requestedTab as Tab) : "ma-liste";
   const tabRefs = useRef(new Map<Tab, HTMLButtonElement>());
   // Onglets déjà ouverts : gardés montés (masqués) pour qu'y revenir
   // n'affiche pas de nouveau « Chargement… » ni de contenu qui se décale
@@ -52,7 +41,7 @@ export default function ProfilePage() {
   }
 
   function selectTab(next: Tab) {
-    setSearchParams(next === "compte" ? {} : { tab: next });
+    setSearchParams(next === "ma-liste" ? {} : { tab: next });
   }
 
   // Flèches ←/→ (et Début/Fin) : onglet voisin, sélectionné et focalisé
@@ -77,58 +66,8 @@ export default function ProfilePage() {
     tabRefs.current.get(next)?.focus();
   }
 
-  // Profil privé : « Voir mon profil public » mène au réglage « Lien
-  // public » de l'onglet Compte (affiché au rendu suivant si on était
-  // sur un autre onglet).
-  function openPublicLinkSetting() {
-    selectTab("compte");
-    setTimeout(() => {
-      document
-        .getElementById(PUBLIC_LINK_ANCHOR)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  }
-
   function renderPanel(id: Tab) {
     switch (id) {
-      case "compte":
-        return (
-          <div className={styles.settings}>
-            <AccountSettings />
-            <PublicProfileSettings />
-          </div>
-        );
-      // Nouvelle DA 8/10 : tout ce qui décrit le comportement de l'app
-      // (recommandations, notifications, affichage), présenté en groupes et
-      // en lignes comme l'onglet Compte.
-      case "preferences":
-        return (
-          <div className={styles.settings}>
-            <SettingsGroup
-              title={t("profile.recommendations")}
-              description={t("profile.recommendationsLead")}
-            >
-              <FavoriteProvidersSettings />
-              <FavoriteLanguagesSettings />
-              <FavoriteCountriesSettings />
-              <ExcludedGenresSettings />
-              <ExcludedTitlesSettings />
-            </SettingsGroup>
-
-            <SettingsGroup
-              title={t("profile.notifications")}
-              description={t("profile.notificationsLead")}
-            >
-              <NotificationSettings />
-            </SettingsGroup>
-
-            <SettingsGroup title={t("profile.display")} description={t("profile.displayLead")}>
-              <LanguageSettings />
-              <RegionSettings />
-              <ThemeSettings />
-            </SettingsGroup>
-          </div>
-        );
       case "communaute":
         return (
           <section className={styles.section}>
@@ -157,9 +96,9 @@ export default function ProfilePage() {
 
   return (
     <div className={styles.page}>
-      <ProfileHeader onOpenPublicLinkSetting={openPublicLinkSetting} />
+      <ProfileHeader />
 
-      {/* Onglets soulignés : une ligne de 4 colonnes égales, collée sous
+      {/* Onglets soulignés : une ligne de 2 colonnes égales, collée sous
           l'en-tête au défilement sur mobile. */}
       <div className={styles.tabs} role="tablist" aria-label={t("profile.tabsLabel")}>
         {TABS.map(({ id, icon, labelKey }) => (

@@ -52,8 +52,6 @@
     "notificationsHint": "Soyez prévenu·e quand un titre de vos envies arrive sur une plateforme, pour vos genres préférés et les grosses sorties.",
     "recommendations": "Recommandations",
     "display": "Affichage",
-    "tabAccount": "Compte",
-    "tabPreferences": "Préférences",
     "tabMyList": "Ma liste",
     "tabCommunity": "Communauté",
     "recommendationsLead": "Ce que Seancy vous propose, et ce qu'il doit laisser de côté.",
@@ -72,6 +70,42 @@
     "statLists_other": "listes",
     "statFollowers_one": "abonné",
     "statFollowers_other": "abonnés"
+  },
+  "settings": {
+    "title": "Réglages",
+    "navLabel": "Sections des réglages",
+    "backToSummary": "Retour au sommaire",
+    "pickSection": "Choisissez une rubrique dans le sommaire.",
+    "summaryProviders_one": "{{count}} plateforme sélectionnée",
+    "summaryProviders_other": "{{count}} plateformes sélectionnées",
+    "sections": {
+      "compte": { "title": "Compte", "summary": "Nom, pseudo, e-mail, connexion" },
+      "confidentialite": {
+        "title": "Confidentialité",
+        "summary": "Qui peut voir votre profil"
+      },
+      "plateformes": { "title": "Mes plateformes", "summary": "Vos services de streaming" },
+      "recommandations": {
+        "title": "Recommandations",
+        "summary": "Langues, pays, genres exclus"
+      },
+      "notifications": { "title": "Notifications", "summary": "Alertes sorties et nouveautés" },
+      "affichage": { "title": "Affichage", "summary": "Langue, région, thème" },
+      "donnees": { "title": "Mes données", "summary": "Export et suppression du compte" },
+      "a-propos": { "title": "À propos", "summary": "Mentions légales et contact" }
+    }
+  },
+  "dataSettings": {
+    "groupTitle": "Mes données",
+    "groupLead": "Exportez une copie de vos données ou supprimez votre compte."
+  },
+  "aboutPage": {
+    "lead": "Seancy, un projet personnel pour suivre ses films et séries.",
+    "brandLabel": "Application",
+    "catalogLabel": "Catalogue",
+    "catalogText": "Fiches, affiches et disponibilités en streaming fournies par TMDB (The Movie Database) et JustWatch.",
+    "legalLabel": "Mentions légales",
+    "contactLabel": "Nous contacter"
   },
   "providerBadges": {
     "unavailable": "Non disponible en streaming en {{region}} pour le moment.",
@@ -137,7 +171,7 @@
       "expired": "La connexion a expiré ou a déjà été utilisée. Recommencez.",
       "cancelled": "Connexion annulée.",
       "failed": "La connexion n'a pas abouti. Réessayez, ou recevez un lien par email.",
-      "no-email": "Ce compte ne nous a pas transmis d'adresse email vérifiée : connectez-vous avec un lien par email, puis associez-le depuis Profil → Compte.",
+      "no-email": "Ce compte ne nous a pas transmis d'adresse email vérifiée : connectez-vous avec un lien par email, puis associez-le depuis Profil → Réglages → Compte.",
       "provider-taken": "Votre compte Seancy est déjà associé à un autre compte de ce fournisseur. Connectez-vous avec celui-ci ou avec un lien par email."
     }
   },
@@ -688,7 +722,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "8 octobre 2026",
+    "lastUpdatedValue": "17 octobre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -787,12 +821,12 @@
     },
     "retention": {
       "title": "Durée de conservation",
-      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Compte (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
+      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
       "textAfter": "."
     },
     "rights": {
       "title": "Vos droits",
-      "textBefore": "Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition sur vos données. Vous pouvez exporter une copie de vos données à tout moment depuis Profil → Compte (bouton « Exporter mes données »), ou exercer l'ensemble de ces droits ",
+      "textBefore": "Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition sur vos données. Vous pouvez exporter une copie de vos données à tout moment depuis Profil → Réglages → Mes données (bouton « Exporter mes données »), ou exercer l'ensemble de ces droits ",
       "textAfter": ", et introduire une réclamation auprès de la CNIL si vous estimez que vos droits ne sont pas respectés."
     },
     "changes": {
@@ -1248,6 +1282,7 @@
     "comingSoon": "Prochainement",
     "random": "Aléatoire",
     "profile": "Profil",
+    "settings": "Réglages",
     "search": "Recherche",
     "searchQuery": "Recherche : {{query}}",
     "login": "Connexion",
