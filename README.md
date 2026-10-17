@@ -25,6 +25,7 @@ Les données (catalogue, affiches, plateformes de streaming) viennent de [TMDB](
 - [Hooks Git locaux (Husky)](#hooks-git-locaux-husky)
 - [Fonctionnalités en stub](#fonctionnalités-en-stub)
 - [Fonctionnalités](#fonctionnalités)
+- [Licence](#licence)
 
 ## Stack technique
 
@@ -221,3 +222,8 @@ Tout le reste (saga/collection, statistiques et collaborateur·rices fréquent·
 - **Ma liste** : Déjà vu (statistiques visuelles : répartition films/séries, temps de visionnage, genres préférés, vus par année), Envie de voir (tri + réordonnancement manuel par glisser-déposer), En cours (séries entamées), listes personnalisées.
 - **Profil** : compte, notifications push, plateformes favorites, genres exclus, titres exclus.
 - **PWA installable**, thème clair/sombre, comptes optionnels avec synchronisation multi-appareils.
+
+## Licence
+
+Code source propriétaire — voir [`LICENSE`](./LICENSE). Le dépôt est public à des fins de
+transparence uniquement ; cela n'accorde aucun droit de réutilisation, copie ou distribution.
