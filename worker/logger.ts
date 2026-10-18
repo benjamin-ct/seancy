@@ -6,5 +6,19 @@ import * as Sentry from "@sentry/cloudflare";
 
 export function logError(message: string, err: unknown): void {
   console.error(message, err);
-  Sentry.captureException(err instanceof Error ? err : new Error(`${message}: ${String(err)}`));
+  if (err instanceof Error) {
+    Sentry.captureException(err);
+    return;
+  }
+  // `String(err)` tombe sur "[object Object]" pour un rejet non-Error (ex.
+  // objet d'erreur WASM sans toString custom) et masque la vraie cause en
+  // Sentry — JSON.stringify garde au moins les clés/valeurs utiles.
+  const detail = (() => {
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  })();
+  Sentry.captureException(new Error(`${message}: ${detail}`));
 }
