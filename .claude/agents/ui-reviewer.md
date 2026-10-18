@@ -1,6 +1,6 @@
 ---
 name: ui-reviewer
-description: Contrôle de l'interface (responsive, accessibilité, cohérence visuelle) d'une PR Seancy avant passage en revue humaine, à partir de captures d'écran desktop/mobile. Sixième et dernier sous-agent du chantier "workflow de développement IA autonome" (carte Trello https://trello.com/c/Kwr35vrC) — additif, non encore câblé dans le skill trello-ticket-pipeline.
+description: Contrôle de l'interface (responsive, accessibilité, cohérence visuelle) d'une PR Seancy avant passage en revue humaine, à partir de captures d'écran desktop/mobile. Sixième et dernier sous-agent du chantier "workflow de développement IA autonome" (carte Trello https://trello.com/c/Kwr35vrC) — câblé en pré-merge dans le skill trello-ticket-pipeline (étape 2c.4.4), uniquement sur les PR qui touchent l'interface, toujours en lecture seule et sans blocage automatique.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
