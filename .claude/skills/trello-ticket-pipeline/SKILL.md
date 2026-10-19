@@ -190,7 +190,7 @@ précédente s'est arrêtée en cours de route) et continuer le développement (
       la branche/PR (`gh pr diff <numéro>`). Toujours en lecture seule — ce sous-agent ne corrige jamais de fichier et
       ne bloque/merge jamais de lui-même, quel que soit ce qu'il trouve.
       - S'il remonte des constats : les ajouter dans une section dédiée de la description de la PR (bloquant / à
-        vérifier / mineur, avec fichier/ligne/scénario) et les résumer dans le commentaire Trello de l'étape 4.5, pour
+        vérifier / mineur, avec fichier/ligne/scénario) et les résumer dans le commentaire Trello de l'étape 4.6, pour
         que l'humain les voie pendant sa review. Ne pas les corriger automatiquement avant validation humaine de ce
         nouveau comportement — pas de boucle de correction automatique dans cette première itération.
       - S'il ne remonte rien, le dire aussi brièvement (ne pas laisser planer un doute sur le fait que la revue a bien
@@ -200,9 +200,18 @@ précédente s'est arrêtée en cours de route) et continuer le développement (
         reprendre
         depuis là ;
       - sinon, la chercher dans les checks/deployments de la PR sur GitHub.
-   4. Déplacer la carte vers `A valider`.
-   5. Ajouter un commentaire sur la carte avec le lien de la preview (et le lien de la PR), et le résumé de la revue
-      pré-merge de l'étape 4.2.
+   4. **Revue UI pré-merge automatisée** : si le diff touche réellement l'interface (composants `.tsx`, CSS, assets),
+      lancer le sous-agent `ui-reviewer` (`.claude/agents/ui-reviewer.md`) sur la PR, avec l'URL de preview récupérée
+      à l'étape 4.3. Toujours en lecture seule, comme `reviewer` — ne corrige jamais de fichier et ne
+      bloque/merge jamais de lui-même.
+      - S'il remonte des constats : les ajouter dans la même section dédiée de la description de la PR que ceux de
+        `reviewer` (bloquant / à vérifier / mineur, avec page/composant/taille d'écran) et les résumer dans le
+        commentaire Trello de l'étape 4.6.
+      - S'il ne remonte rien, ou si la PR ne touche pas l'interface (donc pas de revue UI déclenchée), le dire
+        brièvement aussi.
+   5. Déplacer la carte vers `A valider`.
+   6. Ajouter un commentaire sur la carte avec le lien de la preview (et le lien de la PR), et le résumé des revues
+      pré-merge des étapes 4.2 (`reviewer`) et 4.4 (`ui-reviewer`).
       **Toujours préfixer le commentaire par `🤖 [Claude]`** pour indiquer clairement qu'il s'agit d'un message
       automatisé. Si le développement a été délégué, y indiquer le modèle et l'effort réellement utilisés.
 5. **Vérifier la fraîcheur des CGU / politique de confidentialité** (`src/modules/legal/`, routes
@@ -295,7 +304,7 @@ garde tout le reste : branche (2c.1), lecture de la carte, PR, attente CI, previ
      reprendre à 2c.4 (PR, preview, carte en `A valider`).
 
 6. Indiquer le modèle (id complet lu dans le journal) et l'effort utilisés dans le commentaire de fin de ticket
-   (2c.4.5) et dans le résumé Discord.
+   (2c.4.6) et dans le résumé Discord.
 
 ## Limite d'usage atteinte
 
