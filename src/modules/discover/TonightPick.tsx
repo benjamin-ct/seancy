@@ -9,6 +9,7 @@ import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx"
 import { useLibrary } from "../../core/context/LibraryContext.tsx";
 import { Icon } from "../../shared/components/index.ts";
 import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
+import { usePosterThumbhash } from "../../shared/lib/thumbhash.ts";
 import type { Genre, MediaItem } from "../../core/types/tmdb.ts";
 import posterStyles from "../../shared/styles/posterAccents.module.css";
 import { storageGetJSON, storageSetJSON } from "../../shared/lib/storage.ts";
@@ -100,19 +101,30 @@ export default function TonightPick() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [region, favoritesKey, excludedGenresKey, i18n.language]);
 
-  if (candidates === null) {
-    return <div className={`${styles.hero} ${styles.placeholder}`} aria-hidden="true" />;
-  }
-
-  const unwatched = candidates.filter((c) => !isWatched("movie", c.id));
-  if (unwatched.length === 0) {
-    return null;
-  }
+  // Calculés avant tout `return` conditionnel pour que le hook
+  // `usePosterThumbhash` juste après reste appelé à chaque rendu (règle des
+  // hooks) — `pick` vaut `undefined` tant que `candidates` n'est pas prêt.
+  const unwatched = (candidates ?? []).filter((c) => !isWatched("movie", c.id));
   // Les titres écartés laissent la place aux suivants dans l'ordre de
   // popularité ; une fois tout écarté, on repart du début.
   const remaining = unwatched.filter((c) => !skipped.includes(c.id));
   const pool = (remaining.length ? remaining : unwatched).slice(0, PICK_POOL_SIZE);
   const pick = pool[dailyIndex(pool.length)];
+  const {
+    hasThumbhash: pickHasThumbhash,
+    loaded: pickPosterLoaded,
+    backgroundStyle: pickPosterThumbhashStyle,
+    imgRef: pickPosterImgRef,
+    onLoad: handlePickPosterLoad,
+    onError: handlePickPosterError,
+  } = usePosterThumbhash(pick?.poster_thumbhash);
+
+  if (candidates === null) {
+    return <div className={`${styles.hero} ${styles.placeholder}`} aria-hidden="true" />;
+  }
+  if (unwatched.length === 0) {
+    return null;
+  }
 
   function skip() {
     const next = remaining.length > 1 ? [...skipped, pick.id] : [pick.id];
@@ -144,14 +156,30 @@ export default function TonightPick() {
       {backdrop && (
         <div className={styles.backdrop} style={{ backgroundImage: `url(${backdrop})` }} />
       )}
-      <Link to={detailUrl} className={styles.poster} tabIndex={-1} aria-hidden="true">
+      <Link
+        to={detailUrl}
+        className={styles.poster}
+        style={pickPosterThumbhashStyle}
+        tabIndex={-1}
+        aria-hidden="true"
+      >
         {pick.poster_path ? (
           <img
+            ref={pickPosterImgRef}
             src={posterUrl(pick.poster_path) ?? undefined}
             srcSet={posterSrcSet(pick.poster_path)}
             sizes="(max-width: 860px) 87px, 180px"
             alt=""
             fetchPriority="high"
+            className={
+              pickHasThumbhash
+                ? pickPosterLoaded
+                  ? styles.posterLoaded
+                  : styles.posterLoading
+                : undefined
+            }
+            onLoad={handlePickPosterLoad}
+            onError={handlePickPosterError}
           />
         ) : (
           <div className={`${styles.noPoster} ${posterStyles[accentKey]}`} />

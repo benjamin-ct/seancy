@@ -39,6 +39,18 @@
   display: block;
 }
 
+/* Masque l'affiche tant qu'elle n'a pas fini de charger, pour ne pas
+   peindre le rendu progressif du navigateur par-dessus le ThumbHash flou
+   encore visible dessous (voir MediaCard.tsx, usePosterThumbhash). */
+.posterImg {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.posterImgLoaded {
+  opacity: 1;
+}
+
 .noPoster {
   display: flex;
   align-items: flex-end;

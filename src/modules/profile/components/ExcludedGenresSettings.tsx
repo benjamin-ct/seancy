@@ -49,7 +49,11 @@ export default function ExcludedGenresSettings() {
     : genres;
 
   return (
-    <SettingsRow label={t("excludedGenres.summary")} description={t("excludedGenres.description")}>
+    <SettingsRow
+      label={t("excludedGenres.summary")}
+      description={t("excludedGenres.description")}
+      wide
+    >
       <span className={styles.meta}>
         {t("excludedGenres.meta", { count: excludedGenreIds.length })} ·{" "}
         {t("excludedGenres.toggleHint")}

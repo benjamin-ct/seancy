@@ -1061,6 +1061,49 @@ export async function setRecommendationCache(
     .run();
 }
 
+// `recommendation_cache.items` fige `posterThumbhash` tel qu'il était au
+// moment du calcul (voir setRecommendationCache) : un ThumbHash calculé à
+// la demande après coup (voir worker/images/posterThumbhash.ts) n'y
+// apparaît donc jamais tant que le cache (24h, RECOMMENDATION_CACHE_TTL_MS)
+// n'est pas recalculé de zéro. Permet de relire l'état courant pour une
+// poignée de poster_path, sans payer le coût d'un recalcul complet du
+// classement, afin que les affiches servies par le cache affichent le
+// ThumbHash dès qu'il existe plutôt que de rester en silhouette pendant
+// jusqu'à 24h.
+// Découpé par lots de MAX_BOUND_IDS (voir getNotifiedKeys) : depuis que
+// cette fonction tourne sur toute réponse TMDB proxée (pas seulement une
+// page de recommandations, bornée à quelques dizaines d'items), une
+// filmographie fournie via /person/{id}/combined_credits peut dépasser
+// largement la limite de paramètres liés d'une seule requête D1.
+export async function getThumbhashesForPosterPaths(
+  db: D1Database,
+  posterPaths: string[]
+): Promise<Map<string, string>> {
+  if (posterPaths.length === 0) {
+    return new Map();
+  }
+  const statements: D1PreparedStatement[] = [];
+  for (let i = 0; i < posterPaths.length; i += MAX_BOUND_IDS) {
+    const paths = posterPaths.slice(i, i + MAX_BOUND_IDS);
+    statements.push(
+      db
+        .prepare(
+          `SELECT poster_path, thumbhash FROM poster_thumbhashes
+           WHERE poster_path IN (${paths.map(() => "?").join(", ")})`
+        )
+        .bind(...paths)
+    );
+  }
+  const results = await db.batch<{ poster_path: string; thumbhash: string }>(statements);
+  const hashes = new Map<string, string>();
+  for (const { results: rows } of results) {
+    for (const row of rows) {
+      hashes.set(row.poster_path, row.thumbhash);
+    }
+  }
+  return hashes;
+}
+
 export async function getFavoriteProvidersForUser(
   db: D1Database,
   userId: number

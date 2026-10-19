@@ -26,6 +26,7 @@ const Detail = lazy(() => import("./modules/detail/index.ts"));
 const Person = lazy(() => import("./modules/person/index.ts"));
 const Random = lazy(() => import("./modules/random/index.ts"));
 const Profile = lazy(() => import("./modules/profile/index.ts"));
+const Settings = lazy(() => import("./modules/settings/index.ts"));
 const PublicProfile = lazy(() => import("./modules/public-profile/index.ts"));
 const Search = lazy(() => import("./modules/search/index.ts"));
 const SharedList = lazy(() => import("./modules/shared-list/index.ts"));
@@ -122,6 +123,7 @@ export default function App() {
               <Route path="/aleatoire" element={<Random />} />
               <Route path="/ma-liste" element={<Navigate to="/profil?tab=ma-liste" replace />} />
               <Route path="/profil" element={<Profile />} />
+              <Route path="/reglages/*" element={<Settings />} />
               <Route path="/u/:slug" element={<PublicProfile />} />
               <Route path="/recherche" element={<Search />} />
               <Route path="/liste/:slug" element={<SharedList />} />

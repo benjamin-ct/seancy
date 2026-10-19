@@ -37,6 +37,7 @@ import {
   addNotInterested,
   getRecommendationCache,
   setRecommendationCache,
+  getThumbhashesForPosterPaths,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -61,8 +62,10 @@ import {
   buildTasteProfile,
   getRecommendationCandidates,
   rankRecommendations,
+  type RecommendationItem,
   type RecommendationMediaType,
 } from "./recommendations.ts";
+import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
 import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
@@ -1994,7 +1997,60 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const RECOMMENDATION_CACHE_SIZE = 96;
 
-async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
+// Affiches sans ThumbHash connu parmi la page réellement servie : calcul en
+// arrière-plan (jamais dans le chemin synchrone de la réponse), voir
+// worker/images/posterThumbhash.ts. Ne couvre que la page retournée, pas
+// tout le pool de candidats, pour ne consommer le budget `waitUntil` que
+// pour les affiches effectivement vues par un utilisateur actif.
+function scheduleMissingThumbhashes(
+  ctx: ExecutionContext,
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): void {
+  for (const item of items) {
+    if (item.posterPath && !item.posterThumbhash) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, item.posterPath));
+    }
+  }
+}
+
+// `recommendation_cache` fige `posterThumbhash` au moment du calcul (voir
+// RECOMMENDATION_CACHE_TTL_MS, 24h) : un ThumbHash calculé à la demande
+// après coup (scheduleMissingThumbhashes) n'apparaîtrait donc jamais tant
+// que le cache n'expire pas, même une fois stocké en base — bug remonté en
+// review (carte Trello "ThumbHash affiches", page Découvrir toujours en
+// silhouette malgré plusieurs rechargements). Mute les items en place avec
+// la valeur actuelle de `poster_thumbhashes` pour les affiches encore
+// marquées `null` dans le cache.
+async function refreshMissingThumbhashes(
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): Promise<void> {
+  const missingPaths = items
+    .filter((item) => item.posterPath && !item.posterThumbhash)
+    .map((item) => item.posterPath as string);
+  if (missingPaths.length === 0) {
+    return;
+  }
+  const fresh = await getThumbhashesForPosterPaths(env.DB, [...new Set(missingPaths)]);
+  if (fresh.size === 0) {
+    return;
+  }
+  for (const item of items) {
+    if (item.posterPath && !item.posterThumbhash) {
+      const hash = fresh.get(item.posterPath);
+      if (hash) {
+        item.posterThumbhash = hash;
+      }
+    }
+  }
+}
+
+async function handleGetRecommendations(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
@@ -2014,7 +2070,9 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
   if (cached && isFresh && cached.items.length >= offset + limit) {
-    const pageItems = cached.items.slice(offset, offset + limit);
+    const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
+    await refreshMissingThumbhashes(env, pageItems);
+    scheduleMissingThumbhashes(ctx, env, pageItems);
     return json({
       items: pageItems,
       coldStart: cached.coldStart,
@@ -2040,6 +2098,7 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   });
   await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
   const pageItems = items.slice(offset, offset + limit);
+  scheduleMissingThumbhashes(ctx, env, pageItems);
   return json({
     items: pageItems,
     coldStart: profile.isColdStart,
@@ -2382,6 +2441,111 @@ async function enrichDiscoverResultsWithRegionDate(
   );
 }
 
+// Toute affiche TMDB proxée, pas seulement celles des recommandations
+// (carte Trello "ThumbHash affiches" — demande explicite d'étendre la
+// couverture à Découvrir/recherche/tendances/fiches détail, y compris pour
+// un visiteur non connecté, puisque le ThumbHash d'une affiche n'a rien
+// d'utilisateur). Un item TMDB peut porter `poster_path` à plusieurs
+// profondeurs selon la route (résultats paginés, fiche détail elle-même,
+// `belongs_to_collection`, `parts` d'une collection, `cast` via
+// append_to_response=credits...) : on descend récursivement plutôt que
+// d'énumérer chaque forme, pour rester correct si une route ou un
+// append_to_response change de forme plus tard.
+function collectPosterPathHolders(
+  node: unknown,
+  holders: Array<{ poster_path: string; poster_thumbhash?: string | null }> = []
+): Array<{ poster_path: string; poster_thumbhash?: string | null }> {
+  if (Array.isArray(node)) {
+    for (const entry of node) {
+      collectPosterPathHolders(entry, holders);
+    }
+  } else if (node && typeof node === "object") {
+    const record = node as Record<string, unknown>;
+    if (typeof record.poster_path === "string") {
+      holders.push(record as { poster_path: string; poster_thumbhash?: string | null });
+    }
+    for (const value of Object.values(record)) {
+      if (value && typeof value === "object") {
+        collectPosterPathHolders(value, holders);
+      }
+    }
+  }
+  return holders;
+}
+
+// Même mécanisme que scheduleMissingThumbhashes/refreshMissingThumbhashes
+// (recommandations) mais générique sur n'importe quelle réponse TMDB
+// proxée : lecture groupée de `poster_thumbhashes` pour les affiches
+// déjà connues, calcul en arrière-plan (jamais dans le chemin synchrone de
+// la réponse) pour celles qui manquent encore.
+async function enrichResponseWithPosterThumbhashes(
+  data: unknown,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<void> {
+  const holders = collectPosterPathHolders(data);
+  if (holders.length === 0) {
+    return;
+  }
+  const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
+  const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  for (const holder of holders) {
+    const hash = hashes.get(holder.poster_path);
+    holder.poster_thumbhash = hash ?? null;
+    if (!hash) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+    }
+  }
+}
+
+// Variante de enrichResponseWithPosterThumbhashes pour un hit du cache
+// d'edge (voir handleTmdbProxy) : ne lit/réécrit que les affiches encore
+// `null` dans la réponse déjà figée, sans retoucher à celles déjà connues
+// ni toucher à l'entrée de cache elle-même (chaque requête suivante refait
+// ce même correctif tant que le cache n'a pas expiré, coût borné à une
+// lecture D1 groupée). Repart tôt sans toucher au corps de la réponse si
+// aucune affiche n'est manquante.
+async function refreshCachedPosterThumbhashes(
+  response: Response,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const data = await response
+    .clone()
+    .json()
+    .catch(() => null);
+  if (!data) {
+    return response;
+  }
+  const holders = collectPosterPathHolders(data).filter((holder) => !holder.poster_thumbhash);
+  if (holders.length === 0) {
+    return response;
+  }
+  const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
+  const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  for (const holder of holders) {
+    const hash = hashes.get(holder.poster_path);
+    if (hash) {
+      holder.poster_thumbhash = hash;
+    } else {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+    }
+  }
+  // En-têtes reconstruits à la main plutôt que copiés depuis `response.headers` :
+  // le corps change de taille dès qu'une affiche passe de `null` à un hash (ou
+  // l'inverse), et on ne sait pas si le Cache API de Cloudflare matérialise un
+  // `content-length` (ou un `age`) sur la représentation qu'il renvoie — ne
+  // garder que ce dont ce proxy a vraiment besoin évite tout risque d'en-tête
+  // devenu incohérent avec le nouveau corps.
+  return new Response(JSON.stringify(data), {
+    status: response.status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": response.headers.get("cache-control") || "public, max-age=300",
+    },
+  });
+}
+
 // Proxy TMDB : la clé API TMDB n'est plus exposée côté client (elle
 // n'apparaît dans aucune requête réseau visible depuis le navigateur). Le
 // front (src/core/api/tmdbClient.ts) appelle /api/tmdb/<chemin TMDB> ; ce
@@ -2423,7 +2587,13 @@ async function handleTmdbProxy(
   );
   const cached = await cache.match(cacheKey);
   if (cached) {
-    return cached;
+    // Le cache d'edge fige `poster_thumbhash` tel qu'il était au moment de
+    // sa mise en cache (même souci que `recommendation_cache`, voir
+    // refreshMissingThumbhashes) : sans ce correctif, une affiche calculée
+    // en arrière-plan juste après la première requête resterait en
+    // silhouette pour tout visiteur suivant jusqu'à expiration du cache
+    // (jusqu'à 1h sur les routes par titre).
+    return refreshCachedPosterThumbhashes(cached, env, ctx);
   }
 
   // Plafonds vérifiés APRÈS le cache d'edge : une réponse servie depuis le
@@ -2511,7 +2681,11 @@ async function handleTmdbProxy(
 
   const res = await fetch(tmdbUrl.toString());
   let body = await res.text();
-  if (res.ok && (shouldEnrichProviders || shouldEnrichRegionDate)) {
+  // Le ThumbHash est posé sur TOUTE réponse TMDB proxée qui porte des
+  // affiches (pas seulement les grilles Découvrir enrichies de badges) :
+  // le JSON.parse ci-dessous n'est donc plus conditionné aux deux
+  // enrichissements existants.
+  if (res.ok) {
     const data = JSON.parse(body);
     const usage: TmdbUsage = { calls: 0 };
     if (shouldEnrichProviders) {
@@ -2530,6 +2704,7 @@ async function handleTmdbProxy(
       const region = params.get("region_release_date_region") || "FR";
       await enrichDiscoverResultsWithRegionDate(data, region, url.origin, env, ctx, usage);
     }
+    await enrichResponseWithPosterThumbhashes(data, env, ctx);
     // Imputés après coup (on ne connaît qu'ici le nombre d'appels hors cache) :
     // la requête en cours est servie, les suivantes seront refusées.
     if (usage.calls > 0) {
@@ -2920,7 +3095,7 @@ async function routeRequest(
   }
 
   if (url.pathname === "/api/recommendations" && request.method === "GET") {
-    return handleGetRecommendations(request, env);
+    return handleGetRecommendations(request, env, ctx);
   }
 
   if (url.pathname === "/api/not-interested" && request.method === "POST") {

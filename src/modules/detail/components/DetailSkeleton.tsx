@@ -41,16 +41,18 @@ export default function DetailSkeleton({ mediaType, id, preview }: DetailSkeleto
         <div className={pageStyles.heroInner}>
           <div className={pageStyles.posterWrap}>
             {preview?.posterPath ? (
-              <img
-                src={posterUrl(preview.posterPath, "w342") ?? undefined}
-                srcSet={posterSrcSet(preview.posterPath)}
-                sizes={DETAIL_POSTER_SIZES}
-                alt={preview.title}
-                className={pageStyles.poster}
-                fetchPriority="high"
-              />
+              <div className={pageStyles.posterFrame}>
+                <img
+                  src={posterUrl(preview.posterPath, "w342") ?? undefined}
+                  srcSet={posterSrcSet(preview.posterPath)}
+                  sizes={DETAIL_POSTER_SIZES}
+                  alt={preview.title}
+                  className={pageStyles.poster}
+                  fetchPriority="high"
+                />
+              </div>
             ) : (
-              <div className={`${pageStyles.poster} ${skeletonStyles.block}`} />
+              <div className={`${pageStyles.posterFrame} ${skeletonStyles.block}`} />
             )}
           </div>
           <div className={pageStyles.info}>
