@@ -302,6 +302,8 @@
     padding: 16px;
   }
 
+  /* Pas de pastille « Autre suggestion » dans ces deux états. */
+  .messageBusy .body,
   .messageTextOnly .body {
     padding-right: 0;
   }

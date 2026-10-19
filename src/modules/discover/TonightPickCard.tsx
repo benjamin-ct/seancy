@@ -153,7 +153,7 @@ export function TonightPickMessage({
   const { t } = useTranslation();
   return (
     <section
-      className={`${styles.hero} ${busy ? "" : styles.messageTextOnly}`}
+      className={`${styles.hero} ${busy ? styles.messageBusy : styles.messageTextOnly}`}
       aria-labelledby="tonight-title"
       aria-busy={busy}
       aria-live="polite"
