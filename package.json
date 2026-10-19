@@ -30,6 +30,7 @@
     "verify:tmdb-proxy-policy": "node scripts/verify-tmdb-proxy-policy.ts",
     "verify:tmdb-retry-after": "node scripts/verify-tmdb-retry-after.ts",
     "verify:tmdb-edge-cache": "node scripts/verify-tmdb-edge-cache.ts",
+    "verify:ai-suggestions": "node scripts/verify-ai-suggestions.ts",
     "verify:security-headers": "node scripts/security-headers.ts --check",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "generate:thumbhashes": "node scripts/generate-thumbhashes.ts",

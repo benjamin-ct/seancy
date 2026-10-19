@@ -66,6 +66,7 @@ import {
   type RecommendationMediaType,
 } from "./recommendations.ts";
 import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
+import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
 import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
@@ -2147,6 +2148,59 @@ async function handlePostNotInterested(request: Request, env: Env): Promise<Resp
   return json({ ok: true });
 }
 
+// Suggestions IA « Pour vous ce soir » -----------------------------------
+// Toute la logique (verrou, génération en arrière-plan, repli v1) vit dans
+// ai-suggestions.ts. Le client interroge le GET toutes les quelques
+// secondes tant que la réponse est "pending" : plafond en mémoire assez
+// large pour ce polling, la génération elle-même étant de toute façon
+// limitée à une par utilisateur et par jour par le cache D1.
+const TONIGHT_SUGGESTIONS_RATE_LIMIT = { limit: 60, windowMs: 60_000 };
+
+async function handleGetTonightSuggestions(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !checkRateLimitInMemory(`tonight-suggestions:user:${user.id}`, TONIGHT_SUGGESTIONS_RATE_LIMIT)
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  return json(await getTonightSuggestions(env, ctx, user.id));
+}
+
+async function handlePostTonightSkip(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `tonight-skip:user:${user.id}` })).success
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  const body = await readJsonObject(request);
+  if (!body) {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  if (!isMediaType(body.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(body.tmdbId);
+  if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  await skipTonightSuggestion(env, user.id, body.mediaType, tmdbId);
+  return json({ ok: true });
+}
+
 // Plateformes favorites synchronisées -------------------------------------
 //
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
@@ -3100,6 +3154,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/not-interested" && request.method === "POST") {
     return handlePostNotInterested(request, env);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions" && request.method === "GET") {
+    return handleGetTonightSuggestions(request, env, ctx);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions/skip" && request.method === "POST") {
+    return handlePostTonightSkip(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

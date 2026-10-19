@@ -961,6 +961,13 @@ export async function replaceExcludedGenresForUser(
   const stmt = db.prepare("INSERT INTO excluded_genre_prefs (user_id, genre_id) VALUES (?, ?)");
   await db.batch([
     db.prepare("DELETE FROM excluded_genre_prefs WHERE user_id = ?").bind(userId),
+    db
+      .prepare(
+        "DELETE FROM ai_suggestion_titles WHERE batch_id IN (SELECT id FROM ai_suggestion_batches WHERE user_id = ?)"
+      )
+      .bind(userId),
+    db.prepare("DELETE FROM ai_suggestion_batches WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM ai_suggestion_skips WHERE user_id = ?").bind(userId),
     ...finalIds.map((id) => stmt.bind(userId, id)),
   ]);
 }

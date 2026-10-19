@@ -23,6 +23,9 @@ export interface Env {
   // uniquement dans la config des previews PR (scripts/preview-d1.ts) ; en
   // prod, le hub est atteint via `exports` (cloudflare:workers).
   USER_SYNC_HUB?: DurableObjectNamespace<import("./sync.ts").UserSyncHub>;
+  // Workers AI (voir worker/ai-suggestions.ts) : suggestions « Pour vous ce
+  // soir ». Plan gratuit, quota journalier partagé par tout le compte.
+  AI: Ai;
 
   // Secrets (dashboard Cloudflare, jamais commités).
   TMDB_API_KEY?: string;
