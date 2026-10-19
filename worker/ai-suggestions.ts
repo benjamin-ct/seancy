@@ -28,7 +28,12 @@ import {
   getRecommendationCandidates,
   rankRecommendations,
 } from "./recommendations.ts";
-import { normalizeSearchText } from "./search-index.ts";
+import {
+  nextParisMidnight,
+  nextUtcMidnight,
+  normalizeTitle,
+  parseSuggestions,
+} from "./ai-suggestions-format.ts";
 import { tmdbFetch } from "./tmdb.ts";
 import { logError } from "./logger.ts";
 
@@ -76,6 +81,11 @@ const SKIP_TTL_MONTHS = 6;
 // reste de quoi compléter quelques titres originaux inconnus par génération,
 // le cache `tmdb_title_labels` se remplissant au fil des jours.
 const LABEL_FETCH_BUDGET = 15;
+// Workers n'ouvre que 6 connexions sortantes simultanées par invocation :
+// au-delà, lancer tout en parallèle n'apporte rien, et en test local les
+// requêtes en trop finissaient en « Network connection lost ». Une
+// résolution = 2 recherches (film + série), d'où 3 titres à la fois.
+const MAX_CONCURRENT_FETCHES = 6;
 // Limite de paramètres liés d'une requête D1 (même valeur que db.ts).
 const MAX_BOUND_IDS = 90;
 
@@ -143,46 +153,25 @@ interface ResolvedTitle extends TitleLabel {
   popularity: number;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 function keyOf(mediaType: string, tmdbId: number): string {
   return `${mediaType}:${tmdbId}`;
-}
-
-// Fin de journée calée sur Paris (usage du soir, utilisateurs français
-// d'abord) : `Intl` donne l'heure locale, l'écart avec l'UTC donne le
-// décalage du moment (les changements d'heure ont lieu à 2-3 h, après
-// minuit, donc ce décalage vaut aussi pour le minuit visé).
-export function nextParisMidnight(now: number): number {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(new Date(now))
-      .map((part) => [part.type, Number(part.value)])
-  );
-  const parisWallClock = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second
-  );
-  const offset = parisWallClock - (now - (now % 1000));
-  return Date.UTC(parts.year, parts.month - 1, parts.day + 1) - offset;
-}
-
-// Le quota gratuit Workers AI se remet à zéro à 00:00 UTC (soit 1 h ou 2 h à
-// Paris) : retenter avant ne ferait que reprendre la même erreur.
-function nextUtcMidnight(now: number): number {
-  const date = new Date(now);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
 }
 
 function skipExpiry(now: number): number {
@@ -450,8 +439,10 @@ async function fetchMissingLabels(
     seen.add(k);
     return true;
   });
-  const fetched = await Promise.all(
-    missing.slice(0, LABEL_FETCH_BUDGET).map(async (key) => {
+  const fetched = await mapWithConcurrency(
+    missing.slice(0, LABEL_FETCH_BUDGET),
+    MAX_CONCURRENT_FETCHES,
+    async (key) => {
       try {
         const data = await tmdbFetch<TmdbTitleDetails>(env, `/${key.mediaType}/${key.tmdbId}`);
         return {
@@ -465,7 +456,7 @@ async function fetchMissingLabels(
       } catch {
         return null;
       }
-    })
+    }
   );
   const complete = fetched.filter((title): title is ListedTitle => title !== null);
   if (complete.length === 0) {
@@ -706,38 +697,6 @@ function buildPrompt(
 
 // Sortie du modèle --------------------------------------------------------
 
-// Une ligne « 1. Titre (2019) » par suggestion ; tolère puces, gras markdown
-// et années de série en plage (« (2008-2013) »). Les lignes sans année (phrase
-// d'introduction, commentaire) sont ignorées.
-export function parseSuggestions(content: string): Array<{ title: string; year: number }> {
-  const seen = new Set<string>();
-  const parsed: Array<{ title: string; year: number }> = [];
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine
-      .replace(/^\s*(?:[-*•]\s*)?(?:\d+[.)]\s*)?/, "")
-      .replace(/\*\*/g, "")
-      .trim();
-    const match = line.match(/^(.*?)\s*\((\d{4})(?:\s*[-–]\s*(?:\d{4})?)?\)\s*$/);
-    if (!match || !match[1]) {
-      continue;
-    }
-    const title = match[1].replace(/^["«\s]+|["»\s]+$/g, "");
-    const dedupeKey = `${normalizeTitle(title)}|${match[2]}`;
-    if (!title || seen.has(dedupeKey)) {
-      continue;
-    }
-    seen.add(dedupeKey);
-    parsed.push({ title, year: Number(match[2]) });
-  }
-  return parsed.slice(0, REQUESTED_COUNT);
-}
-
-function normalizeTitle(value: string): string {
-  return normalizeSearchText(value)
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
-
 interface TmdbSearchResult {
   id: number;
   title?: string;
@@ -903,8 +862,10 @@ async function generateSuggestions(env: Env, userId: number, batchId: number): P
   }
 
   try {
-    const suggestions = parseSuggestions(responseText(output));
-    const resolved = await Promise.all(suggestions.map((s) => resolveSuggestion(env, s)));
+    const suggestions = parseSuggestions(responseText(output), REQUESTED_COUNT);
+    const resolved = await mapWithConcurrency(suggestions, MAX_CONCURRENT_FETCHES / 2, (s) =>
+      resolveSuggestion(env, s)
+    );
 
     const excluded = new Set<string>([
       ...profile.seenKeys,

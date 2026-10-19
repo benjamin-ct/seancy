@@ -32,6 +32,7 @@
     "src/core/validation/mediaType.ts",
     "src/shared/lib/numericRangeFilter.ts",
     "src/core/botDetection.ts",
+    "worker/ai-suggestions-format.ts",
     "worker/bots.ts",
     "worker/rate-limit-memory.ts",
     "worker/tmdb-proxy-policy.ts",

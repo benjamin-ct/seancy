@@ -1,4 +1,5 @@
-// Tests unitaires des parties pures de worker/ai-suggestions.ts (suggestions
+// Tests unitaires des parties pures de worker/ai-suggestions.ts (isolées dans
+// worker/ai-suggestions-format.ts) (suggestions
 // IA « Pour vous ce soir », carte Trello "Worker AI pour l'algo V2") :
 // lecture de la sortie du modèle et fin de journée calée sur Paris (durée de
 // vie du lot du jour), changements d'heure compris.
@@ -7,7 +8,12 @@
 // autonome, exécutable avec `node scripts/verify-ai-suggestions.ts`, sur le
 // même modèle que les autres scripts verify:*.
 
-import { nextParisMidnight, parseSuggestions } from "../worker/ai-suggestions.ts";
+import {
+  nextParisMidnight,
+  nextUtcMidnight,
+  normalizeTitle,
+  parseSuggestions,
+} from "../worker/ai-suggestions-format.ts";
 
 let passed = 0;
 let failed = 0;
@@ -22,15 +28,23 @@ function check(name: string, actual: unknown, expected: unknown): void {
   ok ? passed++ : failed++;
 }
 
-check("liste numérotée simple", parseSuggestions("1. Heat (1995)\n2. Zodiac (2007)"), [
+check("liste numérotée simple", parseSuggestions("1. Heat (1995)\n2. Zodiac (2007)", 12), [
   { title: "Heat", year: 1995 },
   { title: "Zodiac", year: 2007 },
 ]);
 
 check(
+  "article en tête et ponctuation ignorés à la comparaison",
+  normalizeTitle("The Departed!") === normalizeTitle("Départed") &&
+    normalizeTitle("Carlito's Way") === normalizeTitle("carlito s way"),
+  true
+);
+
+check(
   "intro ignorée, puces, gras, parenthèses fermantes et plage d'années",
   parseSuggestions(
-    "Voici mes suggestions :\n- **Mindhunter (2017)**\n3) True Detective (2014-2019)\n4. Le Cercle rouge (1970)"
+    "Voici mes suggestions :\n- **Mindhunter (2017)**\n3) True Detective (2014-2019)\n4. Le Cercle rouge (1970)",
+    12
   ),
   [
     { title: "Mindhunter", year: 2017 },
@@ -41,7 +55,7 @@ check(
 
 check(
   "doublons (casse/accents) dédoublonnés, ligne sans année ignorée",
-  parseSuggestions("1. Amélie (2001)\n2. amelie (2001)\n3. Sans année\n4. Amélie (1990)"),
+  parseSuggestions("1. Amélie (2001)\n2. amelie (2001)\n3. Sans année\n4. Amélie (1990)", 12),
   [
     { title: "Amélie", year: 2001 },
     { title: "Amélie", year: 1990 },
@@ -49,9 +63,10 @@ check(
 );
 
 check(
-  "au plus 12 titres gardés",
+  "au plus N titres gardés",
   parseSuggestions(
-    Array.from({ length: 15 }, (_, i) => `${i + 1}. Titre ${i + 1} (${2000 + i})`).join("\n")
+    Array.from({ length: 15 }, (_, i) => `${i + 1}. Titre ${i + 1} (${2000 + i})`).join("\n"),
+    12
   ).length,
   12
 );
@@ -78,6 +93,12 @@ check(
   "veille du passage à l'heure d'hiver (24/10, été) → minuit Paris = 22:00 UTC",
   new Date(nextParisMidnight(Date.UTC(2026, 9, 24, 12, 0))).toISOString(),
   "2026-10-24T22:00:00.000Z"
+);
+
+check(
+  "minuit UTC suivant",
+  new Date(nextUtcMidnight(Date.UTC(2026, 9, 19, 23, 59))).toISOString(),
+  "2026-10-20T00:00:00.000Z"
 );
 
 check(
