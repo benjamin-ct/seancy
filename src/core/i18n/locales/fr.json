@@ -1240,7 +1240,9 @@
     "preparingTitle": "On vous prépare ça…",
     "preparingText": "Vos suggestions du jour arrivent dans quelques secondes.",
     "allSkippedTitle": "C’est tout pour aujourd’hui",
-    "allSkippedText": "Revenez demain pour de nouvelles suggestions, ou trouvez votre bonheur dans le catalogue personnalisé ci-dessous."
+    "allSkippedText": "Revenez demain pour de nouvelles suggestions, ou trouvez votre bonheur dans le catalogue personnalisé ci-dessous.",
+    "emptyTitle": "Pas encore de suggestions",
+    "emptyText": "Notez quelques films et séries pour recevoir vos premières suggestions dès demain. En attendant, parcourez le catalogue personnalisé ci-dessous."
   },
   "filterPanel": {
     "inTheatersFilter": "Au cinéma",

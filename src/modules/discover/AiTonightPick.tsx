@@ -120,6 +120,16 @@ export default function AiTonightPick({ onUnavailable }: { onUnavailable: () => 
     );
   }
   if (!current) {
+    // Lot renvoyé vide par le Worker (bibliothèque encore trop maigre pour
+    // en tirer quoi que ce soit, cf. repli non-IA) : distinct de « tout
+    // écarté », qui suppose qu'il y avait bien des suggestions au départ.
+    if (suggestions.items.length === 0) {
+      return (
+        <TonightPickMessage title={t("tonightPick.emptyTitle")}>
+          {t("tonightPick.emptyText")}
+        </TonightPickMessage>
+      );
+    }
     return (
       <TonightPickMessage title={t("tonightPick.allSkippedTitle")}>
         {t("tonightPick.allSkippedText")}

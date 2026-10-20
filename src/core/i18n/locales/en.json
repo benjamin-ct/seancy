@@ -1240,7 +1240,9 @@
     "preparingTitle": "Getting your picks ready…",
     "preparingText": "Today’s suggestions will be here in a few seconds.",
     "allSkippedTitle": "That’s all for today",
-    "allSkippedText": "Come back tomorrow for new suggestions, or find something you like in your personalized catalogue below."
+    "allSkippedText": "Come back tomorrow for new suggestions, or find something you like in your personalized catalogue below.",
+    "emptyTitle": "No suggestions yet",
+    "emptyText": "Rate a few movies and shows to get your first suggestions tomorrow. In the meantime, browse your personalized catalogue below."
   },
   "filterPanel": {
     "inTheatersFilter": "In theaters",
