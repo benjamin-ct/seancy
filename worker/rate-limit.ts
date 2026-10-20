@@ -28,6 +28,24 @@ export async function checkRateLimit(
 // (fichier séparé pour rester importable depuis les scripts verify:*, qui
 // n'ont pas accès aux types Workers utilisés ci-dessus).
 
+// Binding natif « Rate Limiting » de Workers (voir worker/types.ts,
+// AVATAR_RATE_LIMITER/PUBLIC_SLUG_RATE_LIMITER/LIBRARY_WRITE_RATE_LIMITER) :
+// absent sur les previews de PR (`wrangler preview`), limitation Cloudflare
+// constatée en prod — cf. Sentry "Cannot read properties of undefined
+// (reading 'limit')" sur handleLibrarySync et consorts, reproduit sur
+// plusieurs previews depuis le 2026-10-08, bien avant cette branche. On
+// n'applique alors aucun plafond plutôt que de planter la requête : le vrai
+// plafond (D1, prod/develop) reste en place partout où le binding existe.
+export async function checkBindingRateLimit(
+  limiter: RateLimit | undefined,
+  key: string
+): Promise<boolean> {
+  if (!limiter) {
+    return true;
+  }
+  return (await limiter.limit({ key })).success;
+}
+
 export function getClientIp(request: Request): string {
   // En-tête posé par Cloudflare lui-même sur toute requête passant par son
   // réseau — pas falsifiable par le client (contrairement à X-Forwarded-For).
