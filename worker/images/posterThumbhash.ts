@@ -54,7 +54,11 @@ function ensureWasmReady(): Promise<void> {
 }
 
 export async function computePosterThumbhash(posterPath: string): Promise<string | null> {
-  const res = await fetch(`${POSTER_BASE}${posterPath}`);
+  // Sans ce header, le CDN TMDB négocie parfois le format malgré l'extension
+  // `.jpg` de `posterPath` et répond en WebP (constaté en prod, Sentry
+  // SEANCY-LOGS-3H) : `decodeJpeg` reçoit alors des octets RIFF/WebP et
+  // échoue. `image/jpeg` explicite force TMDB à toujours renvoyer du JPEG.
+  const res = await fetch(`${POSTER_BASE}${posterPath}`, { headers: { Accept: "image/jpeg" } });
   if (!res.ok) {
     console.warn(`Affiche ${posterPath} inaccessible (${res.status}), ThumbHash ignoré.`);
     return null;
