@@ -1036,7 +1036,13 @@ async function handlePutAvatar(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!(await checkBindingRateLimit(env.AVATAR_RATE_LIMITER, `avatar:user:${user.id}`))) {
+  if (
+    !(await checkBindingRateLimit(
+      env.AVATAR_RATE_LIMITER,
+      `avatar:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (Number(request.headers.get("content-length") ?? 0) > AVATAR_MAX_BYTES) {
@@ -1390,7 +1396,13 @@ async function handleDeleteReminder(request: Request, env: Env): Promise<Respons
 // plafonné par IP pour qu'on ne puisse pas balayer l'espace des slugs.
 async function handleGetPublicProfile(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await checkBindingRateLimit(env.PUBLIC_SLUG_RATE_LIMITER, `public-profile:ip:${ip}`))) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const viewer = await getUserFromRequest(env.DB, request);
@@ -1481,7 +1493,13 @@ async function handleGetPublicFollowList(
   kind: "followers" | "following"
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await checkBindingRateLimit(env.PUBLIC_SLUG_RATE_LIMITER, `public-profile:ip:${ip}`))) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const targetId = SHARE_SLUG_PATTERN.test(slug) ? await getUserIdBySlug(env.DB, slug) : null;
@@ -1575,7 +1593,13 @@ async function handleGetPublicProfileAvatar(
   slug: string
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await checkBindingRateLimit(env.PUBLIC_SLUG_RATE_LIMITER, `public-profile:ip:${ip}`))) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1709,7 +1733,13 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `library:user:${user.id}`))) {
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (writeBodyTooLarge(request)) {
@@ -1748,7 +1778,11 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
     return user;
   }
   if (
-    !(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `library-sync:user:${user.id}`))
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library-sync:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1802,7 +1836,11 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
     return user;
   }
   if (
-    !(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `custom-lists:user:${user.id}`))
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-lists:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1832,7 +1870,11 @@ async function handlePutCustomList(request: Request, env: Env, listId: string): 
     return user;
   }
   if (
-    !(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `custom-list:user:${user.id}`))
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1873,7 +1915,11 @@ async function handleDeleteCustomList(
     return user;
   }
   if (
-    !(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `custom-list:user:${user.id}`))
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1930,7 +1976,13 @@ async function handlePutListShare(request: Request, env: Env): Promise<Response>
 // sa vue éditable côté client).
 async function handleGetPublicList(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await checkBindingRateLimit(env.PUBLIC_SLUG_RATE_LIMITER, `public-list:ip:${ip}`))) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-list:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1965,7 +2017,8 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   if (
     !(await checkBindingRateLimit(
       env.LIBRARY_WRITE_RATE_LIMITER,
-      `excluded-genres:user:${user.id}`
+      `excluded-genres:user:${user.id}`,
+      new URL(request.url).hostname
     ))
   ) {
     return RATE_LIMIT_RESPONSE();
@@ -2120,7 +2173,11 @@ async function handlePostNotInterested(request: Request, env: Env): Promise<Resp
     return user;
   }
   if (
-    !(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `not-interested:user:${user.id}`))
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `not-interested:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2186,7 +2243,11 @@ async function handlePostTonightSkip(request: Request, env: Env): Promise<Respon
     return user;
   }
   if (
-    !(await checkBindingRateLimit(env.LIBRARY_WRITE_RATE_LIMITER, `tonight-skip:user:${user.id}`))
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `tonight-skip:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2229,7 +2290,8 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
   if (
     !(await checkBindingRateLimit(
       env.LIBRARY_WRITE_RATE_LIMITER,
-      `favorite-providers:user:${user.id}`
+      `favorite-providers:user:${user.id}`,
+      new URL(request.url).hostname
     ))
   ) {
     return RATE_LIMIT_RESPONSE();

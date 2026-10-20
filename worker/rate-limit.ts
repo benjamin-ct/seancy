@@ -1,3 +1,6 @@
+import { isProductionHostname, PREPROD_HOSTNAME } from "./sentry.ts";
+import { logError } from "./logger.ts";
+
 // Limitation de débit à fenêtre fixe, sur D1 (pas de dépendance à une
 // fonctionnalité Workers séparée type "Rate Limiting binding" — un simple
 // compteur en base suffit très largement pour le volume d'une app perso).
@@ -35,12 +38,27 @@ export async function checkRateLimit(
 // (reading 'limit')" sur handleLibrarySync et consorts, reproduit sur
 // plusieurs previews depuis le 2026-10-08, bien avant cette branche. On
 // n'applique alors aucun plafond plutôt que de planter la requête : le vrai
-// plafond (D1, prod/develop) reste en place partout où le binding existe.
+// plafond (prod/develop) reste en place partout où le binding existe.
+//
+// Absence tolérée uniquement hors prod/`develop` (même distinction que
+// isProductionHostname/PREPROD_HOSTNAME dans sentry.ts) : sur ces deux
+// hostnames le binding doit toujours être présent (voir wrangler.jsonc), une
+// absence y signalerait une vraie régression de déploiement plutôt qu'une
+// limitation attendue des previews — on la laisse alors remonter en Sentry
+// (fail-open sur le plafond, pas sur la requête : un 500 serait pire qu'une
+// écriture non plafonnée le temps de corriger).
 export async function checkBindingRateLimit(
   limiter: RateLimit | undefined,
-  key: string
+  key: string,
+  hostname: string
 ): Promise<boolean> {
   if (!limiter) {
+    if (isProductionHostname(hostname) || hostname === PREPROD_HOSTNAME) {
+      logError(
+        "Rate limiting : binding absent sur un environnement qui devrait l'avoir",
+        new Error(`hostname=${hostname} key=${key}`)
+      );
+    }
     return true;
   }
   return (await limiter.limit({ key })).success;
