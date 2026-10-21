@@ -15,11 +15,17 @@
 --   seancy-develop-demo-2  (Benoit, suit Alice)
 --   seancy-develop-demo-3  (Chloé, profil privé, aucune donnée de bibliothèque)
 
+-- Domaine `@exemple.test`, pas `@develop.seancy.test` : c'est l'adresse que les
+-- testeurs tapent réellement dans le formulaire de connexion (voir ticket
+-- Trello "Environnement de test" et le rapport de bug de ce ticket-ci) —
+-- `findOrCreateUser` (worker/auth.ts) fait un match exact sur l'email, donc
+-- toute adresse qui ne correspond pas mot pour mot crée un compte vide au
+-- lieu de retomber sur celui-ci.
 INSERT OR IGNORE INTO users (id, email, created_at, display_name, username, locale, region, share_slug)
 VALUES
-  (1, 'alice@develop.seancy.test', (unixepoch() * 1000), 'Alice', 'alice-demo', 'fr', 'FR', 'alice-demo'),
-  (2, 'benoit@develop.seancy.test', (unixepoch() * 1000), 'Benoit', 'benoit-demo', 'fr', 'FR', NULL),
-  (3, 'chloe@develop.seancy.test', (unixepoch() * 1000), 'Chloé', 'chloe-demo', 'en', 'US', NULL);
+  (1, 'alice@exemple.test', (unixepoch() * 1000), 'Alice', 'alice-demo', 'fr', 'FR', 'alice-demo'),
+  (2, 'benoit@exemple.test', (unixepoch() * 1000), 'Benoit', 'benoit-demo', 'fr', 'FR', NULL),
+  (3, 'chloe@exemple.test', (unixepoch() * 1000), 'Chloé', 'chloe-demo', 'en', 'US', NULL);
 
 -- Hex SHA-256 de 'seancy-develop-demo-<n>'.
 INSERT OR IGNORE INTO sessions (token, user_id, expires_at, created_at)
