@@ -74,7 +74,13 @@ VALUES
 -- profil (SF pour Alice, comédie pour Benoit, comédie romantique pour
 -- Chloé) : tmdb_id vérifiés réels (API TMDB), pour que le repli non-IA des
 -- suggestions (`popular_titles`) et un futur enrichissement par genre aient
--- de vraies correspondances à exploiter.
+-- de vraies correspondances à exploiter. `library_items` n'a pas de ligne
+-- "système" à upserter comme `users`, donc les deux anciens titres de
+-- Benoit (SF/fantasy, hors thème comédie) sont retirés explicitement plutôt
+-- que laissés par `OR IGNORE` sur une base déjà provisionnée.
+DELETE FROM library_items
+WHERE user_id = 2 AND ((media_type = 'movie' AND tmdb_id = 157336) OR (media_type = 'tv' AND tmdb_id = 1399));
+
 INSERT OR IGNORE INTO library_items (user_id, media_type, tmdb_id, status, data, updated_at) VALUES
   -- Alice (SF)
   (1, 'movie', 603, 'watched', '{"id":603,"mediaType":"movie","title":"Matrix","posterPath":null,"date":"1999-03-30","addedAt":0,"rating":9}', (unixepoch() * 1000)),
@@ -114,6 +120,15 @@ INSERT OR IGNORE INTO library_items (user_id, media_type, tmdb_id, status, data,
 INSERT OR IGNORE INTO custom_lists (id, user_id, name, created_at) VALUES
   ('list-demo-classiques', 1, 'Classiques', (unixepoch() * 1000)),
   ('list-demo-a-tester', 2, 'A tester', (unixepoch() * 1000));
+
+-- tmdb_id fait partie de la PK (user_id, list_id, media_type, tmdb_id) : un
+-- changement d'item sur une ligne système (ci-dessous, Inception -> Very
+-- Bad Trip pour recoller au thème "comédie" de Benoit) passe par un DELETE
+-- explicite de l'ancien tmdb_id, sinon l'INSERT OR IGNORE ajouterait une
+-- seconde ligne à la même position sur une base déjà provisionnée au lieu
+-- de remplacer la première.
+DELETE FROM custom_list_items
+WHERE user_id = 2 AND list_id = 'list-demo-a-tester' AND media_type = 'movie' AND tmdb_id = 27205;
 
 INSERT OR IGNORE INTO custom_list_items (user_id, list_id, media_type, tmdb_id, data, position) VALUES
   (1, 'list-demo-classiques', 'movie', 603, '{"id":603,"mediaType":"movie","title":"Matrix","posterPath":null}', 0),
