@@ -57,14 +57,28 @@ export async function computePosterThumbhash(posterPath: string): Promise<string
   // Sans ce header, le CDN TMDB négocie parfois le format malgré l'extension
   // `.jpg` de `posterPath` et répond en WebP (constaté en prod, Sentry
   // SEANCY-LOGS-3H) : `decodeJpeg` reçoit alors des octets RIFF/WebP et
-  // échoue. `image/jpeg` explicite force TMDB à toujours renvoyer du JPEG.
+  // échoue. `image/jpeg` explicite évite cette négociation WebP, mais ne
+  // force pas TMDB à transcoder une affiche dont la source est nativement
+  // un autre format (ex. PNG) : l'en-tête est alors simplement ignoré.
   const res = await fetch(`${POSTER_BASE}${posterPath}`, { headers: { Accept: "image/jpeg" } });
   if (!res.ok) {
     console.warn(`Affiche ${posterPath} inaccessible (${res.status}), ThumbHash ignoré.`);
     return null;
   }
+  const buffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  // `decodeJpeg` (wasm mozjpeg) plante avec exit(1) sur des octets non-JPEG
+  // plutôt que de rejeter proprement (constaté en prod, Sentry 154334963 :
+  // TMDB renvoie du PNG pour cette affiche malgré l'Accept: image/jpeg
+  // ci-dessus). Un rejet basé sur les premiers octets (magic bytes JPEG :
+  // FF D8 FF) permet de l'ignorer comme une affiche inaccessible plutôt que
+  // de faire planter le calcul.
+  if (bytes.length < 3 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
+    console.warn(`Affiche ${posterPath} non-JPEG malgré Accept: image/jpeg, ThumbHash ignoré.`);
+    return null;
+  }
   await ensureWasmReady();
-  const decoded = await decodeJpeg(await res.arrayBuffer());
+  const decoded = await decodeJpeg(buffer);
   // Équivalent de `sharp(...).resize(100, 100, { fit: "inside",
   // withoutEnlargement: true })` côté CI (scripts/generate-thumbhashes.ts) :
   // le plus grand côté est ramené à 100 au maximum (jamais agrandi), l'autre
