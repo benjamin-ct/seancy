@@ -224,6 +224,10 @@ function provision(prNumber: string): void {
   const uuid = ensureDatabase(dbName);
   writeGeneratedConfig(PREVIEW_CONFIG_PATH, dbName, uuid);
   applyMigrations(dbName, PREVIEW_CONFIG_PATH);
+  // Même jeu de fixtures que l'environnement develop (voir ticket Trello
+  // "Rejouer les fixtures de seed sur les previews de PR") : `INSERT OR
+  // IGNORE` partout, donc sans risque à rejouer à chaque push sur la PR.
+  applySeed(dbName, PREVIEW_CONFIG_PATH, DEVELOP_SEED_PATH);
 }
 
 // Provisionne (une seule fois) puis tient à jour la base persistante de
