@@ -21,11 +21,40 @@
 -- `findOrCreateUser` (worker/auth.ts) fait un match exact sur l'email, donc
 -- toute adresse qui ne correspond pas mot pour mot crée un compte vide au
 -- lieu de retomber sur celui-ci.
-INSERT OR IGNORE INTO users (id, email, created_at, display_name, username, locale, region, share_slug)
+--
+-- `ON CONFLICT DO UPDATE`, pas `OR IGNORE`, pour ces 3 lignes précises : ce
+-- sont des comptes système (id fixe), pas des données de test qu'un humain
+-- pourrait modifier à la main entre deux pushs (contrairement aux tables
+-- suivantes) — un changement d'identité ici (comme ce renommage d'email)
+-- doit se propager aux bases déjà provisionnées (preview en cours, `develop`
+-- persistant), pas rester figé sur la valeur de la toute première exécution.
+--
+-- Nettoyage préalable : avant ce correctif, un testeur qui tapait l'une de
+-- ces adresses dans le formulaire de connexion recevait un compte vide créé
+-- à la volée par `findOrCreateUser` sous cet email (toujours vide, l'id fixe
+-- ci-dessous n'étant pas celui-là) — email désormais déjà pris, ce qui ferait
+-- échouer l'UPSERT ci-dessous (colonne UNIQUE). On retire ce compte
+-- "squatteur" (et sa session, pas de ON DELETE CASCADE sur D1) pour que le
+-- compte démo officiel puisse reprendre son adresse.
+DELETE FROM sessions WHERE user_id IN (
+  SELECT id FROM users WHERE id NOT IN (1, 2, 3)
+    AND email IN ('alice@exemple.test', 'benoit@exemple.test', 'chloe@exemple.test')
+);
+DELETE FROM users WHERE id NOT IN (1, 2, 3)
+  AND email IN ('alice@exemple.test', 'benoit@exemple.test', 'chloe@exemple.test');
+
+INSERT INTO users (id, email, created_at, display_name, username, locale, region, share_slug)
 VALUES
   (1, 'alice@exemple.test', (unixepoch() * 1000), 'Alice', 'alice-demo', 'fr', 'FR', 'alice-demo'),
   (2, 'benoit@exemple.test', (unixepoch() * 1000), 'Benoit', 'benoit-demo', 'fr', 'FR', NULL),
-  (3, 'chloe@exemple.test', (unixepoch() * 1000), 'Chloé', 'chloe-demo', 'en', 'US', NULL);
+  (3, 'chloe@exemple.test', (unixepoch() * 1000), 'Chloé', 'chloe-demo', 'en', 'US', NULL)
+ON CONFLICT(id) DO UPDATE SET
+  email = excluded.email,
+  display_name = excluded.display_name,
+  username = excluded.username,
+  locale = excluded.locale,
+  region = excluded.region,
+  share_slug = excluded.share_slug;
 
 -- Hex SHA-256 de 'seancy-develop-demo-<n>'.
 INSERT OR IGNORE INTO sessions (token, user_id, expires_at, created_at)
