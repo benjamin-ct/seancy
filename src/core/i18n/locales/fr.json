@@ -723,7 +723,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "17 octobre 2026",
+    "lastUpdatedValue": "19 octobre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -792,7 +792,7 @@
       },
       "cloudflare": {
         "label": "Cloudflare",
-        "text": " : héberge l'application et la base de données (Workers, D1)."
+        "text": " : héberge l'application et la base de données (Workers, D1), et génère les suggestions personnalisées « Pour vous ce soir » à partir de votre historique de visionnage via Workers AI (traitement réalisé sur l'infrastructure Cloudflare, aucune donnée transmise à un tiers supplémentaire)."
       },
       "sentry": {
         "label": "Sentry",
@@ -1236,7 +1236,13 @@
   "tonightPick": {
     "eyebrow": "Pour vous ce soir",
     "seeDetails": "Voir la fiche",
-    "another": "Autre suggestion"
+    "another": "Autre suggestion",
+    "preparingTitle": "On vous prépare ça…",
+    "preparingText": "Vos suggestions du jour arrivent dans quelques secondes.",
+    "allSkippedTitle": "C’est tout pour aujourd’hui",
+    "allSkippedText": "Revenez demain pour de nouvelles suggestions, ou trouvez votre bonheur dans le catalogue personnalisé ci-dessous.",
+    "emptyTitle": "Pas encore de suggestions",
+    "emptyText": "Vos suggestions du soir ne sont pas disponibles pour l'instant. Revenez un peu plus tard, ou parcourez le catalogue personnalisé ci-dessous."
   },
   "filterPanel": {
     "inTheatersFilter": "Au cinéma",

@@ -66,6 +66,7 @@ import {
   type RecommendationMediaType,
 } from "./recommendations.ts";
 import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
+import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
 import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
@@ -107,7 +108,12 @@ const EMAIL_LOCALES: EmailLocale[] = ["fr", "en"];
 function sanitizeEmailLocale(value: unknown): EmailLocale {
   return EMAIL_LOCALES.includes(value as EmailLocale) ? (value as EmailLocale) : "fr";
 }
-import { checkRateLimit, getClientIp, secondsUntilWindowEnd } from "./rate-limit.ts";
+import {
+  checkBindingRateLimit,
+  checkRateLimit,
+  getClientIp,
+  secondsUntilWindowEnd,
+} from "./rate-limit.ts";
 import { checkRateLimitInMemory } from "./rate-limit-memory.ts";
 import { WORKER_ONLY_PARAMS, isValidRegion, parseTmdbProxyRequest } from "./tmdb-proxy-policy.ts";
 import { detectKnownCrawler } from "./bots.ts";
@@ -1030,7 +1036,13 @@ async function handlePutAvatar(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!(await env.AVATAR_RATE_LIMITER.limit({ key: `avatar:user:${user.id}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.AVATAR_RATE_LIMITER,
+      `avatar:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (Number(request.headers.get("content-length") ?? 0) > AVATAR_MAX_BYTES) {
@@ -1384,7 +1396,13 @@ async function handleDeleteReminder(request: Request, env: Env): Promise<Respons
 // plafonné par IP pour qu'on ne puisse pas balayer l'espace des slugs.
 async function handleGetPublicProfile(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const viewer = await getUserFromRequest(env.DB, request);
@@ -1475,7 +1493,13 @@ async function handleGetPublicFollowList(
   kind: "followers" | "following"
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const targetId = SHARE_SLUG_PATTERN.test(slug) ? await getUserIdBySlug(env.DB, slug) : null;
@@ -1569,7 +1593,13 @@ async function handleGetPublicProfileAvatar(
   slug: string
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1703,7 +1733,13 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library:user:${user.id}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (writeBodyTooLarge(request)) {
@@ -1742,7 +1778,11 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library-sync:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library-sync:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1796,7 +1836,11 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-lists:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-lists:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1826,7 +1870,11 @@ async function handlePutCustomList(request: Request, env: Env, listId: string): 
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1867,7 +1915,11 @@ async function handleDeleteCustomList(
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1924,7 +1976,13 @@ async function handlePutListShare(request: Request, env: Env): Promise<Response>
 // sa vue éditable côté client).
 async function handleGetPublicList(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-list:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-list:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1957,8 +2015,11 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `excluded-genres:user:${user.id}` }))
-      .success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `excluded-genres:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2112,7 +2173,11 @@ async function handlePostNotInterested(request: Request, env: Env): Promise<Resp
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `not-interested:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `not-interested:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2147,6 +2212,63 @@ async function handlePostNotInterested(request: Request, env: Env): Promise<Resp
   return json({ ok: true });
 }
 
+// Suggestions IA « Pour vous ce soir » -----------------------------------
+// Toute la logique (verrou, génération en arrière-plan, repli v1) vit dans
+// ai-suggestions.ts. Le client interroge le GET toutes les quelques
+// secondes tant que la réponse est "pending" : plafond en mémoire assez
+// large pour ce polling, la génération elle-même étant de toute façon
+// limitée à une par utilisateur et par jour par le cache D1.
+const TONIGHT_SUGGESTIONS_RATE_LIMIT = { limit: 60, windowMs: 60_000 };
+
+async function handleGetTonightSuggestions(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !checkRateLimitInMemory(`tonight-suggestions:user:${user.id}`, TONIGHT_SUGGESTIONS_RATE_LIMIT)
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  return json(await getTonightSuggestions(env, ctx, user.id, new URL(request.url).hostname));
+}
+
+async function handlePostTonightSkip(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `tonight-skip:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  const body = await readJsonObject(request);
+  if (!body) {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  if (!isMediaType(body.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(body.tmdbId);
+  if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  await skipTonightSuggestion(env, user.id, body.mediaType, tmdbId);
+  return json({ ok: true });
+}
+
 // Plateformes favorites synchronisées -------------------------------------
 //
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
@@ -2166,8 +2288,11 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `favorite-providers:user:${user.id}` }))
-      .success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `favorite-providers:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -3100,6 +3225,14 @@ async function routeRequest(
 
   if (url.pathname === "/api/not-interested" && request.method === "POST") {
     return handlePostNotInterested(request, env);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions" && request.method === "GET") {
+    return handleGetTonightSuggestions(request, env, ctx);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions/skip" && request.method === "POST") {
+    return handlePostTonightSkip(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

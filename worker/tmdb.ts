@@ -12,7 +12,7 @@ const BASE_URL = "https://api.themoviedb.org/3";
 export const DEFAULT_REGION = "FR";
 const LANGUAGE = "fr-FR";
 
-async function tmdbFetch<T>(
+export async function tmdbFetch<T>(
   env: Env,
   path: string,
   params: Record<string, string | number | undefined> = {}

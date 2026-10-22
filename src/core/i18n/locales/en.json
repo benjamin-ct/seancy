@@ -723,7 +723,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "October 17, 2026",
+    "lastUpdatedValue": "October 19, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -792,7 +792,7 @@
       },
       "cloudflare": {
         "label": "Cloudflare",
-        "text": ": hosts the application and the database (Workers, D1)."
+        "text": ": hosts the application and the database (Workers, D1), and generates the \"For you tonight\" personalized suggestions from your viewing history via Workers AI (processed on Cloudflare's own infrastructure, no data shared with any additional third party)."
       },
       "sentry": {
         "label": "Sentry",
@@ -1236,7 +1236,13 @@
   "tonightPick": {
     "eyebrow": "For you tonight",
     "seeDetails": "See details",
-    "another": "Another pick"
+    "another": "Another pick",
+    "preparingTitle": "Getting your picks ready…",
+    "preparingText": "Today’s suggestions will be here in a few seconds.",
+    "allSkippedTitle": "That’s all for today",
+    "allSkippedText": "Come back tomorrow for new suggestions, or find something you like in your personalized catalogue below.",
+    "emptyTitle": "No suggestions yet",
+    "emptyText": "Tonight's suggestions aren't available right now. Check back a bit later, or browse your personalized catalogue below."
   },
   "filterPanel": {
     "inTheatersFilter": "In theaters",

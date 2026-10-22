@@ -59,6 +59,11 @@
       "database_id": "3403301e-2ef9-4f70-9f2e-e10d577beda0"
     }
   ],
+  // Workers AI : suggestions « Pour vous ce soir » (voir
+  // worker/ai-suggestions.ts, modèle fixé par AI_SUGGESTIONS_MODEL). Plan
+  // gratuit pour démarrer : ~10 000 neurones/jour partagés par tout le compte,
+  // remis à zéro à 00:00 UTC ; au-delà, repli sur l'algo non-IA.
+  "ai": { "binding": "AI" },
   // Binding natif « Rate Limiting » de Workers (audit F4) : compteur partagé
   // entre isolats/colos, sans écriture D1 — contrairement à
   // `checkRateLimitInMemory` (worker/rate-limit-memory.ts), qui compte par

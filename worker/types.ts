@@ -5,14 +5,17 @@ export interface Env {
   DB: D1Database;
   // Binding natif Rate Limiting (audit F4, voir wrangler.jsonc) : slugs
   // publics (profil, abonnés, avatar partagé, liste) et upload d'avatar.
-  PUBLIC_SLUG_RATE_LIMITER: RateLimit;
-  AVATAR_RATE_LIMITER: RateLimit;
+  // Optionnel : absent sur les previews de PR (limitation Cloudflare, voir
+  // checkBindingRateLimit dans rate-limit.ts), présent partout ailleurs.
+  PUBLIC_SLUG_RATE_LIMITER?: RateLimit;
+  AVATAR_RATE_LIMITER?: RateLimit;
   // Écritures authentifiées à fort volume potentiel (audit M4) : library,
   // library/sync, custom-lists (plein et par liste), excluded-genres,
   // favorite-providers. Binding natif plutôt que checkRateLimit (D1) : ce
   // sont justement les routes dont l'amplification d'écritures D1 est le
   // problème visé, inutile d'en ajouter une par vérification de débit.
-  LIBRARY_WRITE_RATE_LIMITER: RateLimit;
+  // Optionnel pour la même raison que PUBLIC_SLUG_RATE_LIMITER ci-dessus.
+  LIBRARY_WRITE_RATE_LIMITER?: RateLimit;
   // Événements d'usage (recherche, activation notifs, watchlist...) —
   // consommés côté Grafana Cloud via la datasource Cloudflare Analytics.
   // Voir worker/analytics.ts. Optionnel : le binding n'est déclaré dans
@@ -23,6 +26,12 @@ export interface Env {
   // uniquement dans la config des previews PR (scripts/preview-d1.ts) ; en
   // prod, le hub est atteint via `exports` (cloudflare:workers).
   USER_SYNC_HUB?: DurableObjectNamespace<import("./sync.ts").UserSyncHub>;
+  // Workers AI (voir worker/ai-suggestions.ts) : suggestions « Pour vous ce
+  // soir ». Plan gratuit, quota journalier partagé par tout le compte.
+  // Optionnel pour la même raison que les bindings Rate Limiting ci-dessus :
+  // absent sur les previews de PR (constaté en prod, Sentry SEANCY-LOGS-3K),
+  // présent partout ailleurs.
+  AI?: Ai;
 
   // Secrets (dashboard Cloudflare, jamais commités).
   TMDB_API_KEY?: string;

@@ -102,6 +102,7 @@ jobs:
           npm run verify:tmdb-proxy-policy
           npm run verify:tmdb-retry-after
           npm run verify:tmdb-edge-cache
+          npm run verify:ai-suggestions
           npm run verify:security-headers
           npm run verify:changeset-parsing
           npm run verify:changelog-release

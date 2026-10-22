@@ -266,3 +266,54 @@
     border-radius: inherit;
   }
 }
+
+/* Génération en cours (affiche en pulsation, même hauteur que la carte qui
+   suivra pour éviter un saut de mise en page) ou plus rien à proposer
+   aujourd'hui (texte seul, bloc plus bas). */
+.posterPending {
+  background: var(--surface-2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.messageTextOnly {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.messageTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.messageText {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+@media (max-width: 860px) {
+  .messageTextOnly {
+    padding: 16px;
+  }
+
+  /* Pas de pastille « Autre suggestion » dans ces deux états. */
+  .messageBusy .body,
+  .messageTextOnly .body {
+    padding-right: 0;
+  }
+
+  .messageTitle {
+    font-size: 18px;
+  }
+
+  .messageText {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+}
