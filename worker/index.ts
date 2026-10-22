@@ -2234,7 +2234,7 @@ async function handleGetTonightSuggestions(
   ) {
     return RATE_LIMIT_RESPONSE();
   }
-  return json(await getTonightSuggestions(env, ctx, user.id));
+  return json(await getTonightSuggestions(env, ctx, user.id, new URL(request.url).hostname));
 }
 
 async function handlePostTonightSkip(request: Request, env: Env): Promise<Response> {

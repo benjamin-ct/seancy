@@ -36,6 +36,7 @@ import {
 } from "./ai-suggestions-format.ts";
 import { tmdbFetch } from "./tmdb.ts";
 import { logError } from "./logger.ts";
+import { isProductionHostname, PREPROD_HOSTNAME } from "./sentry.ts";
 
 // Seul endroit où le modèle est nommé : en changer ne demande que de
 // modifier cette constante (après un nouveau benchmark, la qualité des
@@ -256,7 +257,8 @@ async function claimGeneration(env: Env, userId: number, now: number): Promise<n
 export async function getTonightSuggestions(
   env: Env,
   ctx: ExecutionContext,
-  userId: number
+  userId: number,
+  hostname: string
 ): Promise<TonightSuggestionsResult> {
   const now = Date.now();
   const current = await getCurrentBatch(env, userId, now);
@@ -268,7 +270,7 @@ export async function getTonightSuggestions(
   }
   const batchId = await claimGeneration(env, userId, now);
   if (batchId != null) {
-    ctx.waitUntil(generateSuggestions(env, userId, batchId));
+    ctx.waitUntil(generateSuggestions(env, userId, batchId, hostname));
   }
   return { status: "pending" };
 }
@@ -796,7 +798,12 @@ function responseText(output: unknown): string {
 
 // Génération (arrière-plan) -----------------------------------------------
 
-async function generateSuggestions(env: Env, userId: number, batchId: number): Promise<void> {
+async function generateSuggestions(
+  env: Env,
+  userId: number,
+  batchId: number,
+  hostname: string
+): Promise<void> {
   const now = Date.now();
   let signals: UserSignals;
   try {
@@ -819,6 +826,31 @@ async function generateSuggestions(env: Env, userId: number, batchId: number): P
   // redonner des titres populaires, autant ne pas consommer le quota.
   if (profile.isColdStart) {
     await fillWithFallback(env, userId, batchId, signals, nextParisMidnight(now));
+    return;
+  }
+
+  // Binding Workers AI absent : même limitation constatée sur les previews
+  // de PR que les bindings "Rate Limiting" natifs (voir
+  // checkBindingRateLimit, rate-limit.ts) — on part directement sur le repli
+  // plutôt que de planter sur `env.AI.run(...)` (Sentry SEANCY-LOGS-3K,
+  // "Cannot read properties of undefined (reading 'run')", preview PR #312).
+  // Absence tolérée hors prod/`develop`, où le binding doit toujours être
+  // présent (voir wrangler.jsonc) : une absence là-bas est une vraie
+  // régression de déploiement à signaler, pas une limitation attendue.
+  if (!env.AI) {
+    if (isProductionHostname(hostname) || hostname === PREPROD_HOSTNAME) {
+      logError(
+        "Suggestions IA : binding Workers AI absent sur un environnement qui devrait l'avoir",
+        new Error(`hostname=${hostname}`)
+      );
+    }
+    await fillWithFallback(
+      env,
+      userId,
+      batchId,
+      signals,
+      Math.min(now + FALLBACK_RETRY_MS, nextParisMidnight(now))
+    );
     return;
   }
 

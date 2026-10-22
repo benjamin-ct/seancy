@@ -1242,7 +1242,7 @@
     "allSkippedTitle": "C’est tout pour aujourd’hui",
     "allSkippedText": "Revenez demain pour de nouvelles suggestions, ou trouvez votre bonheur dans le catalogue personnalisé ci-dessous.",
     "emptyTitle": "Pas encore de suggestions",
-    "emptyText": "Notez quelques films et séries pour recevoir vos premières suggestions dès demain. En attendant, parcourez le catalogue personnalisé ci-dessous."
+    "emptyText": "Vos suggestions du soir ne sont pas disponibles pour l'instant. Revenez un peu plus tard, ou parcourez le catalogue personnalisé ci-dessous."
   },
   "filterPanel": {
     "inTheatersFilter": "Au cinéma",
