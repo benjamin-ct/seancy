@@ -36,7 +36,7 @@ import {
 } from "./ai-suggestions-format.ts";
 import { tmdbFetch } from "./tmdb.ts";
 import { logError } from "./logger.ts";
-import { isProductionHostname, PREPROD_HOSTNAME } from "./sentry.ts";
+import { isProductionHostname } from "./sentry.ts";
 
 // Seul endroit où le modèle est nommé : en changer ne demande que de
 // modifier cette constante (après un nouveau benchmark, la qualité des
@@ -834,11 +834,13 @@ async function generateSuggestions(
   // checkBindingRateLimit, rate-limit.ts) — on part directement sur le repli
   // plutôt que de planter sur `env.AI.run(...)` (Sentry SEANCY-LOGS-3K,
   // "Cannot read properties of undefined (reading 'run')", preview PR #312).
-  // Absence tolérée hors prod/`develop`, où le binding doit toujours être
-  // présent (voir wrangler.jsonc) : une absence là-bas est une vraie
-  // régression de déploiement à signaler, pas une limitation attendue.
+  // `develop` partage cette limitation : déployé via `wrangler preview`
+  // (CI, job deploy-develop), exactement comme les previews de PR — ce
+  // n'est pas "la vraie prod" malgré le tag Sentry "preprod". Seule la vraie
+  // prod (déploiement Workers Builds sur `main`) est une régression si le
+  // binding y manque.
   if (!env.AI) {
-    if (isProductionHostname(hostname) || hostname === PREPROD_HOSTNAME) {
+    if (isProductionHostname(hostname)) {
       logError(
         "Suggestions IA : binding Workers AI absent sur un environnement qui devrait l'avoir",
         new Error(`hostname=${hostname}`)
