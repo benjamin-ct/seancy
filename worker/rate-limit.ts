@@ -1,4 +1,4 @@
-import { isProductionHostname, PREPROD_HOSTNAME } from "./sentry.ts";
+import { isProductionHostname } from "./sentry.ts";
 import { logError } from "./logger.ts";
 
 // Limitation de débit à fenêtre fixe, sur D1 (pas de dépendance à une
@@ -40,20 +40,22 @@ export async function checkRateLimit(
 // n'applique alors aucun plafond plutôt que de planter la requête : le vrai
 // plafond (prod/develop) reste en place partout où le binding existe.
 //
-// Absence tolérée uniquement hors prod/`develop` (même distinction que
-// isProductionHostname/PREPROD_HOSTNAME dans sentry.ts) : sur ces deux
-// hostnames le binding doit toujours être présent (voir wrangler.jsonc), une
-// absence y signalerait une vraie régression de déploiement plutôt qu'une
-// limitation attendue des previews — on la laisse alors remonter en Sentry
-// (fail-open sur le plafond, pas sur la requête : un 500 serait pire qu'une
-// écriture non plafonnée le temps de corriger).
+// Absence tolérée hors prod : `develop` est déployé via `wrangler preview`
+// (CI, job deploy-develop), exactement comme les previews de PR — pas « la
+// vraie prod » malgré le tag Sentry "preprod" (voir worker/sentry.ts), donc
+// soumis à la même limitation que les previews. Seule la vraie prod
+// (déploiement Workers Builds sur `main`) garantit la présence du binding ;
+// une absence là-bas signalerait une vraie régression de déploiement — on
+// la laisse alors remonter en Sentry (fail-open sur le plafond, pas sur la
+// requête : un 500 serait pire qu'une écriture non plafonnée le temps de
+// corriger).
 export async function checkBindingRateLimit(
   limiter: RateLimit | undefined,
   key: string,
   hostname: string
 ): Promise<boolean> {
   if (!limiter) {
-    if (isProductionHostname(hostname) || hostname === PREPROD_HOSTNAME) {
+    if (isProductionHostname(hostname)) {
       logError(
         "Rate limiting : binding absent sur un environnement qui devrait l'avoir",
         new Error(`hostname=${hostname} key=${key}`)
