@@ -4,21 +4,22 @@
 // recommandation qui vient d'entrer dans `popular_titles` avant le
 // prochain run quotidien.
 //
-// Décodage/redimensionnement via `@jsquash/jpeg` + `@jsquash/resize`
-// (WASM pur) plutôt que `sharp` (utilisé en CI) : `sharp` dépend de
-// bindings natifs (libvips) indisponibles dans le runtime Workers, même
-// avec `nodejs_compat` — ça ne tournerait tout simplement pas ici, quel
-// que soit le budget CPU. Benchmarké en conditions réelles (wrangler dev
-// local) : ~6 ms CPU une fois les modules WASM chauds (même ordre de
-// grandeur que le chiffre `sharp` mesuré côté CI), ~25 ms au premier appel
-// d'un isolate neuf (coût d'instanciation des deux modules WASM, une
-// seule fois par isolate).
+// Décodage/redimensionnement via `@jsquash/jpeg` + `@jsquash/png` +
+// `@jsquash/resize` (WASM pur) plutôt que `sharp` (utilisé en CI) : `sharp`
+// dépend de bindings natifs (libvips) indisponibles dans le runtime
+// Workers, même avec `nodejs_compat` — ça ne tournerait tout simplement
+// pas ici, quel que soit le budget CPU. Benchmarké en conditions réelles
+// (wrangler dev local) : ~6 ms CPU une fois les modules WASM chauds (même
+// ordre de grandeur que le chiffre `sharp` mesuré côté CI), ~25 ms au
+// premier appel d'un isolate neuf (coût d'instanciation des modules WASM,
+// une seule fois par isolate).
 //
 // Toujours appelé via `ctx.waitUntil` (jamais dans le chemin synchrone
 // d'une requête) : si le budget CPU de `waitUntil` est dépassé, le calcul
 // est simplement coupé net, sans erreur visible — au pire la prochaine
 // vue de cette affiche retente.
 import decodeJpeg, { init as initJpegDecoder } from "@jsquash/jpeg/decode.js";
+import decodePng, { init as initPngDecoder } from "@jsquash/png/decode.js";
 import resizeImage, { initResize } from "@jsquash/resize/index.js";
 import { rgbaToThumbHash } from "thumbhash";
 import type { Env } from "../types.ts";
@@ -31,22 +32,48 @@ import JPEG_DECODER_WASM from "@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm";
 // réellement le bundler de Wrangler ici (validé en conditions réelles,
 // `wrangler dev`, voir le commentaire d'en-tête du fichier).
 import RESIZE_WASM from "@jsquash/resize/lib/resize/pkg/squoosh_resize_bg.wasm";
+// @ts-expect-error - même situation que RESIZE_WASM ci-dessus
+// (squoosh_png_bg.wasm.d.ts, même générateur wasm-bindgen).
+import PNG_DECODER_WASM from "@jsquash/png/codec/pkg/squoosh_png_bg.wasm";
 
 // w92 : même taille que `scripts/generate-thumbhashes.ts`, déjà proche du
 // max recommandé par ThumbHash (100x100) et léger à télécharger/décoder.
 const POSTER_BASE = "https://image.tmdb.org/t/p/w92";
 const THUMBHASH_SIZE = 100;
 
+// Magic bytes des deux formats que TMDB sert réellement pour les affiches
+// (JPEG très largement majoritaire, PNG pour une poignée de sources
+// natives, voir plus bas) — tout le reste (WebP compris) reste un cas
+// d'erreur explicite plutôt qu'un décodage à l'aveugle.
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function hasSignature(bytes: Uint8Array, signature: number[]): boolean {
+  return signature.length <= bytes.length && signature.every((byte, i) => bytes[i] === byte);
+}
+
+function sniffImageFormat(bytes: Uint8Array): "jpeg" | "png" | null {
+  if (hasSignature(bytes, JPEG_SIGNATURE)) {
+    return "jpeg";
+  }
+  if (hasSignature(bytes, PNG_SIGNATURE)) {
+    return "png";
+  }
+  return null;
+}
+
 let wasmReady: Promise<void> | null = null;
 
-// Les deux modules WASM ne s'instancient qu'une fois par isolate (coût
-// payé une seule fois, jamais par requête) : `initJpegDecoder`/`initResize`
-// sont déjà idempotents côté jsquash, ce verrou évite seulement l'appel
-// concurrent de deux calculs fire-and-forget avant la fin du premier init.
+// Les modules WASM ne s'instancient qu'une fois par isolate (coût payé une
+// seule fois, jamais par requête) : `initJpegDecoder`/`initPngDecoder`/
+// `initResize` sont déjà idempotents côté jsquash, ce verrou évite
+// seulement l'appel concurrent de deux calculs fire-and-forget avant la fin
+// du premier init.
 function ensureWasmReady(): Promise<void> {
   if (!wasmReady) {
     wasmReady = Promise.all([
       initJpegDecoder(JPEG_DECODER_WASM as WebAssembly.Module),
+      initPngDecoder(PNG_DECODER_WASM as WebAssembly.Module),
       initResize(RESIZE_WASM as WebAssembly.Module),
     ]).then(() => undefined);
   }
@@ -54,31 +81,25 @@ function ensureWasmReady(): Promise<void> {
 }
 
 export async function computePosterThumbhash(posterPath: string): Promise<string | null> {
-  // Sans ce header, le CDN TMDB négocie parfois le format malgré l'extension
-  // `.jpg` de `posterPath` et répond en WebP (constaté en prod, Sentry
-  // SEANCY-LOGS-3H) : `decodeJpeg` reçoit alors des octets RIFF/WebP et
-  // échoue. `image/jpeg` explicite évite cette négociation WebP, mais ne
-  // force pas TMDB à transcoder une affiche dont la source est nativement
-  // un autre format (ex. PNG) : l'en-tête est alors simplement ignoré.
+  // `Accept: image/jpeg` évite la négociation WebP déjà constatée en prod
+  // (Sentry SEANCY-LOGS-3H), mais TMDB l'ignore pour une affiche dont la
+  // source est nativement un autre format (Sentry 154334963 : du PNG malgré
+  // cet en-tête) — d'où le sniff sur les octets réellement reçus plutôt que
+  // de faire confiance à l'extension `.jpg` de `posterPath` ou à l'en-tête
+  // envoyé, et un vrai décodage PNG plutôt qu'un rejet silencieux.
   const res = await fetch(`${POSTER_BASE}${posterPath}`, { headers: { Accept: "image/jpeg" } });
   if (!res.ok) {
     console.warn(`Affiche ${posterPath} inaccessible (${res.status}), ThumbHash ignoré.`);
     return null;
   }
   const buffer = await res.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  // `decodeJpeg` (wasm mozjpeg) plante avec exit(1) sur des octets non-JPEG
-  // plutôt que de rejeter proprement (constaté en prod, Sentry 154334963 :
-  // TMDB renvoie du PNG pour cette affiche malgré l'Accept: image/jpeg
-  // ci-dessus). Un rejet basé sur les premiers octets (magic bytes JPEG :
-  // FF D8 FF) permet de l'ignorer comme une affiche inaccessible plutôt que
-  // de faire planter le calcul.
-  if (bytes.length < 3 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
-    console.warn(`Affiche ${posterPath} non-JPEG malgré Accept: image/jpeg, ThumbHash ignoré.`);
+  const format = sniffImageFormat(new Uint8Array(buffer));
+  if (!format) {
+    console.warn(`Affiche ${posterPath} dans un format non reconnu, ThumbHash ignoré.`);
     return null;
   }
   await ensureWasmReady();
-  const decoded = await decodeJpeg(buffer);
+  const decoded = format === "jpeg" ? await decodeJpeg(buffer) : await decodePng(buffer);
   // Équivalent de `sharp(...).resize(100, 100, { fit: "inside",
   // withoutEnlargement: true })` côté CI (scripts/generate-thumbhashes.ts) :
   // le plus grand côté est ramené à 100 au maximum (jamais agrandi), l'autre
