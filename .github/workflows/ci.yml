@@ -12,10 +12,10 @@ name: CI
 on:
   push:
     # `develop` : environnement persistant (voir ticket Trello "Avenir du
-    # développement"), base D1 `seancy-develop` + déploiement Cloudflare
-    # Preview nommé "develop" (job deploy-develop). Migrations prod
-    # (apply-d1-migrations) restent strictement limitées à `main`, voir le
-    # garde-fou sur ce job.
+    # développement"), base D1 `seancy-develop` + vrai déploiement Worker
+    # `seancy-develop` (job deploy-develop, voir ticket Trello "Rendre
+    # develop iso-prod"). Migrations prod (apply-d1-migrations) restent
+    # strictement limitées à `main`, voir le garde-fou sur ce job.
     branches: [main, develop]
   pull_request:
     # "closed" (fermeture ou merge) est nécessaire en plus des types par

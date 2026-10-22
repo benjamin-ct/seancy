@@ -39,6 +39,14 @@ const DEVELOP_SEED_PATH = "scripts/fixtures/develop-seed.sql";
 // Nom du Worker réel dédié à `develop` (distinct de "seancy", la prod) —
 // voir writeDevelopConfig.
 const DEVELOP_WORKER_NAME = "seancy-develop";
+// Décalage appliqué aux `namespace_id` du binding "Rate Limiting" de
+// wrangler.jsonc pour `develop` — voir writeDevelopConfig : ce namespace_id
+// est défini au niveau du COMPTE Cloudflare (pas du Worker, malgré le
+// commentaire de wrangler.jsonc), donc deux Workers qui déclarent le même
+// namespace_id partagent les mêmes compteurs. Sans ce décalage, du trafic de
+// test sur `seancy-develop` viderait le même budget que la prod `seancy` et
+// pourrait faire passer des vrais utilisateurs en 429.
+const DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET = 1000;
 // Tables réinitialisées par `reset-develop`, dans un ordre qui respecte les
 // clés étrangères (dépendants d'abord). `users`/`sessions` en dernier :
 // quasiment toutes les autres tables y font référence (ON DELETE CASCADE
@@ -81,10 +89,16 @@ interface D1Binding {
   database_name: string;
   database_id: string;
 }
+interface RateLimit {
+  name: string;
+  namespace_id: string;
+  simple: { limit: number; period: number };
+}
 interface SourceConfig {
   vars?: Record<string, unknown>;
   d1_databases?: D1Binding[];
   exports?: Record<string, { type: string }>;
+  ratelimits?: RateLimit[];
   [key: string]: unknown;
 }
 
@@ -217,13 +231,19 @@ function writeGeneratedConfig(configPath: string, dbName: string, uuid: string):
 // de PR), tous les bindings de wrangler.jsonc sont donc repris tels quels —
 // "ai", "ratelimits" et "exports" (Durable Objects) fonctionnent nativement
 // sur un vrai déploiement, pas besoin du détour par "migrations"/"previews".
-// Seuls le nom du Worker (pour ne pas écraser la prod "seancy") et le
-// binding D1 "DB" (base dédiée `seancy-develop`) sont réécrits. "vars" reste
-// identique à la prod (valeurs non sensibles, voir wrangler.jsonc) : les
-// vrais secrets (TMDB_API_KEY, VAPID_PRIVATE_KEY...) doivent être configurés
-// une fois, à la main, sur ce nouveau Worker (dashboard Cloudflare →
-// Settings → Variables and Secrets) — ils ne sont jamais hérités de la prod
-// ni gérés par la CI.
+// Le nom du Worker (pour ne pas écraser la prod "seancy"), le binding D1
+// "DB" (base dédiée `seancy-develop`) et les `namespace_id` du binding Rate
+// Limiting (comptes partagés au niveau du compte Cloudflare, voir
+// DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET) sont réécrits. Le reste de "vars"
+// reste identique à la prod (valeurs non sensibles, voir wrangler.jsonc),
+// sauf CLOUDFLARE_ANALYTICS_TOKEN : vidé pour ne pas mêler le trafic de
+// `develop` aux statistiques Web Analytics réelles de la prod (même
+// raisonnement que writeGeneratedConfig ci-dessus pour les previews de PR —
+// `env.CLOUDFLARE_ANALYTICS_TOKEN || null` gère déjà l'absence sans crasher,
+// voir worker/index.ts). Les vrais secrets (TMDB_API_KEY,
+// VAPID_PRIVATE_KEY...) doivent être configurés une fois, à la main, sur ce
+// nouveau Worker (dashboard Cloudflare → Settings → Variables and Secrets)
+// — ils ne sont jamais hérités de la prod ni gérés par la CI.
 function writeDevelopConfig(dbName: string, uuid: string): void {
   const rawConfig = experimental_readRawConfig({ config: SOURCE_CONFIG_PATH })
     .rawConfig as SourceConfig;
@@ -240,6 +260,11 @@ function writeDevelopConfig(dbName: string, uuid: string): void {
     ...rawConfig,
     name: DEVELOP_WORKER_NAME,
     d1_databases: [targetDatabase],
+    vars: { ...rawConfig.vars, CLOUDFLARE_ANALYTICS_TOKEN: "" },
+    ratelimits: rawConfig.ratelimits?.map((rateLimit) => ({
+      ...rateLimit,
+      namespace_id: String(Number(rateLimit.namespace_id) + DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET),
+    })),
   };
   writeFileSync(DEVELOP_CONFIG_PATH, JSON.stringify(generatedConfig, null, 2) + "\n");
 }
