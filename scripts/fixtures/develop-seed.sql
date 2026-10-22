@@ -48,6 +48,20 @@ DELETE FROM sessions WHERE user_id IN (
 DELETE FROM users WHERE id NOT IN (1, 2, 3)
   AND email IN ('alice@exemple.test', 'benoit@exemple.test', 'chloe@exemple.test');
 
+-- Neutralise d'abord les emails des 3 comptes système eux-mêmes : sur une
+-- base déjà provisionnée par une version antérieure de ce fichier, rien ne
+-- garantit que l'id 1 porte déjà 'alice@exemple.test' plutôt que l'email
+-- d'un autre de ces 3 comptes (ex. ids attribués dans un ordre différent par
+-- un run antérieur à ce fixture) — l'UPSERT ci-dessous se ferait alors
+-- percuter une valeur `excluded.email` déjà prise par l'un des deux autres
+-- ids ciblés dans ce même batch (confirmé en pratique : "UNIQUE constraint
+-- failed: users.email" en reseedant une preview provisionnée avant
+-- l'introduction de ces 3 comptes système). Des valeurs temporaires
+-- garanties uniques (et jamais retapables par un testeur, domaine
+-- `.invalid`) lèvent toute collision avant que l'UPSERT ne pose les emails
+-- définitifs.
+UPDATE users SET email = 'tmp-seed-' || id || '@exemple.test.invalid' WHERE id IN (1, 2, 3);
+
 INSERT INTO users (id, email, created_at, display_name, username, locale, region, share_slug)
 VALUES
   (1, 'alice@exemple.test', (unixepoch() * 1000), 'Alice', 'alice-demo', 'fr', 'FR', 'alice-demo'),
