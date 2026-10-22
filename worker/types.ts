@@ -28,7 +28,10 @@ export interface Env {
   USER_SYNC_HUB?: DurableObjectNamespace<import("./sync.ts").UserSyncHub>;
   // Workers AI (voir worker/ai-suggestions.ts) : suggestions « Pour vous ce
   // soir ». Plan gratuit, quota journalier partagé par tout le compte.
-  AI: Ai;
+  // Optionnel pour la même raison que les bindings Rate Limiting ci-dessus :
+  // absent sur les previews de PR (constaté en prod, Sentry SEANCY-LOGS-3K),
+  // présent partout ailleurs.
+  AI?: Ai;
 
   // Secrets (dashboard Cloudflare, jamais commités).
   TMDB_API_KEY?: string;
