@@ -40,6 +40,7 @@
     "check:version-untouched": "node scripts/check-version-untouched.ts",
     "check:pii-fixtures": "node scripts/check-pii-fixtures.ts",
     "release:changelog": "node scripts/changelogRelease.ts",
+    "preview:changelog": "node scripts/generateChangelogPreview.ts",
     "generate:thumbhashes": "node scripts/generate-thumbhashes.ts",
     "check:dead-code": "knip --include files,dependencies",
     "postinstall": "node scripts/generate-icons.ts",

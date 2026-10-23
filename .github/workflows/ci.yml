@@ -452,6 +452,17 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+
+      # Compile un aperçu (non commité) des fragments .changeset/*.md en
+      # attente dans CHANGELOG.md avant le build, pour que /changelog sur
+      # develop reflète ce qui serait publié à la prochaine release -- ticket
+      # Trello "Changelog pas à jour sur develop" : sans ça, cette page
+      # restait figée sur la dernière entrée compilée sur `main`, jamais
+      # reportée sur `develop`, tant qu'aucune release develop -> main n'a
+      # eu lieu (voir scripts/generateChangelogPreview.ts).
+      - name: Preview pending changelog
+        run: npm run preview:changelog
+
       - name: Build
         run: npm run build
 
