@@ -360,10 +360,15 @@ jobs:
   # package.json, puis commit directement sur `main`. Un garde-fou naturel
   # contre la boucle : ce commit généré ne laisse plus aucun fragment, donc
   # le run qu'il déclenche à son tour trouve .changeset/ vide et ne fait
-  # rien. `[skip ci]` évite quand même de relancer ce workflow pour rien sur
-  # ce second push (le déploiement prod réel, lui, part du déploiement Git
-  # Cloudflare Workers Builds branché sur `main`, qui n'obéit pas à
-  # `[skip ci]` — la version buildée inclut donc bien le bump).
+  # rien — pas besoin de `[skip ci]` pour éviter la boucle, et il ne faut
+  # surtout pas en mettre un : `CHANGELOG.md` est lu au build (voir
+  # ChangelogPage.tsx, `?raw`), donc c'est précisément CE commit que le
+  # déploiement Git Cloudflare Workers Builds doit builder pour que la prod
+  # affiche la nouvelle entrée. Cloudflare honore désormais `[skip ci]` (et
+  # variantes) dans le message de commit au même titre que GitHub Actions
+  # (ticket Trello "Changelog pas dispo en prod" : avec le tag, Workers
+  # Builds skippait silencieusement ce commit et la prod restait buildée sur
+  # le commit de merge précédent, donc sans le nouveau CHANGELOG.md).
   #
   # Avant le basculement complet sur `develop`/`main` (voir ticket "adapter
   # le skill trello-ticket-pipeline"), aucune PR vers `main` n'ajoute encore
@@ -412,7 +417,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md package.json package-lock.json .changeset
-          git commit -m "chore(release): v${{ steps.release.outputs.version }} [skip ci]"
+          git commit -m "chore(release): v${{ steps.release.outputs.version }}"
           git push origin HEAD:main
 
   # Environnement `develop` persistant (voir ticket Trello "Avenir du
