@@ -8,6 +8,7 @@ import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
 import { usePosterThumbhash } from "../../shared/lib/thumbhash.ts";
 import type { MediaSummary, MediaType } from "../../core/types/tmdb.ts";
 import posterStyles from "../../shared/styles/posterAccents.module.css";
+import skeletonStyles from "../../shared/styles/skeleton.module.css";
 import styles from "./TonightPick.module.css";
 
 interface TonightPickCardProps {
@@ -158,7 +159,7 @@ export function TonightPickMessage({
       aria-busy={busy}
       aria-live="polite"
     >
-      {busy && <div className={`${styles.poster} ${styles.posterPending}`} aria-hidden="true" />}
+      {busy && <div className={`${styles.poster} ${skeletonStyles.block}`} aria-hidden="true" />}
       <div className={styles.body}>
         <p className={styles.eyebrow}>
           <Icon name="sparkle" /> {t("tonightPick.eyebrow")}
