@@ -141,7 +141,7 @@ export default function TonightPickCard({
 }
 
 /** Même bloc, sans titre à afficher : génération en cours (`busy`, affiche
- * en pulsation) ou plus rien à proposer aujourd'hui. */
+ * en shimmer) ou plus rien à proposer aujourd'hui. */
 export function TonightPickMessage({
   title,
   children,
