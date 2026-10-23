@@ -1404,6 +1404,13 @@ export async function deleteUserAccount(db: D1Database, userId: number): Promise
     db.prepare("DELETE FROM custom_lists WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM library_items WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM excluded_genre_prefs WHERE user_id = ?").bind(userId),
+    db
+      .prepare(
+        "DELETE FROM ai_suggestion_titles WHERE batch_id IN (SELECT id FROM ai_suggestion_batches WHERE user_id = ?)"
+      )
+      .bind(userId),
+    db.prepare("DELETE FROM ai_suggestion_batches WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM ai_suggestion_skips WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM favorite_provider_prefs WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM favorite_language_prefs WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM favorite_country_prefs WHERE user_id = ?").bind(userId),
