@@ -11,7 +11,7 @@ import { useLibrary } from "../../core/context/LibraryContext.tsx";
 import { logWarn } from "../../core/logger.ts";
 import type { MediaDetails } from "../../core/types/tmdb.ts";
 import TonightPickCard, { TonightPickMessage } from "./TonightPickCard.tsx";
-import styles from "./TonightPick.module.css";
+import TonightPickSkeleton from "./TonightPickSkeleton.tsx";
 
 // Le Worker génère les suggestions du jour en arrière-plan (~2-5 s mesurées)
 // et répond "pending" en attendant : on redemande à ce rythme…
@@ -110,7 +110,7 @@ export default function AiTonightPick({ onUnavailable }: { onUnavailable: () => 
   }, [upcomingKey]);
 
   if (suggestions.status === "loading") {
-    return <div className={`${styles.hero} ${styles.placeholder}`} aria-hidden="true" />;
+    return <TonightPickSkeleton />;
   }
   if (suggestions.status === "pending") {
     return (
@@ -138,7 +138,7 @@ export default function AiTonightPick({ onUnavailable }: { onUnavailable: () => 
   }
   const item = details[detailsKey(current)];
   if (!item) {
-    return <div className={`${styles.hero} ${styles.placeholder}`} aria-hidden="true" />;
+    return <TonightPickSkeleton />;
   }
 
   function skip() {

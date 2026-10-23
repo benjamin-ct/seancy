@@ -26,16 +26,6 @@
   pointer-events: none;
 }
 
-.placeholder {
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.6;
-  }
-}
-
 /* Image de fond côté droit, fondue vers la gauche pour laisser le texte
    lisible sur la surface. */
 .backdrop {
@@ -128,6 +118,24 @@
   vertical-align: -2px;
 }
 
+.skeletonTitle {
+  height: clamp(28px, 3.6vw, 44px);
+  width: min(380px, 70%);
+  border-radius: 8px;
+}
+
+.skeletonMeta {
+  height: 13px;
+  width: 140px;
+  border-radius: 6px;
+}
+
+.skeletonLine {
+  height: 13px;
+  width: 85%;
+  border-radius: 6px;
+}
+
 .overview {
   margin: 0;
   max-width: 62ch;
@@ -203,8 +211,19 @@
 
   .backdrop,
   .overview,
-  .actions {
+  .actions,
+  .skeletonLine {
     display: none;
+  }
+
+  .skeletonTitle {
+    height: 20px;
+    width: 70%;
+  }
+
+  .skeletonMeta {
+    height: 12px;
+    width: 100px;
   }
 
   .poster {
@@ -267,14 +286,9 @@
   }
 }
 
-/* Génération en cours (affiche en pulsation, même hauteur que la carte qui
+/* Génération en cours (affiche en shimmer, même hauteur que la carte qui
    suivra pour éviter un saut de mise en page) ou plus rien à proposer
    aujourd'hui (texte seul, bloc plus bas). */
-.posterPending {
-  background: var(--surface-2);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
 .messageTextOnly {
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;

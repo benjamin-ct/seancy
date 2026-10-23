@@ -11,7 +11,7 @@ import type { Genre, MediaItem } from "../../core/types/tmdb.ts";
 import { storageGetJSON, storageSetJSON } from "../../shared/lib/storage.ts";
 import AiTonightPick from "./AiTonightPick.tsx";
 import TonightPickCard from "./TonightPickCard.tsx";
-import styles from "./TonightPick.module.css";
+import TonightPickSkeleton from "./TonightPickSkeleton.tsx";
 
 // Parmi combien de films populaires on tire celui du soir : assez pour
 // varier d'un jour à l'autre, assez peu pour rester sur des titres connus.
@@ -61,7 +61,7 @@ export default function TonightPick() {
   const handleAiUnavailable = useCallback(() => setAiUnavailable(true), []);
 
   if (status === "loading") {
-    return <div className={`${styles.hero} ${styles.placeholder}`} aria-hidden="true" />;
+    return <TonightPickSkeleton />;
   }
   if (status === "authenticated" && !aiUnavailable) {
     return <AiTonightPick onUnavailable={handleAiUnavailable} />;
@@ -125,7 +125,7 @@ function PopularTonightPick() {
   const pick = pool[dailyIndex(pool.length)];
 
   if (candidates === null) {
-    return <div className={`${styles.hero} ${styles.placeholder}`} aria-hidden="true" />;
+    return <TonightPickSkeleton />;
   }
   if (unwatched.length === 0) {
     return null;
