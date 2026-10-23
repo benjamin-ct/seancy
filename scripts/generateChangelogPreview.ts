@@ -8,7 +8,7 @@
 // ci.yml, job deploy-develop) : jamais poussé sur `develop`.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { isChangesetError, readChangesets } from "./changesetLib.ts";
+import { isChangesetError, readChangesets, type Changeset } from "./changesetLib.ts";
 import { formatChangelogEntry, insertChangelogEntry } from "./changelogRelease.ts";
 
 const CHANGELOG_PATH = "CHANGELOG.md";
@@ -25,7 +25,7 @@ function main(): void {
     }
     process.exit(1);
   }
-  const changesets = results.filter((r) => !isChangesetError(r));
+  const changesets = results.filter((r): r is Changeset => !isChangesetError(r));
   if (changesets.length === 0) {
     console.log(
       "Aucun fragment de changelog en attente : aperçu develop = dernière release publiée."
