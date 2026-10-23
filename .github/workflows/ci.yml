@@ -12,10 +12,10 @@ name: CI
 on:
   push:
     # `develop` : environnement persistant (voir ticket Trello "Avenir du
-    # développement"), base D1 `seancy-develop` + déploiement Cloudflare
-    # Preview nommé "develop" (job deploy-develop). Migrations prod
-    # (apply-d1-migrations) restent strictement limitées à `main`, voir le
-    # garde-fou sur ce job.
+    # développement"), base D1 `seancy-develop` + vrai déploiement Worker
+    # `seancy-develop` (job deploy-develop, voir ticket Trello "Rendre
+    # develop iso-prod"). Migrations prod (apply-d1-migrations) restent
+    # strictement limitées à `main`, voir le garde-fou sur ce job.
     branches: [main, develop]
   pull_request:
     # "closed" (fermeture ou merge) est nécessaire en plus des types par
@@ -421,10 +421,22 @@ jobs:
   # scripts/fixtures/develop-seed.sql), rejoué de façon additive à chaque
   # push — contrairement aux previews de PR (une base par PR, nettoyée à la
   # fermeture), pour servir de bac à sable d'équipe entre les previews
-  # éphémères et la prod. Déployé via `wrangler preview` comme les previews
-  # de PR (même mécanisme, nom stable "develop" au lieu du slug de branche),
-  # pas via l'intégration Git Cloudflare Workers Builds qui déploie la vraie
-  # prod sur `main`.
+  # éphémères et la prod.
+  #
+  # Vrai déploiement (`wrangler deploy`, ticket Trello "Rendre develop
+  # iso-prod") vers un Worker dédié `seancy-develop` — plus `wrangler
+  # preview`, qui est le même mécanisme qu'une preview de PR et ne supporte
+  # pas nativement les bindings `ai`/`ratelimits` (voir PR #312, deux bugs
+  # dus à cette hypothèse erronée). Toujours pas via l'intégration Git
+  # Cloudflare Workers Builds, qui reste réservée à la vraie prod sur `main` :
+  # ce Worker `seancy-develop` est déployé explicitement par ce job, avec son
+  # propre binding D1 (voir scripts/preview-d1.ts, writeDevelopConfig) mais
+  # les mêmes vars/bindings non sensibles que wrangler.jsonc. Les vrais
+  # secrets (TMDB_API_KEY, VAPID_PRIVATE_KEY, RECAPTCHA_SECRET_KEY) doivent
+  # être configurés une fois à la main sur ce nouveau Worker (dashboard
+  # Cloudflare → seancy-develop → Settings → Variables and Secrets) : sans ce
+  # réglage manuel, ses fonctionnalités dépendant de ces secrets restent en
+  # repli tant qu'il n'est pas fait.
   deploy-develop:
     name: Deploy develop environment
     needs:
@@ -458,8 +470,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: >-
-          npx wrangler preview
-          --config wrangler.develop.generated.jsonc
-          --name develop
-          --message "develop @ ${{ github.sha }}"
+        run: npx wrangler deploy --config wrangler.develop.generated.jsonc

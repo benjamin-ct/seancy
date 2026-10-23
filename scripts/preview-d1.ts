@@ -12,11 +12,17 @@
 // patientent qu'une place se libère (fermeture/merge d'une autre PR) plutôt
 // que d'échouer immédiatement, comme demandé sur le ticket D1 isolée par PR.
 //
-// `provision` et `provisionDevelop` génèrent chacun un fichier de config
-// wrangler dérivé de wrangler.jsonc (mêmes assets, binding D1 "DB" pointant
-// vers la base dédiée, Durable Objects propres à l'environnement — voir
-// writeGeneratedConfig) : c'est ce fichier que le workflow passe ensuite à
-// `wrangler preview --config` pour déployer, branché sur sa propre base.
+// `provision` génère un fichier de config wrangler dérivé de wrangler.jsonc
+// (mêmes assets, binding D1 "DB" pointant vers la base dédiée, Durable
+// Objects propres à l'environnement — voir writeGeneratedConfig) : c'est ce
+// fichier que le workflow passe ensuite à `wrangler preview --config` pour
+// déployer une preview de PR, branchée sur sa propre base.
+//
+// `provisionDevelop` génère sa propre config (voir writeDevelopConfig) :
+// `develop` est un vrai Worker déployé (`wrangler deploy`, voir ticket
+// Trello "Rendre develop iso-prod"), pas une Preview — il garde donc les
+// bindings natifs de wrangler.jsonc tels quels (ai, ratelimits, exports...),
+// seuls le nom du Worker et le binding D1 sont réécrits.
 
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -30,6 +36,17 @@ const PREVIEW_DATABASE_PREFIX = "seancy-preview-pr-";
 const DEVELOP_DATABASE_NAME = "seancy-develop";
 const DEVELOP_CONFIG_PATH = "wrangler.develop.generated.jsonc";
 const DEVELOP_SEED_PATH = "scripts/fixtures/develop-seed.sql";
+// Nom du Worker réel dédié à `develop` (distinct de "seancy", la prod) —
+// voir writeDevelopConfig.
+const DEVELOP_WORKER_NAME = "seancy-develop";
+// Décalage appliqué aux `namespace_id` du binding "Rate Limiting" de
+// wrangler.jsonc pour `develop` — voir writeDevelopConfig : ce namespace_id
+// est défini au niveau du COMPTE Cloudflare (pas du Worker, malgré le
+// commentaire de wrangler.jsonc), donc deux Workers qui déclarent le même
+// namespace_id partagent les mêmes compteurs. Sans ce décalage, du trafic de
+// test sur `seancy-develop` viderait le même budget que la prod `seancy` et
+// pourrait faire passer des vrais utilisateurs en 429.
+const DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET = 1000;
 // Tables réinitialisées par `reset-develop`, dans un ordre qui respecte les
 // clés étrangères (dépendants d'abord). `users`/`sessions` en dernier :
 // quasiment toutes les autres tables y font référence (ON DELETE CASCADE
@@ -72,10 +89,16 @@ interface D1Binding {
   database_name: string;
   database_id: string;
 }
+interface RateLimit {
+  name: string;
+  namespace_id: string;
+  simple: { limit: number; period: number };
+}
 interface SourceConfig {
   vars?: Record<string, unknown>;
   d1_databases?: D1Binding[];
   exports?: Record<string, { type: string }>;
+  ratelimits?: RateLimit[];
   [key: string]: unknown;
 }
 
@@ -201,6 +224,51 @@ function writeGeneratedConfig(configPath: string, dbName: string, uuid: string):
   writeFileSync(configPath, JSON.stringify(generatedConfig, null, 2) + "\n");
 }
 
+// `develop` est déployé pour de vrai (`wrangler deploy`, voir ticket Trello
+// "Rendre develop iso-prod" — jusqu'ici c'était `wrangler preview`, le même
+// mécanisme qu'une preview de PR, sans bindings natifs réels pour `ai` et
+// `ratelimits`, cf. PR #312). Contrairement à writeGeneratedConfig (previews
+// de PR), tous les bindings de wrangler.jsonc sont donc repris tels quels —
+// "ai", "ratelimits" et "exports" (Durable Objects) fonctionnent nativement
+// sur un vrai déploiement, pas besoin du détour par "migrations"/"previews".
+// Le nom du Worker (pour ne pas écraser la prod "seancy"), le binding D1
+// "DB" (base dédiée `seancy-develop`) et les `namespace_id` du binding Rate
+// Limiting (comptes partagés au niveau du compte Cloudflare, voir
+// DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET) sont réécrits. Le reste de "vars"
+// reste identique à la prod (valeurs non sensibles, voir wrangler.jsonc),
+// sauf CLOUDFLARE_ANALYTICS_TOKEN : vidé pour ne pas mêler le trafic de
+// `develop` aux statistiques Web Analytics réelles de la prod (même
+// raisonnement que writeGeneratedConfig ci-dessus pour les previews de PR —
+// `env.CLOUDFLARE_ANALYTICS_TOKEN || null` gère déjà l'absence sans crasher,
+// voir worker/index.ts). Les vrais secrets (TMDB_API_KEY,
+// VAPID_PRIVATE_KEY...) doivent être configurés une fois, à la main, sur ce
+// nouveau Worker (dashboard Cloudflare → Settings → Variables and Secrets)
+// — ils ne sont jamais hérités de la prod ni gérés par la CI.
+function writeDevelopConfig(dbName: string, uuid: string): void {
+  const rawConfig = experimental_readRawConfig({ config: SOURCE_CONFIG_PATH })
+    .rawConfig as SourceConfig;
+  const prodDatabase = rawConfig.d1_databases?.find(
+    (db) => db.database_name === PROD_DATABASE_NAME
+  );
+  if (!prodDatabase) {
+    throw new Error(
+      `Binding D1 de prod ('${PROD_DATABASE_NAME}') introuvable dans ${SOURCE_CONFIG_PATH}.`
+    );
+  }
+  const targetDatabase = { ...prodDatabase, database_name: dbName, database_id: uuid };
+  const generatedConfig = {
+    ...rawConfig,
+    name: DEVELOP_WORKER_NAME,
+    d1_databases: [targetDatabase],
+    vars: { ...rawConfig.vars, CLOUDFLARE_ANALYTICS_TOKEN: "" },
+    ratelimits: rawConfig.ratelimits?.map((rateLimit) => ({
+      ...rateLimit,
+      namespace_id: String(Number(rateLimit.namespace_id) + DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET),
+    })),
+  };
+  writeFileSync(DEVELOP_CONFIG_PATH, JSON.stringify(generatedConfig, null, 2) + "\n");
+}
+
 function applyMigrations(dbName: string, configPath: string): void {
   console.log(`Application des migrations sur '${dbName}'...`);
   execFileSync(
@@ -240,7 +308,7 @@ function provision(prNumber: string): void {
 // voir `reset-develop` (déclenché à la main, workflow dédié).
 function provisionDevelop(): void {
   const uuid = ensureDatabase(DEVELOP_DATABASE_NAME);
-  writeGeneratedConfig(DEVELOP_CONFIG_PATH, DEVELOP_DATABASE_NAME, uuid);
+  writeDevelopConfig(DEVELOP_DATABASE_NAME, uuid);
   applyMigrations(DEVELOP_DATABASE_NAME, DEVELOP_CONFIG_PATH);
   applySeed(DEVELOP_DATABASE_NAME, DEVELOP_CONFIG_PATH, DEVELOP_SEED_PATH);
 }
@@ -257,7 +325,7 @@ function resetDevelop(): void {
       `Base '${DEVELOP_DATABASE_NAME}' introuvable — rien à réinitialiser (lancer 'provision-develop' d'abord).`
     );
   }
-  writeGeneratedConfig(DEVELOP_CONFIG_PATH, DEVELOP_DATABASE_NAME, existing.uuid);
+  writeDevelopConfig(DEVELOP_DATABASE_NAME, existing.uuid);
   console.log(
     `Réinitialisation de '${DEVELOP_DATABASE_NAME}' (${DEVELOP_RESETTABLE_TABLES.length} tables)...`
   );
