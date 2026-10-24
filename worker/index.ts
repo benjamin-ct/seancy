@@ -2058,6 +2058,19 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const RECOMMENDATION_CACHE_SIZE = 96;
 
+// Chaque calcul décode/redimensionne une image en WASM dans ce même Worker
+// (~6 ms une fois l'isolate chaud, ~25 ms à froid — voir le commentaire de
+// computePosterThumbhash, worker/images/posterThumbhash.ts) : au-delà de
+// quelques affiches manquantes dans une seule réponse, le total facturé sur
+// le budget CPU de la requête (10 ms sur le plan Workers Free, y compris le
+// temps passé dans `waitUntil`) dépasse largement la limite et le Worker est
+// coupé en plein calcul (carte Trello "Limite temps CPU atteinte", erreurs
+// Sentry "ThumbHash à la demande échoué... ExitStatus exit(1)"). Les
+// affiches au-delà de cette limite restent simplement en silhouette jusqu'au
+// prochain passage du batch CI quotidien (scripts/generate-thumbhashes.ts)
+// ou à une requête ultérieure.
+const MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST = 4;
+
 // Affiches sans ThumbHash connu parmi la page réellement servie : calcul en
 // arrière-plan (jamais dans le chemin synchrone de la réponse), voir
 // worker/images/posterThumbhash.ts. Ne couvre que la page retournée, pas
@@ -2068,9 +2081,14 @@ function scheduleMissingThumbhashes(
   env: Env,
   items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
 ): void {
+  let scheduled = 0;
   for (const item of items) {
+    if (scheduled >= MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      break;
+    }
     if (item.posterPath && !item.posterThumbhash) {
       ctx.waitUntil(computeAndStorePosterThumbhash(env, item.posterPath));
+      scheduled++;
     }
   }
 }
@@ -2614,11 +2632,13 @@ async function enrichResponseWithPosterThumbhashes(
   }
   const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
   const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  let scheduled = 0;
   for (const holder of holders) {
     const hash = hashes.get(holder.poster_path);
     holder.poster_thumbhash = hash ?? null;
-    if (!hash) {
+    if (!hash && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
       ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+      scheduled++;
     }
   }
 }
@@ -2648,12 +2668,14 @@ async function refreshCachedPosterThumbhashes(
   }
   const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
   const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  let scheduled = 0;
   for (const holder of holders) {
     const hash = hashes.get(holder.poster_path);
     if (hash) {
       holder.poster_thumbhash = hash;
-    } else {
+    } else if (scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
       ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+      scheduled++;
     }
   }
   // En-têtes reconstruits à la main plutôt que copiés depuis `response.headers` :
