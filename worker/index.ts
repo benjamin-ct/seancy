@@ -2621,10 +2621,19 @@ function collectPosterPathHolders(
 // proxée : lecture groupée de `poster_thumbhashes` pour les affiches
 // déjà connues, calcul en arrière-plan (jamais dans le chemin synchrone de
 // la réponse) pour celles qui manquent encore.
+//
+// `allowCompute` à false pour les crawlers connus (voir handleTmdbProxy) :
+// ils reçoivent les hashes déjà en base mais ne déclenchent jamais de
+// calcul. Applebot explorait tout le catalogue (~99 % du trafic du Worker,
+// des milliers d'affiches jamais vues par heure) : ces décodages WASM
+// dépassaient le budget CPU de 10 ms (erreurs exceededCpu en rafale) et
+// faisaient grimper la mémoire des isolats au-delà de la limite de
+// 128 Mio, sans aucun bénéfice — un crawler n'affiche pas la silhouette.
 async function enrichResponseWithPosterThumbhashes(
   data: unknown,
   env: Env,
-  ctx: ExecutionContext
+  ctx: ExecutionContext,
+  allowCompute: boolean
 ): Promise<void> {
   const holders = collectPosterPathHolders(data);
   if (holders.length === 0) {
@@ -2636,7 +2645,7 @@ async function enrichResponseWithPosterThumbhashes(
   for (const holder of holders) {
     const hash = hashes.get(holder.poster_path);
     holder.poster_thumbhash = hash ?? null;
-    if (!hash && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+    if (!hash && allowCompute && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
       ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
       scheduled++;
     }
@@ -2653,7 +2662,8 @@ async function enrichResponseWithPosterThumbhashes(
 async function refreshCachedPosterThumbhashes(
   response: Response,
   env: Env,
-  ctx: ExecutionContext
+  ctx: ExecutionContext,
+  allowCompute: boolean
 ): Promise<Response> {
   const data = await response
     .clone()
@@ -2673,7 +2683,7 @@ async function refreshCachedPosterThumbhashes(
     const hash = hashes.get(holder.poster_path);
     if (hash) {
       holder.poster_thumbhash = hash;
-    } else if (scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+    } else if (allowCompute && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
       ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
       scheduled++;
     }
@@ -2740,7 +2750,7 @@ async function handleTmdbProxy(
     // en arrière-plan juste après la première requête resterait en
     // silhouette pour tout visiteur suivant jusqu'à expiration du cache
     // (jusqu'à 1h sur les routes par titre).
-    return refreshCachedPosterThumbhashes(cached, env, ctx);
+    return refreshCachedPosterThumbhashes(cached, env, ctx, !crawler);
   }
 
   // Plafonds vérifiés APRÈS le cache d'edge : une réponse servie depuis le
@@ -2851,7 +2861,7 @@ async function handleTmdbProxy(
       const region = params.get("region_release_date_region") || "FR";
       await enrichDiscoverResultsWithRegionDate(data, region, url.origin, env, ctx, usage);
     }
-    await enrichResponseWithPosterThumbhashes(data, env, ctx);
+    await enrichResponseWithPosterThumbhashes(data, env, ctx, !crawler);
     // Imputés après coup (on ne connaît qu'ici le nombre d'appels hors cache) :
     // la requête en cours est servie, les suivantes seront refusées.
     if (usage.calls > 0) {
