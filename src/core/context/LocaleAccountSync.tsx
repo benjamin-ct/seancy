@@ -4,6 +4,7 @@ import { isSupportedLocale } from "../i18n/i18n.ts";
 import { useLocale } from "./LocaleContext.tsx";
 import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncRevision } from "../sync/liveSync.ts";
+import { storageSet } from "../../shared/lib/storage.ts";
 
 // Synchronise la langue avec le compte, sur le même principe que
 // FavoriteProvidersContext (voir ce fichier pour le détail du principe
@@ -45,12 +46,12 @@ export function LocaleAccountSync({ children }: { children: ReactNode }): ReactN
         if (remote.locale && isSupportedLocale(remote.locale)) {
           lastSyncedRef.current = remote.locale;
           setLocale(remote.locale);
-          localStorage.setItem(SYNCED_FOR_KEY, email);
+          storageSet(SYNCED_FOR_KEY, email);
           return;
         }
         // Aucune préférence enregistrée côté compte pour l'instant : cet
         // appareil pousse sa valeur actuelle comme valeur initiale.
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/locale", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },

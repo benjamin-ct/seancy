@@ -1,6 +1,7 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import fr from "./locales/fr.json";
+import { storageGet, storageSet } from "../../shared/lib/storage.ts";
 
 export const SUPPORTED_LOCALES = ["fr", "en"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
@@ -40,13 +41,9 @@ function detectBrowserLocale(): Locale {
 }
 
 export function loadInitialLocale(): Locale {
-  try {
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored && isSupportedLocale(stored)) {
-      return stored;
-    }
-  } catch {
-    // localStorage indisponible (mode privé strict...) : repli silencieux.
+  const stored = storageGet(LOCALE_STORAGE_KEY);
+  if (stored && isSupportedLocale(stored)) {
+    return stored;
   }
   return detectBrowserLocale();
 }
@@ -74,11 +71,7 @@ i18next.use(initReactI18next).init({
 export function applyInitialLocale(locale: Locale): void {
   void i18next.changeLanguage(locale);
   document.documentElement.lang = locale;
-  try {
-    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  } catch {
-    // Repli silencieux, comme dans loadInitialLocale.
-  }
+  storageSet(LOCALE_STORAGE_KEY, locale);
 }
 
 // Charge les traductions de `locale` si ce n'est pas déjà fait. En cas

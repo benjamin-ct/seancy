@@ -4,9 +4,10 @@
 // silencieusement supprimée (whitelist), tout item structurellement invalide
 // est écarté plutôt que de faire échouer toute la requête.
 
+import { isMediaType } from "../src/core/validation/mediaType.ts";
+
 const MAX_STRING_LENGTH = 300;
 const MAX_ITEMS_PER_LIST = 5000; // large marge au-dessus d'un usage réel, évite un abus qui gonflerait la base indéfiniment
-const VALID_MEDIA_TYPES = new Set(["movie", "tv"]);
 // "saison-épisode" (ex. "1-5") : suivi épisode par épisode pour les séries.
 // Aucune série connue ne dépasse quelques centaines d'épisodes, 5000 laisse
 // une large marge sans permettre un payload disproportionné.
@@ -114,7 +115,7 @@ function cleanDirector(raw: unknown): CleanDirector | null {
 // ou null si l'item n'est pas exploitable (id/mediaType manquants ou
 // invalides — le reste a des valeurs de repli raisonnables).
 function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLibraryItem | null {
-  if (!VALID_MEDIA_TYPES.has(mediaType)) {
+  if (!isMediaType(mediaType)) {
     return null;
   }
   const id = cleanNumber(tmdbId);
@@ -251,7 +252,7 @@ function sanitizeSyncUpsert(raw: unknown): SyncUpsert | null {
     return null;
   }
   const r = raw as Record<string, unknown>;
-  if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+  if (!isMediaType(r.mediaType)) {
     return null;
   }
   if (r.status !== "watched" && r.status !== "watchlist") {
@@ -269,7 +270,7 @@ function sanitizeSyncDelete(raw: unknown): SyncDelete | null {
     return null;
   }
   const r = raw as Record<string, unknown>;
-  if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+  if (!isMediaType(r.mediaType)) {
     return null;
   }
   const id = cleanNumber(r.id);
@@ -321,7 +322,7 @@ export function sanitizeWatchlistItems(rawItems: unknown, maxItems: number): Cle
         return null;
       }
       const r = item as Record<string, unknown>;
-      if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+      if (!isMediaType(r.mediaType)) {
         return null;
       }
       const tmdbId = cleanNumber(r.tmdbId);
@@ -351,7 +352,7 @@ export function sanitizeGenrePrefs(rawGenres: unknown, maxItems: number): CleanG
         return null;
       }
       const r = g as Record<string, unknown>;
-      if (!VALID_MEDIA_TYPES.has(r.mediaType as string)) {
+      if (!isMediaType(r.mediaType)) {
         return null;
       }
       const genreId = cleanNumber(r.genreId);
@@ -411,7 +412,12 @@ export function sanitizeIsoCodeList(rawCodes: unknown, pattern: RegExp): string[
 export const LANGUAGE_CODE_PATTERN = /^[a-z]{2}$/;
 export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
 
-const MAX_CUSTOM_LISTS = 200; // large marge au-dessus d'un usage réel
+// Audit M4 : abaissé de 200/5000 à 50/1000 — une liste perso n'a jamais eu
+// besoin de la même marge que watched/watchlist (MAX_ITEMS_PER_LIST), et ces
+// plafonds bornent surtout l'amplification d'écritures D1 d'un remplacement
+// complet (voir replaceCustomListsForUser et upsertCustomListForUser).
+export const MAX_CUSTOM_LISTS = 50;
+const MAX_CUSTOM_LIST_ITEMS = 1000;
 
 export interface CleanCustomList {
   id: string;
@@ -461,8 +467,15 @@ function sanitizeCustomList(id: string, raw: unknown): CleanCustomList | null {
       seenKeys.add(key);
       return true;
     })
-    .slice(0, MAX_ITEMS_PER_LIST);
+    .slice(0, MAX_CUSTOM_LIST_ITEMS);
   return { id, name, createdAt, items };
+}
+
+// Une seule liste (voir PUT /api/custom-lists/:listId) : même validation que
+// sanitizeCustomList ci-dessus, `id` venant de l'URL plutôt que de la clé du
+// payload.
+export function sanitizeSingleCustomList(id: string, body: unknown): CleanCustomList | null {
+  return sanitizeCustomList(id, body);
 }
 
 // Listes perso complètes (voir PUT /api/custom-lists) : { "list-...": { name,
@@ -513,7 +526,7 @@ export function sanitizeKeyList(rawKeys: unknown, maxItems: number): CleanKey[] 
     .slice(0, maxItems)
     .map((key): CleanKey | null => {
       const [mediaType, idStr] = String(key).split(":");
-      if (!VALID_MEDIA_TYPES.has(mediaType)) {
+      if (!isMediaType(mediaType)) {
         return null;
       }
       const id = cleanNumber(idStr);
@@ -551,4 +564,47 @@ export function sanitizeReminder(raw: unknown): CleanReminder | null {
       ? r.releaseDate
       : null;
   return { ...item, releaseDate };
+}
+
+// Abonnement push anonyme (POST /api/subscribe, audit F1) : endpoint et
+// clés fournis par le navigateur à l'abonnement, non authentifiés — n'importe
+// quelle URL https:// serait sinon acceptée et contactée chaque jour par le
+// cron (petit relais sortant exploitable), avec un stockage non borné.
+// Liste blanche des services de push connus : seul le sous-domaine WNS varie
+// par datacenter (ex. wns2-par1.notify.windows.com), d'où le suffixe.
+const ALLOWED_PUSH_ENDPOINT_HOSTS = [
+  "fcm.googleapis.com", // Chrome, Edge et autres navigateurs Chromium
+  "web.push.apple.com", // Safari (macOS/iOS)
+  "updates.push.services.mozilla.com", // Firefox
+];
+const ALLOWED_PUSH_ENDPOINT_SUFFIX = ".notify.windows.com"; // WNS (Edge legacy/Windows)
+
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === "https:" &&
+    (ALLOWED_PUSH_ENDPOINT_HOSTS.includes(url.hostname) ||
+      url.hostname.endsWith(ALLOWED_PUSH_ENDPOINT_SUFFIX))
+  );
+}
+
+// Clé publique ECDH P-256 encodée en base64url (~87 caractères en pratique) :
+// large marge. Idem pour le secret d'authentification (~22 caractères).
+const MAX_PUSH_P256DH_LENGTH = 128;
+const MAX_PUSH_AUTH_LENGTH = 64;
+
+export function isValidPushKeys(p256dh: unknown, auth: unknown): boolean {
+  return (
+    typeof p256dh === "string" &&
+    p256dh.length > 0 &&
+    p256dh.length <= MAX_PUSH_P256DH_LENGTH &&
+    typeof auth === "string" &&
+    auth.length > 0 &&
+    auth.length <= MAX_PUSH_AUTH_LENGTH
+  );
 }

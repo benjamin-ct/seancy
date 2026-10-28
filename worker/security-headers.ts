@@ -60,16 +60,36 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
 };
 
-// Contenu attendu de public/_headers (format Cloudflare : un motif de
-// chemin, puis les en-têtes indentés).
-export function renderHeadersFile(): string {
-  const lines = ["/*"];
-  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+// Fichiers du build Vite (JS, CSS, polices) : leur nom contient un hash du
+// contenu, une nouvelle version porte donc un nouveau nom. Sans cet en-tête,
+// Cloudflare les sert en `max-age=0, must-revalidate` : chaque visite
+// revalidait chaque fichier (un aller-retour par fichier, coûteux sur une
+// connexion lente) au lieu de les lire directement dans le cache du
+// navigateur. index.html, sw.js et les fichiers de public/ (noms fixes)
+// restent revalidés.
+const HASHED_ASSETS_HEADERS: Record<string, string> = {
+  "cache-control": "public, max-age=31536000, immutable",
+};
+
+function renderHeaderBlock(pattern: string, headers: Record<string, string>): string[] {
+  const lines = [pattern];
+  for (const [key, value] of Object.entries(headers)) {
     const name = key.replace(
       /(^|-)([a-z])/g,
       (_, dash: string, c: string) => dash + c.toUpperCase()
     );
     lines.push(`  ${name}: ${value}`);
   }
+  return lines;
+}
+
+// Contenu attendu de public/_headers (format Cloudflare : un motif de
+// chemin, puis les en-têtes indentés ; les blocs dont le motif correspond
+// s'additionnent).
+export function renderHeadersFile(): string {
+  const lines = [
+    ...renderHeaderBlock("/*", SECURITY_HEADERS),
+    ...renderHeaderBlock("/assets/*", HASHED_ASSETS_HEADERS),
+  ];
   return lines.join("\n") + "\n";
 }

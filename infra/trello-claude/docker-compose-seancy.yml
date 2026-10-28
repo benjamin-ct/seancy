@@ -1,0 +1,75 @@
+name: trello-claude-pipeline
+
+services:
+  webhook-listener:
+    build: ./listener
+    container_name: trello-claude-listener
+    ports:
+      - "29000:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+    environment:
+      - TRELLO_API_KEY=${TRELLO_API_KEY}
+      - TRELLO_TOKEN=${TRELLO_TOKEN}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - DISCORD_SENTRY_WEBHOOK_URL=${DISCORD_SENTRY_WEBHOOK_URL}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - SENTRY_WEBHOOK_SECRET=${SENTRY_WEBHOOK_SECRET}
+      # Logs infra (ce service) poussés vers Sentry, tagués source:infra —
+      # voir sentry-log.js. Même valeur que le secret SENTRY_DSN déjà posé
+      # côté dashboard Cloudflare pour le Worker. Optionnel : no-op tant
+      # qu'absent.
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
+      - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
+    restart: unless-stopped
+
+  seancy-repo:
+    build: ./seancy-repo
+    container_name: seancy-repo
+    command: sleep infinity
+    user: claudeuser
+    # Chromium (seancy-screenshot) plante avec les 64 Mo de /dev/shm par défaut.
+    shm_size: "1gb"
+    volumes:
+      # Checkout du serveur (celui que met à jour seancy-pull) : Claude n'y travaille jamais,
+      # il reste sur main.
+      - ../../:/srv/seancy
+      # Clone de travail dédié de Claude (créé au premier lancement de seancy-claude-run).
+      # Monté sur /workspace pour conserver la mémoire Claude liée à ce chemin.
+      - claude-workspace:/workspace
+      - ./ssh-keys:/home/claudeuser/.ssh
+      - claude-config:/home/claudeuser/.claude:rw
+    working_dir: /workspace
+    environment:
+      # Ne JAMAIS définir ANTHROPIC_API_KEY ici : sa seule présence
+      # bascule la facturation en mode API à l'usage, au lieu de
+      # consommer l'abonnement Pro/Max via le token OAuth ci-dessous.
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - TRELLO_API_KEY=${TRELLO_API_KEY}
+      - TRELLO_TOKEN=${TRELLO_TOKEN}
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - GH_TOKEN=${GH_TOKEN}
+      - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+      - SENTRY_ORG_SLUG=${SENTRY_ORG_SLUG}
+      - SENTRY_PROJECT_SLUG=${SENTRY_PROJECT_SLUG}
+      # Jeton de service Cloudflare Access : captures des previews de PR
+      # (voir README, « Vérification visuelle »). Optionnels.
+      - CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID:-}
+      - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET:-}
+      # Clé TMDB pour `wrangler dev` en local (sinon les pages restent vides). Optionnelle.
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
+      - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
+      # Auth Cloudflare (`wrangler whoami`) pour le benchmark Workers AI (carte
+      # "Worker AI pour l'algo V2"). Scope minimal : Account > Workers AI Read/Edit.
+      # Optionnels : no-op (wrangler reste non authentifié) tant qu'absents.
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+    restart: unless-stopped
+
+volumes:
+  claude-config:
+  claude-workspace:

@@ -45,7 +45,12 @@ body {
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.55;
+  /* `dvh` après `vh` (repli pour les navigateurs qui ne le connaissent pas) :
+     suit la hauteur réelle du viewport mobile (barre d'adresse qui
+     montre/cache), au lieu d'une valeur figée qui laisse un bandeau vide ou
+     coupe le bas de page au premier scroll (audit F8). */
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   /* Une seule source de lumière : un spot doré derrière le hero / le titre
      de la page (en haut, défile avec elle). Aucun halo en haut à droite,
@@ -64,6 +69,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 #root > main {
@@ -206,8 +212,11 @@ input[type="radio"] {
    esthétique desktop — le !important est le seul moyen fiable de garantir
    16px sur mobile sans devoir traquer/maintenir chaque composant à la main.
    Sans effet sur desktop (aucun navigateur de bureau ne zoome au focus).
-   Voir le ticket Trello "Zoom champ texte". */
-@media (max-width: 720px) {
+   Voir le ticket Trello "Zoom champ texte". 860px (pas 720px) : aligné sur
+   l'autre repli mobile de ce fichier (barre d'outils Safari ci-dessus) —
+   zoom encore possible entre 721 et 860px sans ça, les champs y gardant
+   leur taille desktop de 14-15px (audit F8). */
+@media (max-width: 860px) {
   input,
   textarea,
   select {

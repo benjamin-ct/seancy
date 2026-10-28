@@ -1,3 +1,6 @@
+import { isProductionHostname } from "./sentry.ts";
+import { logError } from "./logger.ts";
+
 // Limitation de débit à fenêtre fixe, sur D1 (pas de dépendance à une
 // fonctionnalité Workers séparée type "Rate Limiting binding" — un simple
 // compteur en base suffit très largement pour le volume d'une app perso).
@@ -27,6 +30,41 @@ export async function checkRateLimit(
 // voir worker/rate-limit-memory.ts, importé directement là où nécessaire
 // (fichier séparé pour rester importable depuis les scripts verify:*, qui
 // n'ont pas accès aux types Workers utilisés ci-dessus).
+
+// Binding natif « Rate Limiting » de Workers (voir worker/types.ts,
+// AVATAR_RATE_LIMITER/PUBLIC_SLUG_RATE_LIMITER/LIBRARY_WRITE_RATE_LIMITER) :
+// absent sur les previews de PR (`wrangler preview`), limitation Cloudflare
+// constatée en prod — cf. Sentry "Cannot read properties of undefined
+// (reading 'limit')" sur handleLibrarySync et consorts, reproduit sur
+// plusieurs previews depuis le 2026-10-08, bien avant cette branche. On
+// n'applique alors aucun plafond plutôt que de planter la requête : le vrai
+// plafond (prod/develop) reste en place partout où le binding existe.
+//
+// Absence tolérée hors prod : `develop` est déployé via `wrangler preview`
+// (CI, job deploy-develop), exactement comme les previews de PR — pas « la
+// vraie prod » malgré le tag Sentry "preprod" (voir worker/sentry.ts), donc
+// soumis à la même limitation que les previews. Seule la vraie prod
+// (déploiement Workers Builds sur `main`) garantit la présence du binding ;
+// une absence là-bas signalerait une vraie régression de déploiement — on
+// la laisse alors remonter en Sentry (fail-open sur le plafond, pas sur la
+// requête : un 500 serait pire qu'une écriture non plafonnée le temps de
+// corriger).
+export async function checkBindingRateLimit(
+  limiter: RateLimit | undefined,
+  key: string,
+  hostname: string
+): Promise<boolean> {
+  if (!limiter) {
+    if (isProductionHostname(hostname)) {
+      logError(
+        "Rate limiting : binding absent sur un environnement qui devrait l'avoir",
+        new Error(`hostname=${hostname} key=${key}`)
+      );
+    }
+    return true;
+  }
+  return (await limiter.limit({ key })).success;
+}
 
 export function getClientIp(request: Request): string {
   // En-tête posé par Cloudflare lui-même sur toute requête passant par son

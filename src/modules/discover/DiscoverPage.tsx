@@ -12,6 +12,13 @@ import { useFavoriteProviders } from "../../core/context/FavoriteProvidersContex
 import { useExcludedGenres } from "../../core/context/ExcludedGenresContext.tsx";
 import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx";
 import { useLibrary } from "../../core/context/LibraryContext.tsx";
+import { useAuth } from "../../core/context/AuthContext.tsx";
+import {
+  getRecommendations,
+  postNotInterested,
+  type RecommendationMediaItem,
+} from "../../core/api/recommendations.ts";
+import { logWarn } from "../../core/logger.ts";
 import {
   MediaCard,
   MediaCardSkeleton,
@@ -22,9 +29,12 @@ import {
   ContinueWatchingRow,
   FeaturedMediaRow,
   Icon,
+  EMPTY_ADVANCED_FILTERS,
+  DEFAULT_SORT_FIELD,
+  DEFAULT_SORT_DIRECTION,
 } from "../../shared/components/index.ts";
 import type { AdvancedFiltersState } from "../../shared/components/index.ts";
-import type { Genre, MediaItem } from "../../core/types/tmdb.ts";
+import type { Genre, MediaItem, MediaType } from "../../core/types/tmdb.ts";
 import type { WatchProviderOption } from "../../core/api/tmdb.ts";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
 import TonightPick from "./TonightPick.tsx";
@@ -32,6 +42,14 @@ import { useDiscoverFilters } from "./discoverFilters.ts";
 import styles from "./DiscoverPage.module.css";
 
 const GRID_SKELETON_COUNT = 12;
+// Taille de page de la grille personnalisée "Pour toi" — doit rester
+// cohérente entre le chargement initial et loadMore() pour que l'offset
+// envoyé à /api/recommendations (page - 1) * taille reste exact. Retour de
+// review sur #296 : 24 déclenchait un nouveau chargement visible trop
+// souvent au scroll ; 40 (le plafond côté Worker, voir handleGetRecommendations)
+// ramène le même ressenti que la grille "Découvrir" classique (~20-24
+// items/page TMDB, mais affichés par lots plus gros ici).
+const PERSONALIZED_PAGE_SIZE = 40;
 
 // Résultats déjà chargés, par entrée d'historique : au retour arrière, la
 // grille réapparaît tout de suite (sans squelette ni nouvel appel), prête à
@@ -57,6 +75,23 @@ function toDiscoverParams(advanced: AdvancedFiltersState) {
     runtimeMax: num(advanced.runtimeMax),
     originCountry: advanced.originCountry || undefined,
   };
+}
+
+// "En salle" : garde les films pour lesquels le Worker a trouvé une date de
+// sortie ciné régionale (voir includeRegionReleaseDate, même indicateur que
+// le badge "Salles" affiché par MediaCard). Le paramètre natif TMDB
+// with_release_type n'a aucun effet observé en pratique (vérifié : résultats
+// strictement identiques avec/sans sur discover/movie), d'où ce filtre côté
+// client — même pattern que NewReleasesPage/ComingSoonPage.
+function keepTheatricalOnly<T extends { region_release_date?: string | null }>(
+  items: T[],
+  active: boolean,
+  mediaType: MediaType
+): T[] {
+  if (!active || mediaType !== "movie") {
+    return items;
+  }
+  return items.filter((item) => item.region_release_date != null);
 }
 
 export default function DiscoverPage() {
@@ -87,6 +122,8 @@ export default function DiscoverPage() {
     setSortDirection,
     advanced,
     setAdvanced,
+    inTheatersOnly,
+    setInTheatersOnly,
   } = useDiscoverFilters();
   const [genres, setGenres] = useState<Genre[]>([]);
   const [providers, setProviders] = useState<WatchProviderOption[]>([]);
@@ -109,6 +146,24 @@ export default function DiscoverPage() {
   const { excludedGenreIds } = useExcludedGenres();
   const { filterExcluded } = useExcludedTitles();
   const { watchlist } = useLibrary();
+  const { status: authStatus } = useAuth();
+  // Grille personnalisée "Pour toi" affichée à la place du discover()
+  // classique uniquement quand aucun filtre explicite n'est actif (sinon la
+  // personnalisation contredirait le filtre choisi à la main) — voir
+  // décision sur le ticket Trello "Recommandations personnalisées « Pour
+  // toi »". Mémorisé par le rendu réellement affiché (`usingPersonalized`
+  // state, pas recalculé ici) : un échec de l'appel /api/recommendations
+  // retombe sur discover() sans que l'utilisateur distingue une grille
+  // "vide" d'un filtre actif.
+  const isDefaultFilters =
+    genreIds.length === 0 &&
+    providerIds.length === 0 &&
+    !useMyPlatforms &&
+    !inTheatersOnly &&
+    sortField === DEFAULT_SORT_FIELD &&
+    sortDirection === DEFAULT_SORT_DIRECTION &&
+    JSON.stringify(advanced) === JSON.stringify(EMPTY_ADVANCED_FILTERS);
+  const [usingPersonalized, setUsingPersonalized] = useState(false);
 
   const advancedKey = JSON.stringify(advanced);
   const advancedError = getAdvancedFiltersRangeError(advanced);
@@ -117,8 +172,27 @@ export default function DiscoverPage() {
     : providerIds.length
       ? providerIds
       : undefined;
-  // « année · genre » sous chaque carte : premier genre TMDB du titre.
+  // « année · genre » sous chaque carte : premier genre TMDB du titre (ou,
+  // en grille personnalisée, la raison de la suggestion — voir reasonLabel
+  // plus bas).
   const genreNames = useMemo(() => new Map(genres.map((g) => [g.id, g.name])), [genres]);
+
+  const reasonLabel = useCallback(
+    (item: MediaItem): string | undefined => {
+      const reason = (item as Partial<RecommendationMediaItem>).reason;
+      if (!reason) {
+        return genreNames.get(item.genre_ids?.[0] ?? -1);
+      }
+      if (reason.kind === "genre") {
+        return genreNames.get(reason.genreId);
+      }
+      if (reason.kind === "decade") {
+        return t("discoverPage.reasonDecade", { decade: reason.decade });
+      }
+      return t("discoverPage.reasonTrending");
+    },
+    [genreNames, t]
+  );
 
   // "Séries en cours" : séries entamées avec au moins un épisode non vu déjà
   // sorti (indépendant du filtre Films/Séries de la grille de suggestions
@@ -150,7 +224,16 @@ export default function DiscoverPage() {
       return;
     }
     setPage(1);
-  }, [mediaType, genreIds, providerIds, useMyPlatforms, sortField, sortDirection, advancedKey]);
+  }, [
+    mediaType,
+    genreIds,
+    providerIds,
+    useMyPlatforms,
+    sortField,
+    sortDirection,
+    advancedKey,
+    inTheatersOnly,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,34 +269,74 @@ export default function DiscoverPage() {
     const controller = new AbortController();
     setStatus("loading");
     setLoadMoreError(null);
-    discover(mediaType, {
-      signal: controller.signal,
-      page: 1,
-      genreId: genreIds,
-      excludeGenreIds: excludedGenreIds,
-      providerIds: activeProviderIds,
-      region,
-      sortField,
-      sortDirection,
-      excludeUpcoming: true,
-      includeRegionReleaseDate: true,
-      ...toDiscoverParams(advanced),
-    })
-      .then((data) => {
-        if (cancelled) {
-          return;
-        }
-        setResults(filterExcluded(data.results, mediaType).map((r) => ({ ...r, mediaType })));
-        setTotalPages(Math.min(data.total_pages || 1, 500));
-        setStatus("success");
+    const runClassicDiscover = () => {
+      discover(mediaType, {
+        signal: controller.signal,
+        page: 1,
+        genreId: genreIds,
+        excludeGenreIds: excludedGenreIds,
+        providerIds: activeProviderIds,
+        region,
+        sortField,
+        sortDirection,
+        excludeUpcoming: true,
+        includeRegionReleaseDate: true,
+        ...toDiscoverParams(advanced),
       })
-      .catch((err) => {
-        if (cancelled) {
-          return;
-        }
-        setError(err);
-        setStatus("error");
-      });
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          const kept = keepTheatricalOnly(
+            filterExcluded(data.results, mediaType),
+            inTheatersOnly,
+            mediaType
+          );
+          setUsingPersonalized(false);
+          setResults(kept.map((r) => ({ ...r, mediaType })));
+          setTotalPages(Math.min(data.total_pages || 1, 500));
+          setStatus("success");
+        })
+        .catch((err) => {
+          if (cancelled) {
+            return;
+          }
+          setError(err);
+          setStatus("error");
+        });
+    };
+
+    // Grille "Pour toi" réservée aux comptes connectés sans filtre actif
+    // (voir isDefaultFilters) : repli immédiat et silencieux sur discover()
+    // dans tous les autres cas, y compris un échec ou une liste vide de
+    // /api/recommendations (cold start non applicable, erreur réseau...).
+    if (authStatus === "authenticated" && isDefaultFilters) {
+      getRecommendations(mediaType, PERSONALIZED_PAGE_SIZE, controller.signal, 0)
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          const items = filterExcluded(data.items, mediaType);
+          if (items.length === 0) {
+            runClassicDiscover();
+            return;
+          }
+          setUsingPersonalized(true);
+          setResults(items);
+          setPage(1);
+          setTotalPages(data.hasMore ? 2 : 1);
+          setStatus("success");
+        })
+        .catch((err) => {
+          if (cancelled || err?.name === "AbortError") {
+            return;
+          }
+          runClassicDiscover();
+        });
+    } else {
+      runClassicDiscover();
+    }
+
     return () => {
       cancelled = true;
       controller.abort();
@@ -231,9 +354,12 @@ export default function DiscoverPage() {
     useMyPlatforms,
     favoriteProviderIds,
     region,
+    authStatus,
+    isDefaultFilters,
     sortField,
     sortDirection,
     advancedKey,
+    inTheatersOnly,
     i18n.language,
     reloadKey,
   ]);
@@ -244,6 +370,64 @@ export default function DiscoverPage() {
     }
     const nextPage = page + 1;
     setLoadingMore(true);
+
+    if (usingPersonalized) {
+      getRecommendations(
+        mediaType,
+        PERSONALIZED_PAGE_SIZE,
+        undefined,
+        (nextPage - 1) * PERSONALIZED_PAGE_SIZE
+      )
+        .then((data) => {
+          setResults((prev) => {
+            const seenIds = new Set(prev.map((item) => item.id));
+            const fresh = filterExcluded(data.items, mediaType).filter(
+              (item) => !seenIds.has(item.id)
+            );
+            return [...prev, ...fresh];
+          });
+          if (data.hasMore) {
+            setPage(nextPage);
+            setTotalPages(nextPage + 1);
+            return;
+          }
+          // Lot personnalisé épuisé (plafond de calcul côté Worker, voir
+          // RECOMMENDATION_CACHE_SIZE) : le scroll infini continue avec le
+          // flux "Découvrir" classique plutôt que de s'arrêter net — mêmes
+          // filtres par défaut, même pagination que les autres grilles.
+          setUsingPersonalized(false);
+          return discover(mediaType, {
+            page: nextPage,
+            genreId: genreIds,
+            excludeGenreIds: excludedGenreIds,
+            providerIds: activeProviderIds,
+            region,
+            sortField,
+            sortDirection,
+            excludeUpcoming: true,
+            includeRegionReleaseDate: true,
+            ...toDiscoverParams(advanced),
+          }).then((discoverData) => {
+            setResults((prev) => {
+              const seenIds = new Set(prev.map((item) => item.id));
+              const fresh = keepTheatricalOnly(
+                filterExcluded(discoverData.results, mediaType).filter(
+                  (item) => !seenIds.has(item.id)
+                ),
+                inTheatersOnly,
+                mediaType
+              ).map((r) => ({ ...r, mediaType }));
+              return [...prev, ...fresh];
+            });
+            setPage(nextPage);
+            setTotalPages(Math.min(discoverData.total_pages || 1, 500));
+          });
+        })
+        .catch((err) => setLoadMoreError(err))
+        .finally(() => setLoadingMore(false));
+      return;
+    }
+
     discover(mediaType, {
       page: nextPage,
       genreId: genreIds,
@@ -261,9 +445,11 @@ export default function DiscoverPage() {
         // déduplique pour éviter les doublons à l'écran.
         setResults((prev) => {
           const seenIds = new Set(prev.map((item) => item.id));
-          const fresh = filterExcluded(data.results, mediaType)
-            .filter((item) => !seenIds.has(item.id))
-            .map((r) => ({ ...r, mediaType }));
+          const fresh = keepTheatricalOnly(
+            filterExcluded(data.results, mediaType).filter((item) => !seenIds.has(item.id)),
+            inTheatersOnly,
+            mediaType
+          ).map((r) => ({ ...r, mediaType }));
           return [...prev, ...fresh];
         });
         setPage(nextPage);
@@ -277,6 +463,7 @@ export default function DiscoverPage() {
     page,
     totalPages,
     advancedError,
+    usingPersonalized,
     mediaType,
     genreIds,
     excludedGenreIds,
@@ -287,6 +474,7 @@ export default function DiscoverPage() {
     sortField,
     sortDirection,
     advancedKey,
+    inTheatersOnly,
     i18n.language,
   ]);
 
@@ -298,6 +486,9 @@ export default function DiscoverPage() {
 
   // Sentinelle observée pour déclencher le chargement de la page suivante
   // dès qu'elle approche du bas de l'écran (scroll infini, plus de bouton).
+  // Retour de review sur #296 : 600px faisait apparaître le chargement trop
+  // près du bas (visible), 1200px le déclenche assez tôt pour que le lot
+  // suivant soit déjà là avant que l'utilisateur n'atteigne la fin.
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (status !== "success") {
@@ -313,13 +504,24 @@ export default function DiscoverPage() {
           loadMore();
         }
       },
-      { rootMargin: "600px" }
+      { rootMargin: "1200px" }
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, [status, loadMore]);
 
   useScrollRestoration(status === "success", results.length);
+
+  // Masque la carte immédiatement (optimiste) ; le signal négatif part en
+  // tâche de fond. Pas de ré-affichage en cas d'échec réseau : impact nul
+  // (le titre réapparaîtra simplement au prochain calcul côté Worker) pour
+  // une action que l'utilisateur considère déjà faite.
+  const handleNotInterested = useCallback((item: MediaItem) => {
+    setResults((prev) => prev.filter((r) => r.id !== item.id));
+    postNotInterested(item).catch((err) =>
+      logWarn('Seancy : signal "pas intéressé" non enregistré.', err)
+    );
+  }, []);
 
   return (
     <div className={styles.page}>
@@ -376,6 +578,19 @@ export default function DiscoverPage() {
         setSortDirection={setSortDirection}
         advanced={advanced}
         setAdvanced={setAdvanced}
+        switches={
+          mediaType === "movie"
+            ? [
+                {
+                  key: "in-theaters-only",
+                  label: t("filterPanel.inTheatersFilter"),
+                  text: t("filterPanel.inTheatersOnly"),
+                  checked: inTheatersOnly,
+                  onChange: setInTheatersOnly,
+                },
+              ]
+            : []
+        }
       />
 
       {status === "loading" && (
@@ -401,7 +616,12 @@ export default function DiscoverPage() {
                 key={item.id}
                 item={item}
                 yearGenre
-                genreName={genreNames.get(item.genre_ids?.[0] ?? -1)}
+                genreName={reasonLabel(item)}
+                onNotInterested={
+                  (item as Partial<RecommendationMediaItem>).reason
+                    ? handleNotInterested
+                    : undefined
+                }
               />
             ))}
           </div>

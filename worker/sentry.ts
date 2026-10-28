@@ -11,11 +11,6 @@ import type { Env } from "./types.ts";
 // deploy-preview) — tout le reste (dev local compris) est traité comme
 // non-prod.
 export const PRODUCTION_HOSTNAME = "seancy.com";
-// Ancienne URL de prod (avant Seancy), servie par l'ancien Worker `bobine`
-// (resté en place avec l'ancienne base) : ses pages redirigent vers
-// PRODUCTION_HOSTNAME (voir index.ts et src/main.tsx), mais ses appels /api
-// restent servis pour les onglets encore ouverts, donc traités comme la prod.
-export const LEGACY_PRODUCTION_HOSTNAME = "bobine.creusatbenjamin.workers.dev";
 // Autres adresses du Worker `seancy` qui ne doivent jamais servir le site :
 // tout y part en 301 vers PRODUCTION_HOSTNAME, /api compris (voir index.ts ;
 // les pages, servies en assets sans passer par le Worker, sont redirigées
@@ -27,7 +22,28 @@ export const REDIRECTED_TO_PRODUCTION_HOSTNAMES: readonly string[] = [
 ];
 
 export function isProductionHostname(hostname: string): boolean {
-  return hostname === PRODUCTION_HOSTNAME || hostname === LEGACY_PRODUCTION_HOSTNAME;
+  return hostname === PRODUCTION_HOSTNAME;
+}
+
+// Hostname de l'environnement `develop` persistant (voir ticket Trello
+// "Avenir du développement", PR #282) : même mécanisme de nommage que les
+// previews de PR (slug de branche + nom du Worker), nom de branche "develop"
+// donnant ce slug stable.
+export const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+
+// Sans environment explicite, le SDK Sentry retombe sur "production" par
+// défaut — les erreurs des previews de PR et de `develop` remontaient donc
+// jusqu'ici marquées production (voir ticket Trello "Dashboard de suivis de
+// Claude"). Reste "preview" pour tout ce qui n'est ni la vraie prod ni
+// `develop` (previews de PR, `wrangler dev` local).
+export function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
+  if (isProductionHostname(hostname)) {
+    return "production";
+  }
+  if (hostname === PREPROD_HOSTNAME) {
+    return "preprod";
+  }
+  return "preview";
 }
 
 // `wrangler versions upload --preview-alias` ne supprime jamais l'alias de
@@ -51,8 +67,17 @@ export function withSentry<Handler extends ExportedHandler<Env>>(handler: Handle
     (env) => ({
       dsn: env.SENTRY_DSN,
       tracesSampleRate: 0,
+      // Tag partagé avec le client (src/core/logger.ts) et le script de
+      // logs infra du NAS (infra/trello-claude/listener/sentry-log.js) :
+      // permet de filtrer un seul projet Sentry ("applicatif" vs "infra"
+      // plutôt que deux projets séparés — décidé sur le ticket Trello
+      // "Avenir du développement").
+      initialScope: { tags: { source: "app" } },
       beforeSend(event) {
         const hostname = event.request?.url ? new URL(event.request.url).hostname : null;
+        if (hostname) {
+          event.environment = getEnvironmentName(hostname);
+        }
         if (hostname && !isProductionHostname(hostname) && isDeadPreviewD1Error(event)) {
           return null;
         }

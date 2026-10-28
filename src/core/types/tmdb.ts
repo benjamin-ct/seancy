@@ -54,6 +54,14 @@ export interface MediaSummary {
    * s'afficher telle quelle sur les cartes. `null` si aucune sortie ciné
    * connue pour cette région (repli sur `release_date` côté MediaCard). */
   region_release_date?: string | null;
+  /** ThumbHash base64 (voir migration 0021 et scripts/generate-thumbhashes.ts) :
+   * décodable en une image floue (thumbHashToDataURL) à afficher pendant le
+   * chargement de la vraie affiche, à la place du shimmer gris générique.
+   * Présent uniquement sur les items dont le poster_path est déjà connu de
+   * `popular_titles` et dont le ThumbHash a été calculé (voir
+   * worker/recommendations.ts) — `undefined` ailleurs, MediaCard retombe
+   * alors sur le shimmer existant. */
+  poster_thumbhash?: string | null;
 }
 
 /** MediaSummary enrichi côté client d'un `mediaType` non ambigu (voir

@@ -8,6 +8,8 @@
 // (réglages d'affichage appliqués aussi hors connexion), ainsi que
 // l'abonnement push de l'appareil (seancy.push.*), nécessaire pour le
 // détacher du compte côté serveur (voir core/sync/pushAccountLink.ts).
+import { storageGet, storageRemove } from "../../shared/lib/storage.ts";
+
 const ACCOUNT_DATA_KEYS = [
   "seancy.library.v1",
   "seancy.customLists.v1",
@@ -32,19 +34,11 @@ const SYNCED_FOR_KEYS = [
 // repérer une session perdue (expirée, cookie effacé) sans passer par le
 // bouton de déconnexion.
 export function hasAccountDataOnDevice(): boolean {
-  try {
-    return SYNCED_FOR_KEYS.some((key) => localStorage.getItem(key) !== null);
-  } catch {
-    return false;
-  }
+  return SYNCED_FOR_KEYS.some((key) => storageGet(key) !== null);
 }
 
 export function clearAccountDataFromDevice(): void {
-  try {
-    for (const key of [...ACCOUNT_DATA_KEYS, ...SYNCED_FOR_KEYS]) {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // localStorage indisponible (mode privé strict...) : rien à effacer.
+  for (const key of [...ACCOUNT_DATA_KEYS, ...SYNCED_FOR_KEYS]) {
+    storageRemove(key);
   }
 }

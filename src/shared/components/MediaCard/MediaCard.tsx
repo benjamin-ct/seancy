@@ -6,17 +6,15 @@ import {
   posterSrcSet,
   logoUrl,
   getWatchProviders,
-  getTvStatus,
-  getSeriesEpisodeBadge,
   formatFullDate,
 } from "../../../core/api/tmdb.ts";
-import type { SeriesEpisodeBadge } from "../../../core/api/tmdb.ts";
 import { useNearViewport } from "../../hooks/useNearViewport.ts";
-import { useUpcomingRelease } from "../../hooks/useUpcomingRelease.ts";
-import { useLibrary } from "../../../core/context/LibraryContext.tsx";
+import { useLibraryActions } from "../../../core/context/LibraryContext.tsx";
+import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrarySelectors.ts";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { posterAccentFromGenres } from "../../lib/posterAccent.ts";
+import { usePosterThumbhash } from "../../lib/thumbhash.ts";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
 import { pop } from "../../lib/motion.ts";
 import type {
@@ -26,27 +24,17 @@ import type {
 } from "../../../core/types/tmdb.ts";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
 import posterStyles from "../../styles/posterAccents.module.css";
+import skeletonStyles from "../../styles/skeleton.module.css";
 import styles from "./MediaCard.module.css";
 
 interface MediaCardProps {
   item: MediaItem;
-  /** Opt-in, seule Nouveautés l'active (contenus déjà sortis — voir
-   * showFutureReleaseBadge ci-dessous pour Prochainement). Contrairement à
-   * la pastille théâtrale (indexée une fois pour toute la grille, voir
+  /** Opt-in, seule Nouveautés l'active (contenus déjà sortis). Contrairement
+   * à la pastille théâtrale (indexée une fois pour toute la grille, voir
    * getTheatricalStatusIndex), TMDB n'a pas d'équivalent en masse pour
    * "quelles plateformes pour ces N titres" — un appel par carte est ici
    * incontournable. Le scope opt-in limite où ce coût est payé. */
   showProviderBadge?: boolean;
-  /** Opt-in, seule Prochainement l'active. Tout y est par définition pas
-   * encore sorti : le badge doit dire OÙ/COMMENT la sortie à venir est
-   * prévue, jamais déduit de /watch/providers. Réutilise le même badge
-   * (.theatrical, même position/style) que showProviderBadge. */
-  showFutureReleaseBadge?: boolean;
-  /** Opt-in, séries uniquement (voir seriesEpisodeBadge.ts) : "Vient de
-   * sortir"/"Prochainement" sur un épisode, indépendant des deux badges
-   * ci-dessus (sortie ciné/plateforme, propre aux films). Même emplacement
-   * visuel (.theatrical). */
-  showEpisodeBadge?: boolean;
   /** Opt-in, seul le Top 5 du profil partagé l'utilise : rang affiché en
    * médaillon en haut à gauche de l'affiche (le badge Film/Série se décale
    * à sa droite). */
@@ -64,6 +52,11 @@ interface MediaCardProps {
   /** Opt-in (liste publique, tri « Ordre de X ») : numéro « 01 », « 02 »…
    * à la place du badge Film / Série. */
   position?: number;
+  /** Opt-in (grille "Pour toi", voir DiscoverPage) : 3e pastille qui
+   * masque la carte et enregistre un signal négatif pour les
+   * recommandations. Absent ailleurs — un visiteur de Nouveautés ou de Ma
+   * liste n'a pas cette action. */
+  onNotInterested?: (item: MediaItem) => void;
 }
 
 // Largeur affichée des affiches de la grille (voir mediaGrid.module.css : 2,
@@ -78,16 +71,15 @@ const CARD_POSTER_SIZES = "(max-width: 720px) 50vw, (max-width: 1080px) 25vw, 17
 function MediaCard({
   item,
   showProviderBadge = false,
-  showFutureReleaseBadge = false,
-  showEpisodeBadge = false,
   rank,
   yearGenre = false,
   genreName,
   ownerRating,
   position,
+  onNotInterested,
 }: MediaCardProps) {
   const { t } = useTranslation();
-  const { isWatched, isInWatchlist, toggleWatched, toggleWatchlist } = useLibrary();
+  const { toggleWatched, toggleWatchlist } = useLibraryActions();
   const { getTheatricalStatus, region } = useRegion();
   const { locale } = useLocale();
   const theatricalBadges: Record<string, string> = {
@@ -104,8 +96,8 @@ function MediaCard({
   // enrichDiscoverResultsWithRegionDate). `null` (enrichi, rien trouvé pour
   // cette région) retombe correctement sur item.release_date via `||`.
   const date = item.region_release_date || item.release_date || item.first_air_date;
-  const watched = isWatched(mediaType, item.id);
-  const inWatchlist = isInWatchlist(mediaType, item.id);
+  const watched = useIsWatched(mediaType, item.id);
+  const inWatchlist = useIsInWatchlist(mediaType, item.id);
 
   // Alimente le cache de préview (voir mediaPreviewCache) pour que la fiche
   // (DetailPage) puisse préafficher affiche/titre/date pendant son propre
@@ -125,6 +117,10 @@ function MediaCard({
   const todayIso = new Date().toISOString().slice(0, 10);
   const theatricalStatus =
     inTheatricalIndex && date ? (date <= todayIso ? "in_theaters" : "upcoming") : inTheatricalIndex;
+  // Pas encore sorti (ciné ou plateforme) : le bouton "Vu" porterait à
+  // confusion, donc masqué tant que rien n'a déjà été marqué vu (voir
+  // DetailPage.tsx, même logique sur la fiche).
+  const isUpcoming = Boolean(date && date > todayIso);
 
   // Charger le badge (plateforme ou prochaine sortie) seulement quand la
   // carte approche du viewport : une grille de Nouveautés/Prochainement
@@ -132,10 +128,23 @@ function MediaCard({
   // partent tous en parallèle dès le montage, y compris pour les cartes
   // hors écran — pic qui épuise le quota de la clé TMDB partagée.
   const posterRef = useRef<HTMLDivElement>(null);
-  const isNearViewport = useNearViewport(
-    posterRef,
-    showProviderBadge || showFutureReleaseBadge || showEpisodeBadge
-  );
+  const isNearViewport = useNearViewport(posterRef, showProviderBadge);
+
+  // Shimmer tant que l'affiche n'a pas fini de charger (retour de review sur
+  // #296 : le shimmer restait affiché en permanence, même une fois l'image
+  // chargée, car la classe ne dépendait que de la présence d'un poster_path,
+  // jamais de son état de chargement réel).
+  // Aperçu flou (voir migration 0021, scripts/generate-thumbhashes.ts) :
+  // affiché à la place du shimmer gris pendant le chargement, quand l'item
+  // en a un (voir worker/index.ts, enrichResponseWithPosterThumbhashes).
+  const {
+    hasThumbhash,
+    loaded: posterLoaded,
+    backgroundStyle: posterThumbhashStyle,
+    imgRef: posterImgRef,
+    onLoad: handlePosterLoad,
+    onError: handlePosterError,
+  } = usePosterThumbhash(item.poster_thumbhash);
 
   const [provider, setProvider] = useState<WatchProviderEntry | null>(null);
   // Distingue "pas encore vérifié" de "vérifié, rien trouvé".
@@ -185,64 +194,9 @@ function MediaCard({
   const showUnknownStatus =
     showProviderBadge && providerStatus === "done" && !provider && !hasTheatricalBadge;
 
-  // Prochainement : prochaine sortie/diffusion connue (label + date).
-  const { release: upcomingRelease, status: upcomingStatus } = useUpcomingRelease(
-    showFutureReleaseBadge && isNearViewport,
-    mediaType,
-    item.id,
-    region,
-    date
-  );
-
-  // Vient de sortir / Prochainement (séries) : indépendant de
-  // showFutureReleaseBadge (films uniquement), basé sur
-  // next_episode_to_air/last_episode_to_air (voir seriesEpisodeBadge.ts).
-  const [episodeBadge, setEpisodeBadge] = useState<SeriesEpisodeBadge | null>(null);
-  useEffect(() => {
-    if (!showEpisodeBadge || !isNearViewport || mediaType !== "tv") {
-      return;
-    }
-    let cancelled = false;
-    getTvStatus(item.id)
-      .then((details) => {
-        if (!cancelled) {
-          setEpisodeBadge(getSeriesEpisodeBadge(details));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setEpisodeBadge(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [showEpisodeBadge, isNearViewport, mediaType, item.id]);
-
-  // Le texte affiché vient toujours de t() (kind -> clé de traduction),
-  // jamais de episodeBadge.label (français en dur, présent uniquement pour
-  // que la logique pure reste testable indépendamment de react-i18next).
-  const episodeBadgeLabel = episodeBadge
-    ? episodeBadge.kind === "just_released"
-      ? t("mediaCard.episodeJustReleased")
-      : t("mediaCard.episodeUpcoming")
-    : null;
-  const episodeBadgeDateFormatted = episodeBadge
-    ? formatFullDate(episodeBadge.date, locale) || episodeBadge.date
-    : null;
-
-  // Film sans date exploitable dans release_dates : on retombe sur l'index
-  // théâtral déjà chargé pour toute la grille plutôt que de laisser le
-  // badge vide. Vocabulaire unifié : même ce repli affiche "Cinéma".
-  const futureReleaseLabel =
-    upcomingRelease?.label ||
-    (mediaType === "movie" && theatricalStatus === "upcoming" && upcomingStatus === "done"
-      ? t("mediaCard.upcomingFallback")
-      : null);
-  const effectiveDate = (showFutureReleaseBadge && upcomingRelease?.date) || date;
   const displayDate = yearGenre
-    ? [effectiveDate?.slice(0, 4), genreName].filter(Boolean).join(" · ") || "—"
-    : formatFullDate(effectiveDate, locale) || (effectiveDate ? effectiveDate.slice(0, 4) : "—");
+    ? [date?.slice(0, 4), genreName].filter(Boolean).join(" · ") || "—"
+    : formatFullDate(date, locale) || (date ? date.slice(0, 4) : "—");
 
   const libItem = {
     id: item.id,
@@ -258,9 +212,14 @@ function MediaCard({
   return (
     <div className={styles.card}>
       <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
-        <div className={styles.poster} ref={posterRef}>
+        <div
+          className={`${styles.poster} ${item.poster_path && !posterLoaded && !posterThumbhashStyle ? skeletonStyles.block : ""}`}
+          style={posterThumbhashStyle}
+          ref={posterRef}
+        >
           {item.poster_path ? (
             <img
+              ref={posterImgRef}
               src={posterUrl(item.poster_path) ?? undefined}
               srcSet={posterSrcSet(item.poster_path)}
               sizes={CARD_POSTER_SIZES}
@@ -268,6 +227,20 @@ function MediaCard({
               alt=""
               loading="lazy"
               decoding="async"
+              // Masquée tant qu'elle n'a pas fini de charger, seulement
+              // quand un ThumbHash existe dessous : sinon le navigateur
+              // peint l'image au fil du téléchargement par-dessus le flou
+              // encore visible, d'où le rendu mi-net mi-flou remonté sur
+              // la carte Trello "ThumbHash affiches" le 2026-10-17.
+              className={
+                hasThumbhash
+                  ? posterLoaded
+                    ? styles.posterImgLoaded
+                    : styles.posterImg
+                  : undefined
+              }
+              onLoad={handlePosterLoad}
+              onError={handlePosterError}
             />
           ) : (
             <div className={`${styles.noPoster} ${posterStyles[accentKey]}`} aria-hidden="true">
@@ -299,46 +272,25 @@ function MediaCard({
               <Icon name="star" size={11} filled /> {ownerRating}
             </span>
           )}
-          {showEpisodeBadge ? (
-            episodeBadgeLabel && (
-              <span
-                className={styles.theatrical}
-                title={`${episodeBadgeLabel} (${episodeBadgeDateFormatted})`}
-              >
-                <Icon name={episodeBadge?.kind === "just_released" ? "sparkle" : "calendar"} />{" "}
-                {episodeBadgeLabel}
-              </span>
-            )
-          ) : showFutureReleaseBadge ? (
-            futureReleaseLabel && (
-              <span className={styles.theatrical} title={futureReleaseLabel}>
-                <Icon name="calendar" /> {futureReleaseLabel}
-              </span>
-            )
-          ) : (
-            <>
-              {hasTheatricalBadge && theatricalStatus && (
-                <span className={styles.theatrical}>
-                  <Icon name={theatricalIcons[theatricalStatus]} />{" "}
-                  {theatricalBadges[theatricalStatus]}
-                </span>
-              )}
-              {showUnknownStatus && (
-                <span className={`${styles.theatrical} ${styles.theatricalUnknown}`}>
-                  <Icon name="help" /> {t("mediaCard.unknownReleaseStatus")}
-                </span>
-              )}
-              {provider?.logo_path && (
-                <span className={styles.provider} title={provider.provider_name}>
-                  <img
-                    src={logoUrl(provider.logo_path, "w45") ?? undefined}
-                    alt={provider.provider_name}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </span>
-              )}
-            </>
+          {hasTheatricalBadge && theatricalStatus && (
+            <span className={styles.theatrical}>
+              <Icon name={theatricalIcons[theatricalStatus]} /> {theatricalBadges[theatricalStatus]}
+            </span>
+          )}
+          {showUnknownStatus && (
+            <span className={`${styles.theatrical} ${styles.theatricalUnknown}`}>
+              <Icon name="help" /> {t("mediaCard.unknownReleaseStatus")}
+            </span>
+          )}
+          {provider?.logo_path && (
+            <span className={styles.provider} title={provider.provider_name}>
+              <img
+                src={logoUrl(provider.logo_path, "w45") ?? undefined}
+                alt={provider.provider_name}
+                loading="lazy"
+                decoding="async"
+              />
+            </span>
           )}
         </div>
         <div className={styles.info}>
@@ -366,21 +318,34 @@ function MediaCard({
         >
           <Icon name="star" size={16} strokeWidth={inWatchlist ? 2 : 1.5} filled={inWatchlist} />
         </button>
-        <button
-          type="button"
-          className={`${styles.pastille} ${watched ? styles.pastilleWatched : ""}`}
-          onClick={(e) => {
-            if (!watched) {
-              pop(e.currentTarget.firstElementChild);
-            }
-            toggleWatched(libItem);
-          }}
-          aria-pressed={watched}
-          aria-label={t("mediaCard.markAsWatchedNamed", { title })}
-          title={t("mediaCard.markAsWatched")}
-        >
-          <Icon name="check" size={16} strokeWidth={watched ? 3 : 1.5} />
-        </button>
+        {(watched || !isUpcoming) && (
+          <button
+            type="button"
+            className={`${styles.pastille} ${watched ? styles.pastilleWatched : ""}`}
+            onClick={(e) => {
+              if (!watched) {
+                pop(e.currentTarget.firstElementChild);
+              }
+              toggleWatched(libItem);
+            }}
+            aria-pressed={watched}
+            aria-label={t("mediaCard.markAsWatchedNamed", { title })}
+            title={t("mediaCard.markAsWatched")}
+          >
+            <Icon name="check" size={16} strokeWidth={watched ? 3 : 1.5} />
+          </button>
+        )}
+        {onNotInterested && (
+          <button
+            type="button"
+            className={styles.pastille}
+            onClick={() => onNotInterested(item)}
+            aria-label={t("mediaCard.notInterestedNamed", { title })}
+            title={t("mediaCard.notInterested")}
+          >
+            <Icon name="eyeOff" size={16} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -440,34 +441,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     leaveAccount();
   }, [t]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        status,
-        email,
-        displayName,
-        shareSlug,
-        username,
-        avatarVersion,
-        requestLink,
-        verify,
-        verifyCode,
-        logout,
-        logoutAll,
-        updateDisplayName: updateDisplayNameCallback,
-        setProfileShared,
-        requestEmailChange,
-        confirmEmailChange,
-        updateUsername,
-        checkUsername,
-        uploadAvatar,
-        removeAvatar,
-        deleteAccount,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  // Audit H9 (fichiers concernés) : sans ce useMemo, un nouvel objet était
+  // recréé à chaque rendu du Provider, donc tout consommateur de useAuth()
+  // se re-rendait même quand aucun des champs lus ne changeait réellement.
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      status,
+      email,
+      displayName,
+      shareSlug,
+      username,
+      avatarVersion,
+      requestLink,
+      verify,
+      verifyCode,
+      logout,
+      logoutAll,
+      updateDisplayName: updateDisplayNameCallback,
+      setProfileShared,
+      requestEmailChange,
+      confirmEmailChange,
+      updateUsername,
+      checkUsername,
+      uploadAvatar,
+      removeAvatar,
+      deleteAccount,
+    }),
+    [
+      status,
+      email,
+      displayName,
+      shareSlug,
+      username,
+      avatarVersion,
+      requestLink,
+      verify,
+      verifyCode,
+      logout,
+      logoutAll,
+      updateDisplayNameCallback,
+      setProfileShared,
+      requestEmailChange,
+      confirmEmailChange,
+      updateUsername,
+      checkUsername,
+      uploadAvatar,
+      removeAvatar,
+      deleteAccount,
+    ]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // Les messages d'erreur du Worker sont en français : on les traduit côté

@@ -158,7 +158,7 @@
   grid-area: poster;
 }
 
-.poster {
+.posterFrame {
   aspect-ratio: 2 / 3;
   border-radius: var(--radius);
   overflow: hidden;
@@ -166,7 +166,27 @@
   box-shadow: var(--shadow-lift);
   width: 100%;
   display: block;
+  background-size: cover;
+  background-position: center;
+}
+
+.poster {
+  width: 100%;
+  height: 100%;
+  display: block;
   object-fit: cover;
+}
+
+/* Masquée tant qu'elle n'a pas fini de charger, seulement quand un
+   ThumbHash existe dessous (voir usePosterThumbhash) : sinon le rendu
+   progressif du navigateur se peint par-dessus le flou encore visible. */
+.posterLoading {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.posterLoaded {
+  opacity: 1;
 }
 
 .posterEmpty {
@@ -336,18 +356,22 @@
    vrai contrôle interactif est l'<input type="date"> invisible superposé
    par-dessus, pour que le tap ouvre le sélecteur natif sur mobile — un
    bouton qui appelle showPicker() ne fonctionne pas sur Safari iOS, qui ne
-   supporte pas cette méthode. Taille fixe + overflow hidden sur le
-   wrapper : Firefox/Safari refusent de rendre un <input type="date"> plus
-   étroit qu'environ 110-140px et débordent visuellement de la largeur CSS
-   demandée au lieu de la respecter comme Chrome — sans ce clip, le bouton
-   apparaît comme une pilule allongée au lieu d'une icône carrée (même bug
-   trouvé et corrigé sur le bouton équivalent d'EpisodeTracker, retour
-   Trello carte "date de visionnage"). */
+   supporte pas cette méthode. `overflow: hidden` sur le wrapper :
+   Firefox/Safari refusent de rendre un <input type="date"> plus étroit
+   qu'environ 110-140px et débordent visuellement de la largeur CSS demandée
+   au lieu de la respecter comme Chrome — sans ce clip, le bouton apparaît
+   comme une pilule allongée au lieu d'une icône carrée (même bug trouvé et
+   corrigé sur le bouton équivalent d'EpisodeTracker, retour Trello carte
+   "date de visionnage"). Largeur fixe (contrainte du clip ci-dessus) mais
+   hauteur par `align-self: stretch` plutôt qu'une valeur figée, pour rester
+   pile à la hauteur réelle des pilules voisines (retour Trello carte
+   "Bouton calendrier pas de la même taille" : un 40px fixe ne correspondait
+   plus à leur hauteur, ~45,7px avec --pill-padding). */
 .watchDateWrap {
   position: relative;
   display: inline-flex;
+  align-self: stretch;
   width: 40px;
-  height: 40px;
   overflow: hidden;
   border-radius: 999px;
 }

@@ -9,12 +9,17 @@
 .stars {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  /* Dix cibles de 44px continueraient hors écran sur un mobile étroit sans
+     ce retour à la ligne (audit F8). */
   gap: 2px;
 }
 
 .star {
-  width: 30px;
-  height: 30px;
+  /* Zone tactile 44px (audit F8) : la cible visuelle (icône, 22px) reste
+     inchangée, le hitbox cliquable grandit autour d'elle. */
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   color: var(--border-2);

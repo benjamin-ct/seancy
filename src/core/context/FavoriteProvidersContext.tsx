@@ -9,8 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext.tsx";
-import { logError, logWarn } from "../logger.ts";
+import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncRevision } from "../sync/liveSync.ts";
+import {
+  storageGet,
+  storageGetJSON,
+  storageSet,
+  storageSetJSON,
+} from "../../shared/lib/storage.ts";
 
 // Plateformes de streaming que la personne a réellement (Netflix, Disney+...),
 // cochées une fois pour filtrer Découvrir/Nouveautés/Aléatoire en un clic
@@ -34,16 +40,8 @@ interface FavoriteProvidersContextValue {
 const FavoriteProvidersContext = createContext<FavoriteProvidersContextValue | null>(null);
 
 function loadInitialIds(): number[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isFinite(id)) : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isFinite(id)) : [];
 }
 
 export function FavoriteProvidersProvider({ children }: { children: ReactNode }) {
@@ -70,11 +68,7 @@ export function FavoriteProvidersProvider({ children }: { children: ReactNode })
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(favoriteProviderIds));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les plateformes favorites.", err);
-    }
+    storageSetJSON(STORAGE_KEY, favoriteProviderIds);
   }, [favoriteProviderIds]);
 
   // Synchronisation avec le compte : au moment où l'utilisateur devient
@@ -110,7 +104,7 @@ export function FavoriteProvidersProvider({ children }: { children: ReactNode })
           return;
         }
         const remoteIds = remote.providerIds || [];
-        const alreadySyncedFor = localStorage.getItem(SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           lastSyncedJsonRef.current = JSON.stringify(remoteIds);
           setFavoriteProviderIds(remoteIds);
@@ -118,7 +112,7 @@ export function FavoriteProvidersProvider({ children }: { children: ReactNode })
         }
         const merged = [...new Set([...favoriteProviderIds, ...remoteIds])];
         setFavoriteProviderIds(merged);
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         // `merge: true` : `remoteIds` peut déjà être périmé si un autre
         // appareil vient de synchroniser entre le GET ci-dessus et ce PUT —
         // le serveur fait l'union avec ce qu'il a réellement plutôt que de

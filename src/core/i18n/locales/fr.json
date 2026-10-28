@@ -33,7 +33,8 @@
   "footer": {
     "tagline": "Découvrez, suivez et retrouvez vos films & séries.",
     "terms": "Conditions d'utilisation",
-    "privacy": "Confidentialité"
+    "privacy": "Confidentialité",
+    "changelog": "Changelog"
   },
   "pullToRefresh": {
     "pull": "Tirer pour recharger",
@@ -52,8 +53,6 @@
     "notificationsHint": "Soyez prévenu·e quand un titre de vos envies arrive sur une plateforme, pour vos genres préférés et les grosses sorties.",
     "recommendations": "Recommandations",
     "display": "Affichage",
-    "tabAccount": "Compte",
-    "tabPreferences": "Préférences",
     "tabMyList": "Ma liste",
     "tabCommunity": "Communauté",
     "recommendationsLead": "Ce que Seancy vous propose, et ce qu'il doit laisser de côté.",
@@ -72,6 +71,42 @@
     "statLists_other": "listes",
     "statFollowers_one": "abonné",
     "statFollowers_other": "abonnés"
+  },
+  "settings": {
+    "title": "Réglages",
+    "navLabel": "Sections des réglages",
+    "backToSummary": "Retour au sommaire",
+    "pickSection": "Choisissez une rubrique dans le sommaire.",
+    "summaryProviders_one": "{{count}} plateforme sélectionnée",
+    "summaryProviders_other": "{{count}} plateformes sélectionnées",
+    "sections": {
+      "compte": { "title": "Compte", "summary": "Nom, pseudo, e-mail, connexion" },
+      "confidentialite": {
+        "title": "Confidentialité",
+        "summary": "Qui peut voir votre profil"
+      },
+      "plateformes": { "title": "Mes plateformes", "summary": "Vos services de streaming" },
+      "recommandations": {
+        "title": "Recommandations",
+        "summary": "Langues, pays, genres exclus"
+      },
+      "notifications": { "title": "Notifications", "summary": "Alertes sorties et nouveautés" },
+      "affichage": { "title": "Affichage", "summary": "Langue, région, thème" },
+      "donnees": { "title": "Mes données", "summary": "Export et suppression du compte" },
+      "a-propos": { "title": "À propos", "summary": "Mentions légales et contact" }
+    }
+  },
+  "dataSettings": {
+    "groupTitle": "Mes données",
+    "groupLead": "Exportez une copie de vos données ou supprimez votre compte."
+  },
+  "aboutPage": {
+    "lead": "Seancy, un projet personnel pour suivre ses films et séries.",
+    "brandLabel": "Application",
+    "catalogLabel": "Catalogue",
+    "catalogText": "Fiches, affiches et disponibilités en streaming fournies par TMDB (The Movie Database) et JustWatch.",
+    "legalLabel": "Mentions légales",
+    "contactLabel": "Nous contacter"
   },
   "providerBadges": {
     "unavailable": "Non disponible en streaming en {{region}} pour le moment.",
@@ -128,7 +163,18 @@
     "emailLabel": "Adresse email",
     "emailPlaceholder": "vous@exemple.com",
     "sending": "Envoi…",
-    "submitEmail": "Recevoir mon lien de connexion"
+    "submitEmail": "Recevoir mon lien de connexion",
+    "continueWith": "Continuer avec {{provider}}",
+    "orEmail": "ou avec votre adresse email",
+    "oauthErrors": {
+      "unavailable": "Ce moyen de connexion n'est pas disponible pour le moment.",
+      "rate-limited": "Trop de tentatives de connexion. Réessayez dans quelques minutes.",
+      "expired": "La connexion a expiré ou a déjà été utilisée. Recommencez.",
+      "cancelled": "Connexion annulée.",
+      "failed": "La connexion n'a pas abouti. Réessayez, ou recevez un lien par email.",
+      "no-email": "Ce compte ne nous a pas transmis d'adresse email vérifiée : connectez-vous avec un lien par email, puis associez-le depuis Profil → Réglages → Compte.",
+      "provider-taken": "Votre compte Seancy est déjà associé à un autre compte de ce fournisseur. Connectez-vous avec celui-ci ou avec un lien par email."
+    }
   },
   "membersOnly": {
     "title": "Action réservée aux membres connectés",
@@ -141,6 +187,7 @@
   "ratingStars": {
     "yourRating": "Votre note :",
     "notRatedYet": "Pas encore noté",
+    "groupAriaLabel": "Note sur 10",
     "starAriaLabel": "{{n}}/10 — {{label}}",
     "clear": "Effacer"
   },
@@ -244,6 +291,29 @@
     "avatarCropZoom": "Zoom",
     "avatarCropCancel": "Annuler",
     "avatarCropConfirm": "Valider",
+    "signInMethods": {
+      "title": "Moyens de connexion",
+      "hint": "Connectez-vous avec Google ou Apple en plus du lien envoyé par email, qui reste toujours disponible. L'adresse email du compte ne change pas.",
+      "magicLink": "Lien ou code par email",
+      "alwaysOn": "Toujours actif",
+      "linked": "Associé",
+      "notLinked": "Non associé",
+      "link": "Associer",
+      "unlink": "Dissocier",
+      "linkLabel": "Associer un compte {{provider}}",
+      "unlinkLabel": "Dissocier le compte {{provider}}",
+      "unlinkError": "Impossible de dissocier ce compte pour le moment. Réessayez.",
+      "results": {
+        "linked": "Compte {{provider}} associé : vous pouvez maintenant l'utiliser pour vous connecter.",
+        "used-elsewhere": "Ce compte {{provider}} est déjà associé à un autre compte Seancy.",
+        "provider-taken": "Un autre compte {{provider}} est déjà associé : dissociez-le d'abord.",
+        "cancelled": "Association annulée.",
+        "expired": "L'association a expiré. Recommencez.",
+        "unavailable": "Ce moyen de connexion n'est pas disponible pour le moment.",
+        "rate-limited": "Trop de tentatives. Réessayez dans quelques minutes.",
+        "failed": "L'association n'a pas abouti. Réessayez."
+      }
+    },
     "exportData": "Exporter mes données",
     "exportDataHint": "Téléchargez une copie de toutes les données de votre compte au format JSON (droit à la portabilité).",
     "exportDataButton": "Télécharger mes données",
@@ -340,6 +410,8 @@
     "featuredTitle": "Mise en avant",
     "featuredSubtitle": "· sorties à venir",
     "suggestionsEyebrow": "Suggestions pour vous",
+    "reasonDecade": "Années {{decade}}",
+    "reasonTrending": "Tendance du moment",
     "emptyState": "Aucun résultat pour ces filtres."
   },
   "filterBar": {
@@ -651,7 +723,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "3 octobre 2026",
+    "lastUpdatedValue": "19 octobre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -664,7 +736,7 @@
       },
       "library": {
         "label": "Bibliothèque personnelle",
-        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », vos listes personnalisées et leur contenu. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), ces éléments ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email. Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
+        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour toi ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
       },
       "preferences": {
         "label": "Préférences",
@@ -693,6 +765,10 @@
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
         "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse email. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
+      },
+      "signInProviders": {
+        "label": "Connexion avec Google ou Apple",
+        "text": " (si vous l'utilisez) : l'identifiant de votre compte chez ce fournisseur et l'adresse email qu'il nous transmet, rattachés à votre compte Seancy pour vous reconnaître aux connexions suivantes. Nous ne recevons ni votre mot de passe ni d'autres données de ce compte. Vous pouvez dissocier ce compte à tout moment depuis votre profil, ce qui supprime ces données."
       }
     },
     "why": {
@@ -716,7 +792,7 @@
       },
       "cloudflare": {
         "label": "Cloudflare",
-        "text": " : héberge l'application et la base de données (Workers, D1)."
+        "text": " : héberge l'application et la base de données (Workers, D1), et génère les suggestions personnalisées « Pour vous ce soir » à partir de votre historique de visionnage via Workers AI (traitement réalisé sur l'infrastructure Cloudflare, aucune donnée transmise à un tiers supplémentaire)."
       },
       "sentry": {
         "label": "Sentry",
@@ -730,7 +806,15 @@
         "label": "Gravatar",
         "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse email. Nous ne transmettons jamais votre email en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
       },
-      "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires."
+      "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires.",
+      "google": {
+        "label": "Google (Se connecter avec Google)",
+        "text": " : si vous choisissez de vous connecter avec Google, la connexion se fait chez Google, selon sa politique de confidentialité, qui nous transmet alors votre identifiant de compte et votre adresse email."
+      },
+      "apple": {
+        "label": "Apple (Se connecter avec Apple)",
+        "text": " : même principe pour la connexion avec Apple, selon sa politique de confidentialité ; Apple peut nous transmettre une adresse email de relais à la place de la vôtre si vous le choisissez."
+      }
     },
     "cookies": {
       "title": "Cookies et outils de mesure",
@@ -738,18 +822,23 @@
     },
     "retention": {
       "title": "Durée de conservation",
-      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Compte (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
+      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
       "textAfter": "."
     },
     "rights": {
       "title": "Vos droits",
-      "textBefore": "Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition sur vos données. Vous pouvez exporter une copie de vos données à tout moment depuis Profil → Compte (bouton « Exporter mes données »), ou exercer l'ensemble de ces droits ",
+      "textBefore": "Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, de portabilité et d'opposition sur vos données. Vous pouvez exporter une copie de vos données à tout moment depuis Profil → Réglages → Mes données (bouton « Exporter mes données »), ou exercer l'ensemble de ces droits ",
       "textAfter": ", et introduire une réclamation auprès de la CNIL si vous estimez que vos droits ne sont pas respectés."
     },
     "changes": {
       "title": "Modification de cette politique",
       "text": "Cette politique peut évoluer avec le service, notamment si de nouveaux outils (mesure d'audience, financement participatif...) sont ajoutés. La date de dernière mise à jour est indiquée en haut de cette page."
     }
+  },
+  "changelogPage": {
+    "eyebrow": "Nouveautés",
+    "title": "Changelog",
+    "empty": "Aucune release pour le moment."
   },
   "mediaCard": {
     "inTheaters": "En salles",
@@ -765,6 +854,8 @@
     "markAsWatched": "Marquer comme vu",
     "wantToWatchNamed": "Envie de voir : {{title}}",
     "markAsWatchedNamed": "Marquer comme vu : {{title}}",
+    "notInterested": "Pas intéressé",
+    "notInterestedNamed": "Pas intéressé : {{title}}",
     "position": "N° {{position}} de la liste",
     "ownerRating": "Note du propriétaire : {{rating}}/10"
   },
@@ -784,7 +875,7 @@
     "noOverview": "Pas de synopsis disponible.",
     "watchedOn": "Déjà vu",
     "watchedOff": "Marquer comme vu",
-    "watchDateAriaLabel": "Choisir une date de visionnage",
+    "watchDateAriaLabel": "Marquer comme vu à une date précise",
     "watchDateFutureError": "La date de visionnage ne peut pas être dans le futur.",
     "wantToWatchOn": "Dans vos envies",
     "wantToWatchOff": "Envie de voir",
@@ -1145,9 +1236,17 @@
   "tonightPick": {
     "eyebrow": "Pour vous ce soir",
     "seeDetails": "Voir la fiche",
-    "another": "Autre suggestion"
+    "another": "Autre suggestion",
+    "preparingTitle": "On vous prépare ça…",
+    "preparingText": "Vos suggestions du jour arrivent dans quelques secondes.",
+    "allSkippedTitle": "C’est tout pour aujourd’hui",
+    "allSkippedText": "Revenez demain pour de nouvelles suggestions, ou trouvez votre bonheur dans le catalogue personnalisé ci-dessous.",
+    "emptyTitle": "Pas encore de suggestions",
+    "emptyText": "Vos suggestions du soir ne sont pas disponibles pour l'instant. Revenez un peu plus tard, ou parcourez le catalogue personnalisé ci-dessous."
   },
   "filterPanel": {
+    "inTheatersFilter": "Au cinéma",
+    "inTheatersOnly": "Seulement les films en salle",
     "filters": "Filtres",
     "activeCount_one": "{{count}} filtre actif",
     "activeCount_other": "{{count}} filtres actifs",
@@ -1195,11 +1294,13 @@
     "comingSoon": "Prochainement",
     "random": "Aléatoire",
     "profile": "Profil",
+    "settings": "Réglages",
     "search": "Recherche",
     "searchQuery": "Recherche : {{query}}",
     "login": "Connexion",
     "terms": "Conditions d'utilisation",
     "privacy": "Politique de confidentialité",
+    "changelog": "Changelog",
     "notFound": "Page introuvable",
     "withYear": "{{title}} ({{year}})"
   }

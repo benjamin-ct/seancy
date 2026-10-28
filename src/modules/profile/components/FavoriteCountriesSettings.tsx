@@ -56,6 +56,7 @@ export default function FavoriteCountriesSettings() {
     <SettingsRow
       label={t("favoriteCountriesSettings.title")}
       description={t("favoriteCountriesSettings.description")}
+      wide
     >
       <span className={styles.meta}>
         {t("favoriteCountriesSettings.activeCount", { count: favoriteCountryCodes.length })}

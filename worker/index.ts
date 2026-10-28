@@ -14,6 +14,10 @@ import {
   applyLibraryChanges,
   getCustomListsForUser,
   replaceCustomListsForUser,
+  upsertCustomListForUser,
+  deleteCustomListForUser,
+  countCustomListsForUser,
+  customListExistsForUser,
   getListSharesForUser,
   shareListForUser,
   unshareListForUser,
@@ -29,6 +33,11 @@ import {
   TOP_PICKS_MAX,
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
+  getNotInterestedForUser,
+  addNotInterested,
+  getRecommendationCache,
+  setRecommendationCache,
+  getThumbhashesForPosterPaths,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -49,6 +58,16 @@ import {
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
+import {
+  buildTasteProfile,
+  getRecommendationCandidates,
+  rankRecommendations,
+  type RecommendationItem,
+  type RecommendationMediaType,
+} from "./recommendations.ts";
+import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
+import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
+import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
   isValidEmail,
@@ -70,13 +89,31 @@ import {
   type EmailLocale,
   type AuthUser,
 } from "./auth.ts";
+import {
+  configuredProviders,
+  consumeOAuthState,
+  exchangeCode,
+  findIdentityUser,
+  isOAuthProvider,
+  linkIdentity,
+  listIdentities,
+  sanitizeReturnTo,
+  startOAuth,
+  unlinkIdentity,
+  type OAuthProvider,
+} from "./oauth.ts";
 
 const EMAIL_LOCALES: EmailLocale[] = ["fr", "en"];
 
 function sanitizeEmailLocale(value: unknown): EmailLocale {
   return EMAIL_LOCALES.includes(value as EmailLocale) ? (value as EmailLocale) : "fr";
 }
-import { checkRateLimit, getClientIp, secondsUntilWindowEnd } from "./rate-limit.ts";
+import {
+  checkBindingRateLimit,
+  checkRateLimit,
+  getClientIp,
+  secondsUntilWindowEnd,
+} from "./rate-limit.ts";
 import { checkRateLimitInMemory } from "./rate-limit-memory.ts";
 import { WORKER_ONLY_PARAMS, isValidRegion, parseTmdbProxyRequest } from "./tmdb-proxy-policy.ts";
 import { detectKnownCrawler } from "./bots.ts";
@@ -87,17 +124,20 @@ import {
   sanitizeGenrePrefs,
   sanitizeKeyList,
   sanitizeCustomListsPayload,
+  sanitizeSingleCustomList,
+  MAX_CUSTOM_LISTS,
   sanitizeDisplayName,
   sanitizeIdList,
   sanitizeIsoCodeList,
   LANGUAGE_CODE_PATTERN,
   COUNTRY_CODE_PATTERN,
   sanitizeReminder,
+  isAllowedPushEndpoint,
+  isValidPushKeys,
 } from "./validate.ts";
 import { verifyRecaptcha } from "./recaptcha.ts";
 import { getTheatricalIndex } from "./tmdb.ts";
 import {
-  LEGACY_PRODUCTION_HOSTNAME,
   PRODUCTION_HOSTNAME,
   REDIRECTED_TO_PRODUCTION_HOSTNAMES,
   isProductionHostname,
@@ -253,6 +293,19 @@ const SEARCH_INDEX_SYNC_CRON = "30 7 * * *";
 const RATE_LIMIT_RESPONSE = (): Response =>
   json({ error: "Trop de requêtes. Réessayez dans quelques minutes." }, 429);
 
+// Audit M4 : plafond de taille de corps pour les écritures authentifiées à
+// fort volume potentiel (library, library/sync, custom-lists, excluded-genres,
+// favorite-providers) — large marge au-dessus d'un payload légitime (ex.
+// 1000 items de liste perso, voir MAX_CUSTOM_LIST_ITEMS), mais qui écarte
+// avant même `request.json()` un corps disproportionné.
+const MAX_WRITE_BODY_BYTES = 1_000_000;
+
+function writeBodyTooLarge(request: Request): boolean {
+  return Number(request.headers.get("content-length") ?? 0) > MAX_WRITE_BODY_BYTES;
+}
+
+const BODY_TOO_LARGE_RESPONSE = (): Response => json({ error: "Requête trop volumineuse." }, 413);
+
 // Variante du proxy TMDB : `retry-after` (fin de la fenêtre d'une minute de
 // ses plafonds) permet à tmdbFetch de réessayer tout seul au bon moment
 // plutôt que d'afficher une erreur.
@@ -312,17 +365,16 @@ async function handleSubscribe(request: Request, env: Env): Promise<Response> {
   };
   if (
     typeof endpoint !== "string" ||
-    !endpoint.startsWith("https://") ||
-    !keys?.p256dh ||
-    !keys?.auth
+    !isAllowedPushEndpoint(endpoint) ||
+    !isValidPushKeys(keys?.p256dh, keys?.auth)
   ) {
     return json({ error: "Abonnement push incomplet ou invalide (endpoint/keys manquants)." }, 400);
   }
 
   const subscriptionId = await upsertSubscription(env.DB, {
     endpoint,
-    p256dh: String(keys.p256dh),
-    auth: String(keys.auth),
+    p256dh: String(keys?.p256dh),
+    auth: String(keys?.auth),
     locale: sanitizeSubscriptionLocale(locale),
     account: await subscriptionAccountOf(request, env),
   });
@@ -540,16 +592,38 @@ async function handleTestAccountNotification(
   return json({ ok: true, channel });
 }
 
+// Comparaison en temps constant d'une clé de debug (évite qu'une différence
+// de durée de réponse ne laisse deviner la clé secrète octet par octet,
+// audit F2). Passe par un hachage pour que `timingSafeEqual` compare toujours
+// deux tampons de même longueur, quelle que soit celle des chaînes d'origine.
+async function timingSafeEqualString(received: string | null, expected: string): Promise<boolean> {
+  if (received === null) {
+    return false;
+  }
+  const encoder = new TextEncoder();
+  const [receivedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(received)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(receivedHash, expectedHash);
+}
+
 // Déclenchement manuel de la vérification quotidienne, pour diagnostiquer
 // sans attendre le prochain passage du cron. Protégé par une clé partagée
 // pour éviter qu'un tiers ne déclenche des requêtes TMDB / push à volonté ;
-// désactivé par défaut si la clé n'est pas configurée.
-async function handleManualRun(request: Request, env: Env): Promise<Response> {
+// désactivé par défaut si la clé n'est pas configurée. Le travail est confié
+// à `waitUntil` (comme le vrai cron) : la requête HTTP ne reste pas ouverte
+// le temps de toute la vérification quotidienne (audit F2).
+async function handleManualRun(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
-  await runDailyCheck(env);
+  ctx.waitUntil(runDailyCheck(env));
   return json({ ok: true });
 }
 
@@ -558,7 +632,7 @@ async function handleManualRun(request: Request, env: Env): Promise<Response> {
 // /api/run-check.
 async function handleManualSyncSearchIndex(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
   await syncPopularTitles(env);
@@ -588,7 +662,7 @@ async function handleSearchIndex(request: Request, env: Env): Promise<Response> 
 // vraie erreur survienne en prod. Même protection que /api/run-check.
 async function handleTestError(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
   logError(
@@ -598,51 +672,55 @@ async function handleTestError(request: Request, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
-// Envoie une notification de test à tous les abonnements, pour vérifier que
-// toute la chaîne fonctionne (VAPID, service worker, permission navigateur)
-// sans dépendre de la logique métier — au premier passage, celle-ci ne
-// notifie jamais rien (elle se contente de prendre une référence). Même
-// protection que /api/run-check.
+// Envoie une notification de test à UN SEUL abonnement (?subscriptionId=…),
+// pour vérifier que toute la chaîne fonctionne (VAPID, service worker,
+// permission navigateur) sans dépendre de la logique métier. Ciblé plutôt que
+// diffusé à tous les abonnés de la prod (audit F2 : un appel par erreur ne
+// doit pas spammer toute la base).
 async function handleTestNotification(request: Request, env: Env): Promise<Response> {
   const expected = env.DEBUG_TRIGGER_KEY;
-  if (!expected || request.headers.get("x-debug-key") !== expected) {
+  if (!expected || !(await timingSafeEqualString(request.headers.get("x-debug-key"), expected))) {
     return json({ error: "Non autorisé." }, 401);
   }
 
-  const subscriptions = await getAllSubscriptions(env.DB);
-  if (subscriptions.length === 0) {
+  const subscriptionId = Number(new URL(request.url).searchParams.get("subscriptionId"));
+  if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) {
     return json(
-      { error: "Aucun abonnement enregistré. Activez d'abord les notifications dans l'app." },
-      404
+      {
+        error:
+          "Paramètre ?subscriptionId=<id> requis (évite un envoi à tous les abonnés par erreur).",
+      },
+      400
     );
   }
 
-  const results: Array<{ id: number; ok: boolean; error?: string }> = [];
-  for (const subscription of subscriptions) {
-    try {
-      await sendPush(
-        subscription,
-        {
-          title: "Seancy 🎬",
-          body: "Ceci est une notification de test — si vous la voyez, tout fonctionne !",
-          url: "/ma-liste",
-        },
-        env
-      );
-      results.push({ id: subscription.id, ok: true });
-    } catch (err) {
-      if (err instanceof ExpiredSubscriptionError) {
-        await deleteSubscriptionById(env.DB, subscription.id);
-      }
-      results.push({
-        id: subscription.id,
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  const subscriptions = await getAllSubscriptions(env.DB);
+  const subscription = subscriptions.find((s) => s.id === subscriptionId);
+  if (!subscription) {
+    return json({ error: "Abonnement introuvable." }, 404);
   }
 
-  return json({ results });
+  try {
+    await sendPush(
+      subscription,
+      {
+        title: "Seancy 🎬",
+        body: "Ceci est une notification de test — si vous la voyez, tout fonctionne !",
+        url: "/ma-liste",
+      },
+      env
+    );
+    return json({ results: [{ id: subscription.id, ok: true }] });
+  } catch (err) {
+    if (err instanceof ExpiredSubscriptionError) {
+      await deleteSubscriptionById(env.DB, subscription.id);
+    }
+    return json({
+      results: [
+        { id: subscription.id, ok: false, error: err instanceof Error ? err.message : String(err) },
+      ],
+    });
+  }
 }
 
 // Compte (lien magique) ---------------------------------------------------
@@ -790,23 +868,144 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  return json(
-    {
-      email: user.email,
-      displayName: user.displayName,
-      shareSlug: user.shareSlug,
-      username: user.username,
-      avatarVersion: await getAvatarVersion(env.DB, user.id),
-    },
-    200,
-    // Session ouverte sous les anciens noms de cookies (bobine_*) : appelé à
-    // chaque démarrage de l'app, c'est ici qu'elle passe aux nouveaux noms.
-    user.legacyCookie
-      ? { "set-cookie": sessionCookieHeaders(request, user.sessionToken, user.expiresAt) }
-      : undefined
+  return json({
+    email: user.email,
+    displayName: user.displayName,
+    shareSlug: user.shareSlug,
+    username: user.username,
+    avatarVersion: await getAvatarVersion(env.DB, user.id),
+  });
+}
+
+// Connexion avec Google / Apple (voir worker/oauth.ts) ----------------------
+
+// Redirection sans cache : chaque retour du fournisseur est à usage unique.
+function redirectTo(location: string): Response {
+  return new Response(null, { status: 303, headers: { location, "cache-control": "no-store" } });
+}
+
+function handleOAuthProviders(env: Env): Response {
+  return json({ providers: configuredProviders(env) });
+}
+
+async function handleOAuthStart(request: Request, env: Env, url: URL): Promise<Response> {
+  const provider = url.searchParams.get("provider");
+  const linking = url.searchParams.get("mode") === "link";
+  const failure = (reason: string) =>
+    redirectTo(linking ? `/profil?oauth=${reason}` : `/connexion?oauth=${reason}`);
+  if (!isOAuthProvider(provider) || !configuredProviders(env).includes(provider)) {
+    return failure("unavailable");
+  }
+  if (
+    !checkRateLimitInMemory(`oauth:ip:${getClientIp(request)}`, { limit: 20, windowMs: 60_000 })
+  ) {
+    return failure("rate-limited");
+  }
+  let userId: number | null = null;
+  if (linking) {
+    const user = await getUserFromRequest(env.DB, request);
+    if (!user) {
+      return redirectTo("/connexion");
+    }
+    userId = user.id;
+  }
+  return redirectTo(
+    await startOAuth(
+      env.DB,
+      env,
+      url.origin,
+      provider,
+      userId,
+      sanitizeReturnTo(url.searchParams.get("returnTo"))
+    )
   );
 }
 
+// GET (Google) ou POST form_post (Apple, requête inter-sites : pas de
+// cookie de session attendu ici, tout vient du parcours enregistré).
+async function handleOAuthCallback(
+  request: Request,
+  env: Env,
+  url: URL,
+  provider: OAuthProvider
+): Promise<Response> {
+  const params =
+    request.method === "POST"
+      ? new URLSearchParams(await request.text().catch(() => ""))
+      : url.searchParams;
+  const state = await consumeOAuthState(env.DB, provider, params.get("state"));
+  if (!state) {
+    return redirectTo("/connexion?oauth=expired");
+  }
+  const failure = (reason: string) =>
+    redirectTo(state.userId ? `/profil?oauth=${reason}` : `/connexion?oauth=${reason}`);
+  const code = params.get("code");
+  if (!code) {
+    // Refus ou abandon chez le fournisseur (error=access_denied,
+    // user_cancelled_authorize…).
+    return failure("cancelled");
+  }
+
+  let identity;
+  try {
+    identity = await exchangeCode(env, url.origin, provider, code, state);
+  } catch (err) {
+    logError(`Connexion ${provider} en échec :`, err);
+    return failure("failed");
+  }
+
+  if (state.userId) {
+    const result = await linkIdentity(env.DB, state.userId, provider, identity);
+    return redirectTo(
+      `/profil?oauth=${result === "already-linked" ? "linked" : result}&provider=${provider}`
+    );
+  }
+
+  let email = (await findIdentityUser(env.DB, provider, identity.subject))?.email ?? null;
+  if (!email) {
+    if (!identity.email) {
+      return failure("no-email");
+    }
+    // Compte de même email vérifié (créé s'il n'existe pas) : le fournisseur
+    // atteste le contrôle de cette adresse, comme le ferait le lien magique.
+    const user = await findOrCreateUser(env.DB, identity.email);
+    const result = await linkIdentity(env.DB, user.id, provider, identity);
+    if (result === "provider-taken") {
+      // Le compte est déjà associé à un autre compte de ce fournisseur : on
+      // ne remplace pas l'association en silence.
+      return failure("provider-taken");
+    }
+    email = user.email;
+  }
+  const { token } = await createMagicLink(env.DB, email);
+  // Même destination par défaut que LoginPage.
+  const next = encodeURIComponent(state.returnTo ?? "/profil?tab=ma-liste");
+  return redirectTo(`/auth/verify?token=${token}&next=${next}`);
+}
+
+async function handleListIdentities(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  return json({
+    identities: await listIdentities(env.DB, user.id),
+    providers: configuredProviders(env),
+  });
+}
+
+async function handleUnlinkIdentity(request: Request, env: Env, url: URL): Promise<Response> {
+  const user = await getUserFromRequest(env.DB, request);
+  if (!user) {
+    return json({ error: "Non connecté." }, 401);
+  }
+  const provider = url.searchParams.get("provider");
+  if (!isOAuthProvider(provider)) {
+    return json({ error: "Fournisseur inconnu." }, 400);
+  }
+  await unlinkIdentity(env.DB, user.id, provider);
+  return json({ ok: true });
+}
 // Photo de profil personnelle (ticket « Ajouter son propre avatar ») --------
 //
 // Même garde IDOR que le reste : le compte vient uniquement du cookie. Le
@@ -837,7 +1036,13 @@ async function handlePutAvatar(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!checkRateLimitInMemory(`avatar:user:${user.id}`, { limit: 20, windowMs: 60_000 })) {
+  if (
+    !(await checkBindingRateLimit(
+      env.AVATAR_RATE_LIMITER,
+      `avatar:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (Number(request.headers.get("content-length") ?? 0) > AVATAR_MAX_BYTES) {
@@ -1191,7 +1396,13 @@ async function handleDeleteReminder(request: Request, env: Env): Promise<Respons
 // plafonné par IP pour qu'on ne puisse pas balayer l'espace des slugs.
 async function handleGetPublicProfile(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-profile:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const viewer = await getUserFromRequest(env.DB, request);
@@ -1282,7 +1493,13 @@ async function handleGetPublicFollowList(
   kind: "followers" | "following"
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-profile:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const targetId = SHARE_SLUG_PATTERN.test(slug) ? await getUserIdBySlug(env.DB, slug) : null;
@@ -1376,7 +1593,13 @@ async function handleGetPublicProfileAvatar(
   slug: string
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-profile:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1510,6 +1733,18 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -1541,6 +1776,18 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library-sync:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1575,15 +1822,30 @@ async function handleGetCustomLists(request: Request, env: Env): Promise<Respons
   return json(customLists);
 }
 
-// Remplacement complet à chaque appel (voir LibraryContext : anti-rebond côté
-// client, un PUT par salve de changements) — pas de synchronisation
-// incrémentale ici, contrairement à /api/library/sync : une liste perso
-// change par opérations multi-lignes (création, renommage, glisser-déposer)
-// qu'un diff incrémental compliquerait pour un gain nul à cette échelle.
+// Remplacement complet de TOUTES les listes perso — réservé depuis l'audit
+// M4 à la fusion initiale d'un nouvel appareil (voir LibraryContext,
+// CUSTOM_LISTS_SYNCED_FOR_KEY), un vrai remplacement complet y est correct
+// et rare. Toute modification normale passe désormais par
+// handlePutCustomList/handleDeleteCustomList ci-dessous (une seule liste à
+// la fois) : avant, éditer un item d'une liste réécrivait aussi toutes les
+// autres listes du compte en D1 (amplification déjà observée, voir ticket
+// "Milliers de calls workers").
 async function handlePutCustomLists(request: Request, env: Env): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-lists:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1592,6 +1854,76 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
     return json({ error: "JSON invalide." }, 400);
   }
   await replaceCustomListsForUser(env.DB, user.id, sanitizeCustomListsPayload(body));
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+// Remplacement d'UNE SEULE liste perso (audit M4, « synchro incrémentale ») :
+// chemin normal pour toute création/modification (création, renommage,
+// ajout/retrait d'item, glisser-déposer) une fois la fusion initiale faite.
+// Toujours un remplacement complet DE CETTE LISTE (pas de diff item par
+// item) : une liste change par opérations multi-lignes, comme documenté sur
+// replaceCustomListsForUser — seule la granularité change, pas la stratégie.
+async function handlePutCustomList(request: Request, env: Env, listId: string): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const list = sanitizeSingleCustomList(listId, body);
+  if (!list) {
+    return json({ error: "Liste invalide." }, 400);
+  }
+  // Le plafond total (MAX_CUSTOM_LISTS) ne peut être vérifié qu'ici, pas dans
+  // le sanitizer : celui-ci ne voit qu'une liste à la fois, pas le total déjà
+  // en base. Un ré-envoi d'une liste déjà existante (simple édition) reste
+  // toujours accepté, seule la création d'une liste EN PLUS du plafond est
+  // refusée.
+  const alreadyExists = await customListExistsForUser(env.DB, user.id, list.id);
+  if (!alreadyExists && (await countCustomListsForUser(env.DB, user.id)) >= MAX_CUSTOM_LISTS) {
+    return json({ error: "Nombre maximal de listes atteint.", reason: "too-many-lists" }, 400);
+  }
+  await upsertCustomListForUser(env.DB, user.id, list);
+  publishToUser(request, user.id, { type: "custom-lists" });
+  return json({ ok: true });
+}
+
+async function handleDeleteCustomList(
+  request: Request,
+  env: Env,
+  listId: string
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  await deleteCustomListForUser(env.DB, user.id, listId);
   publishToUser(request, user.id, { type: "custom-lists" });
   return json({ ok: true });
 }
@@ -1644,7 +1976,13 @@ async function handlePutListShare(request: Request, env: Env): Promise<Response>
 // sa vue éditable côté client).
 async function handleGetPublicList(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!checkRateLimitInMemory(`public-list:ip:${ip}`, { limit: 60, windowMs: 60_000 })) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-list:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1676,6 +2014,18 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   if (user instanceof Response) {
     return user;
   }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `excluded-genres:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -1686,6 +2036,254 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
   const merge = (body as { merge?: unknown })?.merge === true;
   await replaceExcludedGenresForUser(env.DB, user.id, genreIds, merge);
   publishToUser(request, user.id, { type: "excluded-genres" });
+  return json({ ok: true });
+}
+
+// Recommandations personnalisées "Pour toi" ------------------------------
+// Tout le calcul (profil de goûts, scoring, diversité) vit dans
+// recommendations.ts ; ce handler ne fait que rassembler les signaux
+// stockés (bibliothèque, genres exclus, "pas intéressé") et renvoyer le
+// résultat. Réservé aux comptes connectés : un visiteur anonyme reste sur
+// le comportement existant (discover() classique) côté client, voir
+// DiscoverPage.tsx.
+const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
+// Retour de review sur la carte Trello : relire toute la bibliothèque et
+// rescorer les candidats à chaque ouverture de la page d'accueil est trop
+// coûteux (quota TMDB/CPU du Worker). Le résultat est donc précalculé par
+// lot et mis en cache (migration 0020, voir db.ts) ; on ne recalcule que si
+// le cache a dépassé sa durée de vie ou s'il ne couvre pas la page demandée
+// (`offset` + `limit`, voir scroll infini côté DiscoverPage.tsx). La taille
+// du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
+// pages suivantes soient servies par le même lot sans recalcul.
+const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const RECOMMENDATION_CACHE_SIZE = 96;
+
+// Chaque calcul décode/redimensionne une image en WASM dans ce même Worker
+// (~6 ms une fois l'isolate chaud, ~25 ms à froid — voir le commentaire de
+// computePosterThumbhash, worker/images/posterThumbhash.ts) : au-delà de
+// quelques affiches manquantes dans une seule réponse, le total facturé sur
+// le budget CPU de la requête (10 ms sur le plan Workers Free, y compris le
+// temps passé dans `waitUntil`) dépasse largement la limite et le Worker est
+// coupé en plein calcul (carte Trello "Limite temps CPU atteinte", erreurs
+// Sentry "ThumbHash à la demande échoué... ExitStatus exit(1)"). Les
+// affiches au-delà de cette limite restent simplement en silhouette jusqu'au
+// prochain passage du batch CI quotidien (scripts/generate-thumbhashes.ts)
+// ou à une requête ultérieure.
+const MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST = 4;
+
+// Affiches sans ThumbHash connu parmi la page réellement servie : calcul en
+// arrière-plan (jamais dans le chemin synchrone de la réponse), voir
+// worker/images/posterThumbhash.ts. Ne couvre que la page retournée, pas
+// tout le pool de candidats, pour ne consommer le budget `waitUntil` que
+// pour les affiches effectivement vues par un utilisateur actif.
+function scheduleMissingThumbhashes(
+  ctx: ExecutionContext,
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): void {
+  let scheduled = 0;
+  for (const item of items) {
+    if (scheduled >= MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      break;
+    }
+    if (item.posterPath && !item.posterThumbhash) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, item.posterPath));
+      scheduled++;
+    }
+  }
+}
+
+// `recommendation_cache` fige `posterThumbhash` au moment du calcul (voir
+// RECOMMENDATION_CACHE_TTL_MS, 24h) : un ThumbHash calculé à la demande
+// après coup (scheduleMissingThumbhashes) n'apparaîtrait donc jamais tant
+// que le cache n'expire pas, même une fois stocké en base — bug remonté en
+// review (carte Trello "ThumbHash affiches", page Découvrir toujours en
+// silhouette malgré plusieurs rechargements). Mute les items en place avec
+// la valeur actuelle de `poster_thumbhashes` pour les affiches encore
+// marquées `null` dans le cache.
+async function refreshMissingThumbhashes(
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): Promise<void> {
+  const missingPaths = items
+    .filter((item) => item.posterPath && !item.posterThumbhash)
+    .map((item) => item.posterPath as string);
+  if (missingPaths.length === 0) {
+    return;
+  }
+  const fresh = await getThumbhashesForPosterPaths(env.DB, [...new Set(missingPaths)]);
+  if (fresh.size === 0) {
+    return;
+  }
+  for (const item of items) {
+    if (item.posterPath && !item.posterThumbhash) {
+      const hash = fresh.get(item.posterPath);
+      if (hash) {
+        item.posterThumbhash = hash;
+      }
+    }
+  }
+}
+
+async function handleGetRecommendations(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (!checkRateLimitInMemory(`recommendations:user:${user.id}`, RECOMMENDATIONS_RATE_LIMIT)) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  const url = new URL(request.url);
+  const typeParam = url.searchParams.get("type") || "all";
+  const mediaTypes: RecommendationMediaType[] =
+    typeParam === "movie" || typeParam === "tv" ? [typeParam] : ["movie", "tv"];
+  const limitParam = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 40) : 20;
+  const offsetParam = Number(url.searchParams.get("offset"));
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
+
+  const cached = await getRecommendationCache(env.DB, user.id, typeParam);
+  const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
+  if (cached && isFresh && cached.items.length >= offset + limit) {
+    const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
+    await refreshMissingThumbhashes(env, pageItems);
+    scheduleMissingThumbhashes(ctx, env, pageItems);
+    return json({
+      items: pageItems,
+      coldStart: cached.coldStart,
+      hasMore: offset + pageItems.length < cached.items.length,
+    });
+  }
+
+  const [library, excludedGenreIds, notInterested] = await Promise.all([
+    getLibraryForUser(env.DB, user.id),
+    getExcludedGenresForUser(env.DB, user.id),
+    getNotInterestedForUser(env.DB, user.id),
+  ]);
+  const watched = Object.values(library.watched);
+  const watchlist = Object.values(library.watchlist);
+  const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
+
+  const candidateLists = await Promise.all(
+    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+  );
+  const candidates = candidateLists.flat();
+  const items = rankRecommendations(candidates, profile, {
+    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
+  });
+  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  const pageItems = items.slice(offset, offset + limit);
+  scheduleMissingThumbhashes(ctx, env, pageItems);
+  return json({
+    items: pageItems,
+    coldStart: profile.isColdStart,
+    hasMore: offset + pageItems.length < items.length,
+  });
+}
+
+async function handlePostNotInterested(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `not-interested:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const r = body as {
+    mediaType?: unknown;
+    tmdbId?: unknown;
+    genreIds?: unknown;
+    releaseDate?: unknown;
+  };
+  if (!isMediaType(r.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(r.tmdbId);
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  const genreIds = sanitizeIdList(r.genreIds);
+  const releaseDate =
+    typeof r.releaseDate === "string" && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(r.releaseDate)
+      ? r.releaseDate.slice(0, 10)
+      : null;
+  await addNotInterested(env.DB, user.id, r.mediaType, tmdbId, genreIds, releaseDate);
+  return json({ ok: true });
+}
+
+// Suggestions IA « Pour vous ce soir » -----------------------------------
+// Toute la logique (verrou, génération en arrière-plan, repli v1) vit dans
+// ai-suggestions.ts. Le client interroge le GET toutes les quelques
+// secondes tant que la réponse est "pending" : plafond en mémoire assez
+// large pour ce polling, la génération elle-même étant de toute façon
+// limitée à une par utilisateur et par jour par le cache D1.
+const TONIGHT_SUGGESTIONS_RATE_LIMIT = { limit: 60, windowMs: 60_000 };
+
+async function handleGetTonightSuggestions(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !checkRateLimitInMemory(`tonight-suggestions:user:${user.id}`, TONIGHT_SUGGESTIONS_RATE_LIMIT)
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  return json(await getTonightSuggestions(env, ctx, user.id, new URL(request.url).hostname));
+}
+
+async function handlePostTonightSkip(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `tonight-skip:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  const body = await readJsonObject(request);
+  if (!body) {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  if (!isMediaType(body.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(body.tmdbId);
+  if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  await skipTonightSuggestion(env, user.id, body.mediaType, tmdbId);
   return json({ ok: true });
 }
 
@@ -1706,6 +2304,18 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `favorite-providers:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
   }
   let body: unknown;
   try {
@@ -1974,6 +2584,125 @@ async function enrichDiscoverResultsWithRegionDate(
   );
 }
 
+// Toute affiche TMDB proxée, pas seulement celles des recommandations
+// (carte Trello "ThumbHash affiches" — demande explicite d'étendre la
+// couverture à Découvrir/recherche/tendances/fiches détail, y compris pour
+// un visiteur non connecté, puisque le ThumbHash d'une affiche n'a rien
+// d'utilisateur). Un item TMDB peut porter `poster_path` à plusieurs
+// profondeurs selon la route (résultats paginés, fiche détail elle-même,
+// `belongs_to_collection`, `parts` d'une collection, `cast` via
+// append_to_response=credits...) : on descend récursivement plutôt que
+// d'énumérer chaque forme, pour rester correct si une route ou un
+// append_to_response change de forme plus tard.
+function collectPosterPathHolders(
+  node: unknown,
+  holders: Array<{ poster_path: string; poster_thumbhash?: string | null }> = []
+): Array<{ poster_path: string; poster_thumbhash?: string | null }> {
+  if (Array.isArray(node)) {
+    for (const entry of node) {
+      collectPosterPathHolders(entry, holders);
+    }
+  } else if (node && typeof node === "object") {
+    const record = node as Record<string, unknown>;
+    if (typeof record.poster_path === "string") {
+      holders.push(record as { poster_path: string; poster_thumbhash?: string | null });
+    }
+    for (const value of Object.values(record)) {
+      if (value && typeof value === "object") {
+        collectPosterPathHolders(value, holders);
+      }
+    }
+  }
+  return holders;
+}
+
+// Même mécanisme que scheduleMissingThumbhashes/refreshMissingThumbhashes
+// (recommandations) mais générique sur n'importe quelle réponse TMDB
+// proxée : lecture groupée de `poster_thumbhashes` pour les affiches
+// déjà connues, calcul en arrière-plan (jamais dans le chemin synchrone de
+// la réponse) pour celles qui manquent encore.
+//
+// `allowCompute` à false pour les crawlers connus (voir handleTmdbProxy) :
+// ils reçoivent les hashes déjà en base mais ne déclenchent jamais de
+// calcul. Applebot explorait tout le catalogue (~99 % du trafic du Worker,
+// des milliers d'affiches jamais vues par heure) : ces décodages WASM
+// dépassaient le budget CPU de 10 ms (erreurs exceededCpu en rafale) et
+// faisaient grimper la mémoire des isolats au-delà de la limite de
+// 128 Mio, sans aucun bénéfice — un crawler n'affiche pas la silhouette.
+async function enrichResponseWithPosterThumbhashes(
+  data: unknown,
+  env: Env,
+  ctx: ExecutionContext,
+  allowCompute: boolean
+): Promise<void> {
+  const holders = collectPosterPathHolders(data);
+  if (holders.length === 0) {
+    return;
+  }
+  const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
+  const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  let scheduled = 0;
+  for (const holder of holders) {
+    const hash = hashes.get(holder.poster_path);
+    holder.poster_thumbhash = hash ?? null;
+    if (!hash && allowCompute && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+      scheduled++;
+    }
+  }
+}
+
+// Variante de enrichResponseWithPosterThumbhashes pour un hit du cache
+// d'edge (voir handleTmdbProxy) : ne lit/réécrit que les affiches encore
+// `null` dans la réponse déjà figée, sans retoucher à celles déjà connues
+// ni toucher à l'entrée de cache elle-même (chaque requête suivante refait
+// ce même correctif tant que le cache n'a pas expiré, coût borné à une
+// lecture D1 groupée). Repart tôt sans toucher au corps de la réponse si
+// aucune affiche n'est manquante.
+async function refreshCachedPosterThumbhashes(
+  response: Response,
+  env: Env,
+  ctx: ExecutionContext,
+  allowCompute: boolean
+): Promise<Response> {
+  const data = await response
+    .clone()
+    .json()
+    .catch(() => null);
+  if (!data) {
+    return response;
+  }
+  const holders = collectPosterPathHolders(data).filter((holder) => !holder.poster_thumbhash);
+  if (holders.length === 0) {
+    return response;
+  }
+  const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
+  const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  let scheduled = 0;
+  for (const holder of holders) {
+    const hash = hashes.get(holder.poster_path);
+    if (hash) {
+      holder.poster_thumbhash = hash;
+    } else if (allowCompute && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+      scheduled++;
+    }
+  }
+  // En-têtes reconstruits à la main plutôt que copiés depuis `response.headers` :
+  // le corps change de taille dès qu'une affiche passe de `null` à un hash (ou
+  // l'inverse), et on ne sait pas si le Cache API de Cloudflare matérialise un
+  // `content-length` (ou un `age`) sur la représentation qu'il renvoie — ne
+  // garder que ce dont ce proxy a vraiment besoin évite tout risque d'en-tête
+  // devenu incohérent avec le nouveau corps.
+  return new Response(JSON.stringify(data), {
+    status: response.status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": response.headers.get("cache-control") || "public, max-age=300",
+    },
+  });
+}
+
 // Proxy TMDB : la clé API TMDB n'est plus exposée côté client (elle
 // n'apparaît dans aucune requête réseau visible depuis le navigateur). Le
 // front (src/core/api/tmdbClient.ts) appelle /api/tmdb/<chemin TMDB> ; ce
@@ -2015,7 +2744,13 @@ async function handleTmdbProxy(
   );
   const cached = await cache.match(cacheKey);
   if (cached) {
-    return cached;
+    // Le cache d'edge fige `poster_thumbhash` tel qu'il était au moment de
+    // sa mise en cache (même souci que `recommendation_cache`, voir
+    // refreshMissingThumbhashes) : sans ce correctif, une affiche calculée
+    // en arrière-plan juste après la première requête resterait en
+    // silhouette pour tout visiteur suivant jusqu'à expiration du cache
+    // (jusqu'à 1h sur les routes par titre).
+    return refreshCachedPosterThumbhashes(cached, env, ctx, !crawler);
   }
 
   // Plafonds vérifiés APRÈS le cache d'edge : une réponse servie depuis le
@@ -2103,7 +2838,11 @@ async function handleTmdbProxy(
 
   const res = await fetch(tmdbUrl.toString());
   let body = await res.text();
-  if (res.ok && (shouldEnrichProviders || shouldEnrichRegionDate)) {
+  // Le ThumbHash est posé sur TOUTE réponse TMDB proxée qui porte des
+  // affiches (pas seulement les grilles Découvrir enrichies de badges) :
+  // le JSON.parse ci-dessous n'est donc plus conditionné aux deux
+  // enrichissements existants.
+  if (res.ok) {
     const data = JSON.parse(body);
     const usage: TmdbUsage = { calls: 0 };
     if (shouldEnrichProviders) {
@@ -2122,6 +2861,7 @@ async function handleTmdbProxy(
       const region = params.get("region_release_date_region") || "FR";
       await enrichDiscoverResultsWithRegionDate(data, region, url.origin, env, ctx, usage);
     }
+    await enrichResponseWithPosterThumbhashes(data, env, ctx, !crawler);
     // Imputés après coup (on ne connaît qu'ici le nombre d'appels hors cache) :
     // la requête en cours est servie, les suivantes seront refusées.
     if (usage.calls > 0) {
@@ -2187,19 +2927,11 @@ export default withSentry({
     // profil, liste), qui passent par ici pour leurs balises de partage
     // (voir page-meta.ts). Réponses reconstruites, d'où withSecurityHeaders.
     if (!url.pathname.startsWith("/api/")) {
-      // Ancienne URL de prod : liens partagés, robots et sitemap renvoient
-      // définitivement vers seancy.com. Les autres pages sont des assets
-      // servis sans passer par ici, redirigés côté client (src/main.tsx).
-      // /api/* reste servi pour les onglets encore ouverts sur l'ancienne
-      // URL, le temps qu'ils se rechargent.
-      if (url.hostname === LEGACY_PRODUCTION_HOSTNAME) {
-        return Response.redirect(`https://${PRODUCTION_HOSTNAME}${url.pathname}${url.search}`, 301);
-      }
       if (url.pathname === "/robots.txt") {
         return withSecurityHeaders(serveRobots(url));
       }
       if (url.pathname === "/sitemap.xml") {
-        return withSecurityHeaders(serveSitemap(url));
+        return withSecurityHeaders(await serveSitemap(url, env));
       }
       if (
         PAGE_META_ROUTE.test(url.pathname) &&
@@ -2319,7 +3051,7 @@ async function routeRequest(
   }
 
   if (url.pathname === "/api/run-check" && request.method === "POST") {
-    return handleManualRun(request, env);
+    return handleManualRun(request, env, ctx);
   }
 
   if (url.pathname === "/api/search-index" && request.method === "GET") {
@@ -2348,6 +3080,28 @@ async function routeRequest(
 
   if (url.pathname === "/api/auth/me" && request.method === "GET") {
     return handleMe(request, env);
+  }
+
+  if (url.pathname === "/api/auth/providers" && request.method === "GET") {
+    return handleOAuthProviders(env);
+  }
+
+  if (url.pathname === "/api/auth/oauth/start" && request.method === "GET") {
+    return handleOAuthStart(request, env, url);
+  }
+
+  if (url.pathname.startsWith("/api/auth/oauth/callback/")) {
+    const provider = url.pathname.slice("/api/auth/oauth/callback/".length);
+    if (isOAuthProvider(provider) && (request.method === "GET" || request.method === "POST")) {
+      return handleOAuthCallback(request, env, url, provider);
+    }
+  }
+
+  if (url.pathname === "/api/account/identities" && request.method === "GET") {
+    return handleListIdentities(request, env);
+  }
+  if (url.pathname === "/api/account/identities" && request.method === "DELETE") {
+    return handleUnlinkIdentity(request, env, url);
   }
 
   if (url.pathname === "/api/auth/logout" && request.method === "POST") {
@@ -2472,6 +3226,14 @@ async function routeRequest(
     return handlePutCustomLists(request, env);
   }
 
+  const singleCustomListMatch = url.pathname.match(/^\/api\/custom-lists\/([^/]+)$/);
+  if (singleCustomListMatch && request.method === "PUT") {
+    return handlePutCustomList(request, env, singleCustomListMatch[1]);
+  }
+  if (singleCustomListMatch && request.method === "DELETE") {
+    return handleDeleteCustomList(request, env, singleCustomListMatch[1]);
+  }
+
   if (url.pathname === "/api/list-shares" && request.method === "GET") {
     return handleGetListShares(request, env);
   }
@@ -2487,6 +3249,22 @@ async function routeRequest(
 
   if (url.pathname === "/api/excluded-genres" && request.method === "PUT") {
     return handlePutExcludedGenres(request, env);
+  }
+
+  if (url.pathname === "/api/recommendations" && request.method === "GET") {
+    return handleGetRecommendations(request, env, ctx);
+  }
+
+  if (url.pathname === "/api/not-interested" && request.method === "POST") {
+    return handlePostNotInterested(request, env);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions" && request.method === "GET") {
+    return handleGetTonightSuggestions(request, env, ctx);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions/skip" && request.method === "POST") {
+    return handlePostTonightSkip(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { MediaType } from "../types/tmdb.ts";
-import { logError } from "../logger.ts";
+import { storageGetJSON, storageSetJSON } from "../../shared/lib/storage.ts";
 
 // NOUVEAU (repris de la maquette HTML, absent du Projet A avant migration) :
 // bouton "Exclure ce titre" sur la fiche détail — un titre précis, jamais
@@ -50,29 +50,13 @@ interface ExcludedTitlesContextValue {
 const ExcludedTitlesContext = createContext<ExcludedTitlesContextValue | null>(null);
 
 function loadInitialKeys(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
 }
 
 function loadInitialLabels(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(LABELS_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = storageGetJSON<unknown>(LABELS_STORAGE_KEY, {});
+  return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
 }
 
 export function ExcludedTitlesProvider({ children }: { children: ReactNode }) {
@@ -86,19 +70,11 @@ export function ExcludedTitlesProvider({ children }: { children: ReactNode }) {
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(excludedTitleKeys));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les titres exclus.", err);
-    }
+    storageSetJSON(STORAGE_KEY, excludedTitleKeys);
   }, [excludedTitleKeys]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LABELS_STORAGE_KEY, JSON.stringify(excludedTitleLabels));
-    } catch (err) {
-      console.error("Seancy : impossible de sauvegarder les libellés des titres exclus.", err);
-    }
+    storageSetJSON(LABELS_STORAGE_KEY, excludedTitleLabels);
   }, [excludedTitleLabels]);
 
   const toggleExcludedTitle = useCallback(

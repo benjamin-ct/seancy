@@ -57,16 +57,15 @@ export default function CustomListPanel({
   const { locale } = useLocale();
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(list.name);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("manual");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const items = getListItems(list.id);
   const ratedCount = items.filter((item) => getRating(item.mediaType, item.id) != null).length;
 
   function handleDelete() {
-    if (window.confirm(t("customListPanel.confirmDelete", { name: list.name }))) {
-      deleteList(list.id);
-      onDeleted();
-    }
+    deleteList(list.id);
+    onDeleted();
   }
 
   function submitRename() {
@@ -224,13 +223,35 @@ export default function CustomListPanel({
               >
                 <Icon name="edit" /> {t("customListPanel.renameButton")}
               </button>
-              <button type="button" className={dropdownStyles.option} onClick={handleDelete}>
+              <button
+                type="button"
+                className={dropdownStyles.option}
+                onClick={() => setConfirmingDelete(true)}
+              >
                 <Icon name="trash" /> {t("customListPanel.deleteButton")}
               </button>
             </Dropdown>
           </div>
         </div>
       </div>
+
+      {confirmingDelete && (
+        <div className={styles.confirmDelete} role="alertdialog">
+          <p>{t("customListPanel.confirmDelete", { name: list.name })}</p>
+          <div className={styles.inline}>
+            <button type="button" className={styles.confirmDeleteBtn} onClick={handleDelete}>
+              {t("customListPanel.deleteButton")}
+            </button>
+            <button
+              type="button"
+              className={styles.confirmCancelBtn}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              {t("customListPanel.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {canSort && <p className={styles.dragHint}>{t("customListPanel.dragHint")}</p>}
 

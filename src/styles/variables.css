@@ -23,7 +23,10 @@
   --surface-3: #1a3560;
   --fg: #f5f8ff;
   --muted: #a7b6d0;
-  --subtle: #6e7e9c;
+  /* Éclairci depuis #6e7e9c (contraste WCAG AA insuffisant, ~3.6-4.4:1
+     selon la surface — audit F8) : 4.5:1 minimum y compris sur le fond le
+     plus clair où ce texte apparaît (--surface-2). */
+  --subtle: #7d90b2;
   --border: rgba(255, 255, 255, 0.08);
   --border-2: rgba(255, 255, 255, 0.16);
 
@@ -157,7 +160,9 @@
   --surface-3: oklch(0.915 0.02 80);
   --fg: oklch(0.24 0.02 55);
   --muted: oklch(0.49 0.02 60);
-  --subtle: oklch(0.56 0.018 62);
+  /* Assombri depuis oklch(0.56 ...) : même raison qu'en sombre ci-dessus,
+     4.5:1 minimum sur --surface-2 (audit F8). */
+  --subtle: oklch(0.53 0.018 62);
   --border: oklch(0.9 0.014 80);
   --border-2: oklch(0.84 0.02 78);
 

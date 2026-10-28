@@ -6,6 +6,7 @@
 import { useEffect } from "react";
 import { logWarn } from "../logger.ts";
 import type { AuthStatus } from "../context/AuthContext.tsx";
+import { storageGet, storageSet } from "../../shared/lib/storage.ts";
 
 // Endpoint de l'abonnement push de cet appareil, posé par NotificationSettings
 // à l'activation des notifications.
@@ -19,9 +20,9 @@ export function usePushAccountLink(status: AuthStatus): void {
     if (status === "loading") {
       return;
     }
-    const endpoint = localStorage.getItem(PUSH_ENDPOINT_STORAGE_KEY);
+    const endpoint = storageGet(PUSH_ENDPOINT_STORAGE_KEY);
     const desired = status === "authenticated" ? "1" : "0";
-    if (!endpoint || localStorage.getItem(LINKED_STORAGE_KEY) === desired) {
+    if (!endpoint || storageGet(LINKED_STORAGE_KEY) === desired) {
       return;
     }
     fetch("/api/subscribe/account", {
@@ -31,7 +32,7 @@ export function usePushAccountLink(status: AuthStatus): void {
     })
       .then((res) => {
         if (res.ok) {
-          localStorage.setItem(LINKED_STORAGE_KEY, desired);
+          storageSet(LINKED_STORAGE_KEY, desired);
         }
       })
       .catch((err) => logWarn("Seancy : rattachement des notifications au compte échoué.", err));

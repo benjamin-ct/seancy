@@ -1,12 +1,31 @@
 # Seancy 🎬
 
+[![CI](https://github.com/benjamin-ct/seancy/actions/workflows/ci.yml/badge.svg)](https://github.com/benjamin-ct/seancy/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)
+![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+
 > En ligne sur **https://seancy.com** (previews de PR sur `<slug>.dev.seancy.com`).
->
-> Anciennement « Bobine ». L'ancienne URL `bobine.creusatbenjamin.workers.dev` redirige vers seancy.com (côté Worker pour les liens partagés, côté client pour les pages de l'app) ; ses appels `/api` restent servis pour les onglets encore ouverts. Les cookies `bobine_session` / `bobine_auth` et l'en-tête `x-bobine-client` sont encore acceptés pendant la transition (remplacés par `seancy_*` et `x-seancy-client`). Restent à renommer côté Cloudflare/GitHub : Worker `bobine`, base D1 `bobine-notifications`, dépôt GitHub `bobine`.
 
 Application pour découvrir des films et séries, savoir où les regarder en streaming (France), tirer un titre au hasard, et suivre ce que tu as déjà vu.
 
 Les données (catalogue, affiches, plateformes de streaming) viennent de [TMDB](https://www.themoviedb.org/) (The Movie Database), qui agrège aussi les disponibilités JustWatch.
+
+## Sommaire
+
+- [Stack technique](#stack-technique)
+- [Structure du projet](#structure-du-projet)
+- [Lancer le projet en local](#lancer-le-projet-en-local)
+- [Convention de fetch API](#convention-de-fetch-api)
+- [Style et CSS](#style-et-css)
+- [Comptes et synchronisation (optionnel)](#comptes-et-synchronisation-optionnel)
+- [Notifications push (optionnel)](#notifications-push-optionnel)
+- [Déploiement (Cloudflare Workers)](#déploiement-cloudflare-workers)
+- [Observabilité](#observabilité)
+- [Sécurité](#sécurité)
+- [Hooks Git locaux (Husky)](#hooks-git-locaux-husky)
+- [Fonctionnalités en stub](#fonctionnalités-en-stub)
+- [Fonctionnalités](#fonctionnalités)
+- [Licence](#licence)
 
 ## Stack technique
 
@@ -100,6 +119,15 @@ Système maison en CSS Modules : un `*.module.css` par composant, référencant 
 
 Se connecter (page **Connexion**) permet de retrouver sa liste "envie de voir" / "déjà vu" sur plusieurs navigateurs et appareils. Pas de mot de passe : un lien de connexion à usage unique est envoyé par email (valable 15 minutes), avec aussi un **code court** en alternative (ex. `AB2K9X`) à taper directement dans l'app — pensé pour les apps ajoutées à l'écran d'accueil (iOS surtout), où le lien s'ouvrirait dans le navigateur au lieu de l'app installée.
 
+### Connexion avec Google / Apple (optionnel)
+
+En plus du lien magique (toujours disponible), on peut se connecter avec Google ou Apple, et associer/dissocier ces comptes depuis **Profil → Compte → Moyens de connexion** (`worker/oauth.ts`, migration `0017`). Chaque bouton n'apparaît que si tous les secrets de son fournisseur sont définis (tous en **Secret**, même les identifiants publics, pour survivre aux déploiements). URL de retour à déclarer chez le fournisseur : `https://seancy.com/api/auth/oauth/callback/<google|apple>` (une par domaine ; les previews ne l'ont pas, d'où des boutons absents sans secrets dans **Previews Base**).
+
+- **Google** : Google Cloud Console → _APIs & Services → Credentials_ → _OAuth client ID_ de type **Web application**, avec l'URL de retour ci-dessus → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Écran de consentement : scopes `openid` et `email` seulement.
+- **Apple** (compte Apple Developer payant) : un _App ID_ avec « Sign in with Apple », un _Services ID_ (= `APPLE_CLIENT_ID`) avec le domaine `seancy.com` et l'URL de retour, une _Key_ « Sign in with Apple » (`.p8` → `APPLE_PRIVATE_KEY`, son identifiant → `APPLE_KEY_ID`), et le _Team ID_ du compte → `APPLE_TEAM_ID`.
+
+Une connexion Google / Apple ouvre le compte qui a déjà associé ce compte, sinon celui de même email vérifié (créé au besoin). Sur iPhone, depuis l'app installée sur l'écran d'accueil, la page du fournisseur peut s'ouvrir dans Safari : la session est alors ouverte dans Safari, pas dans l'app (même limite que le lien email ; le code par email reste la solution).
+
 ## Notifications push (optionnel)
 
 Le Worker gère les notifications push (nouveautés en streaming, sorties dans tes genres préférés, grosses tendances) via une tâche planifiée quotidienne et une base D1. Activées depuis **Profil** (bouton "Activer les notifications").
@@ -117,14 +145,16 @@ En parallèle, le job `apply-d1-migrations` de la CI GitHub Actions (`.github/wo
 
 **Avant le premier déploiement**, configure dans le dashboard Cloudflare (Worker `seancy` → **Settings → Variables and Secrets**, type **Secret** obligatoire — voir l'avertissement dans `wrangler.jsonc`). Un Worker qui n'a encore jamais été déployé a ses réglages grisés (« Aucune version ou aucun déploiement n'est associé à ce Worker ») : la CI lui en donne une automatiquement (étape « Bootstrap Worker seancy » du job de preview, `scripts/seancy-bootstrap-worker.ts` : réponse 503 fixe, sans URL workers.dev, domaine ni tâche planifiée), que le premier vrai déploiement remplacera en gardant les secrets. Le bouton **Edit code › Deploy** du dashboard reste grisé dans ce cas. Les previews ne reprennent rien de la prod : leurs variables et secrets se règlent à part, dans l'onglet **Previews Base** de ces mêmes réglages.
 
-| Nom                                    | Obligatoire        | Rôle                                                                                                                                                                                                                                                                                               |
-| -------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TMDB_API_KEY`                         | ✅                 | Proxy TMDB + tâche planifiée                                                                                                                                                                                                                                                                       |
-| `VAPID_PRIVATE_KEY`                    | Notifications push | `node -e "console.log(require('web-push').generateVAPIDKeys())"`                                                                                                                                                                                                                                   |
-| `DEBUG_TRIGGER_KEY`                    | optionnel          | À inventer toi-même (chaîne aléatoire, pas une clé fournie par un service externe) : sert de mot de passe partagé pour `/api/run-check`, `/api/test-notification`, `/api/test-error`, `/api/sync-search-index` — colle ensuite la même valeur dans le header `x-debug-key` de tes requêtes de test |
-| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Comptes            | Envoi des liens de connexion par email (sans elle : le lien est renvoyé dans la réponse API, pour tester sans boîte mail)                                                                                                                                                                          |
-| `RECAPTCHA_SECRET_KEY`                 | optionnel          | Anti-bot sur l'authentification                                                                                                                                                                                                                                                                    |
-| `SENTRY_DSN`                           | optionnel          | Suivi des erreurs (client + Worker), voir section Observabilité ci-dessous                                                                                                                                                                                                                         |
+| Nom                                                                        | Obligatoire        | Rôle                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TMDB_API_KEY`                                                             | ✅                 | Proxy TMDB + tâche planifiée                                                                                                                                                                                                                                                                       |
+| `VAPID_PRIVATE_KEY`                                                        | Notifications push | `node -e "console.log(require('web-push').generateVAPIDKeys())"`                                                                                                                                                                                                                                   |
+| `DEBUG_TRIGGER_KEY`                                                        | optionnel          | À inventer toi-même (chaîne aléatoire, pas une clé fournie par un service externe) : sert de mot de passe partagé pour `/api/run-check`, `/api/test-notification`, `/api/test-error`, `/api/sync-search-index` — colle ensuite la même valeur dans le header `x-debug-key` de tes requêtes de test |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL`                                     | Comptes            | Envoi des liens de connexion par email (sans elle : le lien est renvoyé dans la réponse API, pour tester sans boîte mail)                                                                                                                                                                          |
+| `RECAPTCHA_SECRET_KEY`                                                     | optionnel          | Anti-bot sur l'authentification                                                                                                                                                                                                                                                                    |
+| `SENTRY_DSN`                                                               | optionnel          | Suivi des erreurs (client + Worker), voir section Observabilité ci-dessous                                                                                                                                                                                                                         |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`                                | optionnel          | Bouton « Continuer avec Google », voir « Connexion avec Google / Apple » ci-dessus                                                                                                                                                                                                                 |
+| `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | optionnel          | Bouton « Continuer avec Apple », idem                                                                                                                                                                                                                                                              |
 
 Pour tester la configuration localement sans rien déployer : `npm run build && npx wrangler deploy --dry-run`.
 
@@ -133,6 +163,20 @@ Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.
 connecté plutôt qu'une base vide, rejoue aussi le seed de démo utilisé par les previews de PR (voir
 `scripts/fixtures/preview-seed.sql`) : `npx wrangler d1 execute seancy-notifications --local --file scripts/fixtures/preview-seed.sql`,
 puis pose le cookie `seancy_session=seancy-preview-demo` (voir le commentaire en tête du fichier).
+
+### Environnement `develop` (persistant)
+
+En plus de la prod (`main`) et des previews éphémères par PR (une base D1 chacune, détruite à la fermeture), un environnement persistant `develop` sert de bac à sable d'équipe : une base D1 unique **`seancy-develop`** (créée une fois, jamais supprimée) peuplée d'un jeu de données fictives "full" — trois comptes de démo avec bibliothèque, listes perso, partage de profil et abonnement entre eux (voir `scripts/fixtures/develop-seed.sql`).
+
+Déployé par le job `deploy-develop` de la CI (`.github/workflows/ci.yml`) à chaque push sur la branche `develop`, via un vrai `wrangler deploy` (ticket Trello "Rendre develop iso-prod") vers un Worker dédié **`seancy-develop`** — pas l'intégration Git Cloudflare Workers Builds, réservée à la vraie prod sur `main`, mais un déploiement réel avec les mêmes bindings natifs que la prod (`ai`, `ratelimits`, Durable Objects), contrairement à l'ancien mécanisme `wrangler preview --name develop` (même limite qu'une preview de PR). Le seed est rejoué de façon additive (`INSERT OR IGNORE`) à chaque push : les données de test modifiées à la main entre deux déploiements ne sont jamais écrasées, seules les nouvelles lignes de fixtures (suivant les migrations ajoutées) s'insèrent. Pour repartir d'une base vide : onglet **Actions** → workflow **Reset develop database** → **Run workflow** (`reset-develop-db.yml`, déclenché à la main uniquement, jamais automatique).
+
+**Étape manuelle unique à faire une fois** (hors CI, pas automatisable avec le token disponible) : configurer les secrets réels (`TMDB_API_KEY`, `VAPID_PRIVATE_KEY`, `RECAPTCHA_SECRET_KEY`...) sur le nouveau Worker `seancy-develop` (dashboard Cloudflare → Workers & Pages → seancy-develop → Settings → Variables and Secrets) — ils ne sont jamais hérités de la prod ni poussés par la CI. Tant que ce n'est pas fait, les fonctionnalités qui en dépendent restent en repli sur `develop`.
+
+**Étape manuelle unique** (pas encore faite, une seule fois nécessaire) : créer et pousser la branche `develop` depuis `main` (`git branch develop main && git push origin develop`) — c'est ce push initial qui déclenche la première exécution de `deploy-develop` et crée `seancy-develop`.
+
+Budget D1 (plan gratuit, 10 bases au total) : prod + `seancy-develop` comptent en permanence, donc au plus 8 previews de PR simultanées sur le reste du quota (voir `scripts/preview-d1.ts`).
+
+Tant que les branches `feature/*` ciblent encore `main` (le pipeline Trello → Claude n'a pas encore été adapté au git flow `main`/`develop`/`feature`/`hotfix` décidé sur le ticket Trello "Avenir du développement"), cet environnement reste à jour uniquement via des merges manuels dans `develop`.
 
 ## Observabilité
 
@@ -169,6 +213,7 @@ puis pose le cookie `seancy_session=seancy-preview-demo` (voir le commentaire en
 
 - **Isolation entre comptes** : `PUT`/`GET /api/library` déterminent toujours le compte à partir du cookie de session (jointure `sessions` ↔ `users` en base), jamais d'un identifiant fourni par le client. Voir le commentaire au-dessus de `handleGetLibrary`/`handlePutLibrary` dans `worker/index.ts`.
 - **Rate-limiting, validation de schéma, en-têtes HTTP, proxy TMDB** : voir `worker/rate-limit.ts`, `worker/validate.ts`, `public/_headers`.
+- **Scan de secrets** : [gitleaks](https://github.com/gitleaks/gitleaks) tourne sur chaque PR (`.github/workflows/ci.yml`, job `secrets-scan`). Les quelques faux positifs connus (clé "site" reCAPTCHA, publique par conception ; clés `localStorage` type `seancy.*` ; valeurs d'exemple du README) sont documentés et exclus dans `.gitleaks.toml`.
 - Détail complet des mécanismes vérifiés après la migration TypeScript : voir le debrief de migration (fourni séparément, pas commité dans ce README pour rester concis).
 
 ## Hooks Git locaux (Husky)
@@ -195,3 +240,8 @@ Tout le reste (saga/collection, statistiques et collaborateur·rices fréquent·
 - **Ma liste** : Déjà vu (statistiques visuelles : répartition films/séries, temps de visionnage, genres préférés, vus par année), Envie de voir (tri + réordonnancement manuel par glisser-déposer), En cours (séries entamées), listes personnalisées.
 - **Profil** : compte, notifications push, plateformes favorites, genres exclus, titres exclus.
 - **PWA installable**, thème clair/sombre, comptes optionnels avec synchronisation multi-appareils.
+
+## Licence
+
+Code source propriétaire — voir [`LICENSE`](./LICENSE). Le dépôt est public à des fins de
+transparence uniquement ; cela n'accorde aucun droit de réutilisation, copie ou distribution.

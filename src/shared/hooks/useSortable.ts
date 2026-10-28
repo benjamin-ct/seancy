@@ -153,14 +153,18 @@ export function useSortable({ keys, enabled, onReorder }: UseSortableOptions) {
   useLayoutEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const held = session.current?.active ? session.current.key : null;
-    const moved: HTMLElement[] = [];
-    for (const [key, el] of elements.current) {
-      if (key === held) {
-        continue;
-      }
-      const previous = lastRects.current.get(key);
+    const items = [...elements.current].filter(([key]) => key !== held);
+    // Écritures, lectures puis écritures en trois passes séparées : les
+    // alterner élément par élément forçait un recalcul de mise en page par
+    // carte à chaque changement de place pendant le glisser. Un transform ne
+    // déplace pas les autres cartes, les positions lues sont donc les mêmes.
+    for (const [, el] of items) {
       el.style.transition = "none";
       el.style.transform = "";
+    }
+    const offsets: [HTMLElement, number, number][] = [];
+    for (const [key, el] of items) {
+      const previous = lastRects.current.get(key);
       const rect = el.getBoundingClientRect();
       const current = pagePoint(rect.left, rect.top);
       lastRects.current.set(key, current);
@@ -170,9 +174,13 @@ export function useSortable({ keys, enabled, onReorder }: UseSortableOptions) {
       const dx = previous.x - current.x;
       const dy = previous.y - current.y;
       if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-        el.style.transform = `translate(${dx}px, ${dy}px)`;
-        moved.push(el);
+        offsets.push([el, dx, dy]);
       }
+    }
+    const moved: HTMLElement[] = [];
+    for (const [el, dx, dy] of offsets) {
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      moved.push(el);
     }
     if (moved.length > 0) {
       // Force le calcul de la position de départ avant de lancer la transition.

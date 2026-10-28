@@ -23,9 +23,7 @@ export { default as NavBar } from "./NavBar/NavBar.tsx";
 export { default as Footer } from "./Footer/Footer.tsx";
 export { default as TicketLogo } from "./TicketLogo/TicketLogo.tsx";
 export { default as LegalLinks } from "./LegalLinks/LegalLinks.tsx";
-export { default as FilterBar } from "./FilterBar/FilterBar.tsx";
 export {
-  default as AdvancedFilters,
   EMPTY_ADVANCED_FILTERS,
   getAdvancedFiltersRangeError,
 } from "./AdvancedFilters/AdvancedFilters.tsx";
@@ -45,3 +43,4 @@ export { default as FollowStats } from "./FollowStats/FollowStats.tsx";
 export { default as ProfileList } from "./ProfileList/ProfileList.tsx";
 export { default as ListCover } from "./ListCover/ListCover.tsx";
 export { default as ReadOnlyBanner } from "./ReadOnlyBanner/ReadOnlyBanner.tsx";
+export { default as AccountAvatar } from "./AccountAvatar/AccountAvatar.tsx";

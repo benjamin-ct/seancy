@@ -18,6 +18,13 @@
   // prochain déploiement (même mécanisme que "vars" ci-dessous — voir
   // README section Observabilité pour le reste : Sentry, Analytics Engine,
   // Web Analytics, health check).
+  //
+  // Traces échantillonnées à 10 % : chaque requête produit ~4 spans
+  // (fetch TMDB, cache_match, cache_put, D1), soit ~80 % des événements
+  // d'observabilité du compte. À 100 %, le passage d'Applebot (~85 000
+  // requêtes/jour) a épuisé le quota gratuit de 200 000 événements/jour
+  // partagé par tous les Workers du compte (ingestion coupée jusqu'à
+  // minuit UTC). Les logs restent à 100 % pour ne perdre aucune erreur.
   "observability": {
     "logs": {
       "enabled": true,
@@ -27,7 +34,7 @@
     },
     "traces": {
       "enabled": true,
-      "head_sampling_rate": 1,
+      "head_sampling_rate": 0.1,
       "persist": true
     }
   },
@@ -57,6 +64,39 @@
       "binding": "DB",
       "database_name": "seancy-notifications",
       "database_id": "3403301e-2ef9-4f70-9f2e-e10d577beda0"
+    }
+  ],
+  // Workers AI : suggestions « Pour vous ce soir » (voir
+  // worker/ai-suggestions.ts, modèle fixé par AI_SUGGESTIONS_MODEL). Plan
+  // gratuit pour démarrer : ~10 000 neurones/jour partagés par tout le compte,
+  // remis à zéro à 00:00 UTC ; au-delà, repli sur l'algo non-IA.
+  "ai": { "binding": "AI" },
+  // Binding natif « Rate Limiting » de Workers (audit F4) : compteur partagé
+  // entre isolats/colos, sans écriture D1 — contrairement à
+  // `checkRateLimitInMemory` (worker/rate-limit-memory.ts), qui compte par
+  // isolat et qu'un balayage distribué peut donc contourner. Limité ici aux
+  // routes visées par le ticket (slugs publics + avatar) : le binding natif
+  // n'accepte qu'une période fixe de 10 ou 60 s et un coût de 1 par appel,
+  // ce qui ne couvre pas les autres usages de rate-limit-memory.ts (fenêtre
+  // de 5 min pour /api/theatrical-index, coût variable pour l'enrichissement
+  // TMDB) — ceux-là restent en mémoire. `namespace_id` est un identifiant
+  // arbitraire propre à ce Worker (pas une ressource à créer côté
+  // dashboard, contrairement à d1_databases ci-dessus).
+  "ratelimits": [
+    {
+      "name": "PUBLIC_SLUG_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "AVATAR_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "LIBRARY_WRITE_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 60, "period": 60 }
     }
   ],
   // Synchro temps réel multi-appareils (voir worker/sync.ts) : un Durable

@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,8 +13,19 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "./AuthContext.tsx";
 import { useMembersOnly } from "./MembersOnlyContext.tsx";
 import { getDetails } from "../api/tmdb.ts";
-import { logError, logWarn } from "../logger.ts";
+import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncEvent } from "../sync/liveSync.ts";
+import {
+  LIBRARY_STORAGE_KEY,
+  loadInitialLibraryState,
+  setLibrarySnapshot,
+} from "./libraryStore.ts";
+import {
+  storageGet,
+  storageGetJSON,
+  storageSet,
+  storageSetJSON,
+} from "../../shared/lib/storage.ts";
 import type {
   CustomList,
   CustomListMap,
@@ -26,7 +38,6 @@ import type {
 } from "../types/library.ts";
 import type { MediaType } from "../types/tmdb.ts";
 
-const STORAGE_KEY = "seancy.library.v1";
 // Mémorise, par email, si on a déjà fait la fusion initiale local ↔ serveur
 // sur CET appareil (voir l'effet de synchronisation plus bas).
 const SYNCED_FOR_KEY = "seancy.library.syncedFor";
@@ -117,29 +128,19 @@ interface LibraryContextValue {
   reorderList: (listId: string, fromKey: string, toKey: string, insertAfter: boolean) => void;
 }
 
-const LibraryContext = createContext<LibraryContextValue | null>(null);
-
-function loadInitialState(): LibraryState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { watched: {}, watchlist: {} };
-    }
-    const parsed = JSON.parse(raw);
-    return {
-      watched: parsed.watched || {},
-      watchlist: parsed.watchlist || {},
-    };
-  } catch (err) {
-    // Le contenu stocké n'est pas du JSON valide (écriture interrompue,
-    // corruption...). On repart sur une bibliothèque vide MAIS on se garde
-    // bien d'écraser tout de suite localStorage avec cet état vide (voir
-    // l'effet ci-dessous) : si les vraies données sont encore là sous une
-    // forme récupérable, mieux vaut ne pas les perdre définitivement.
-    logWarn("Seancy : lecture de la bibliothèque locale impossible, on repart à vide.", err);
-    return { watched: {}, watchlist: {} };
-  }
+// Actions des cartes (MediaCard, rangées de listes) séparées du reste :
+// leur valeur ne dépend pas de l'état de la bibliothèque, donc une carte
+// qui ne lit que ça (plus les sélecteurs fins de useLibrarySelectors.ts)
+// ne se re-rend plus à chaque action sur la bibliothèque — useLibrary(),
+// recalculé à chaque changement d'état, re-rendait toute la grille.
+interface LibraryActionsContextValue {
+  toggleWatched: LibraryContextValue["toggleWatched"];
+  toggleWatchlist: LibraryContextValue["toggleWatchlist"];
 }
+
+const LibraryActionsContext = createContext<LibraryActionsContextValue | null>(null);
+
+const LibraryContext = createContext<LibraryContextValue | null>(null);
 
 function makeKey(mediaType: MediaType, id: number | string): string {
   return `${mediaType}:${id}`;
@@ -160,7 +161,7 @@ interface LegacyCustomListShape {
 
 function loadInitialCustomLists(): CustomListMap {
   try {
-    const raw = localStorage.getItem(CUSTOM_LISTS_STORAGE_KEY);
+    const raw = storageGet(CUSTOM_LISTS_STORAGE_KEY);
     if (!raw) {
       return {};
     }
@@ -190,13 +191,8 @@ function loadInitialCustomLists(): CustomListMap {
 }
 
 function loadInitialWatchlistOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(WATCHLIST_ORDER_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
-  } catch {
-    return [];
-  }
+  const parsed = storageGetJSON<unknown>(WATCHLIST_ORDER_STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
 }
 
 function makeListId(): string {
@@ -265,7 +261,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { status: authStatus, email } = useAuth();
   const { requireMember } = useMembersOnly();
-  const [state, setState] = useState<LibraryState>(loadInitialState);
+  const [state, setState] = useState<LibraryState>(loadInitialLibraryState);
   // Évite d'écraser le localStorage dès le premier rendu : on ne persiste
   // qu'à partir du moment où l'état change réellement suite à une action de
   // l'utilisateur (toggle, import...).
@@ -279,10 +275,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const pendingOpsRef = useRef(new Map<string, PendingOp>());
   const [customLists, setCustomLists] = useState<CustomListMap>(loadInitialCustomLists);
   const isFirstCustomListsRender = useRef(true);
-  // Dernier JSON de `customLists` connu comme synchronisé avec le serveur
-  // (reçu du pull, ou déjà envoyé par le push) — voir les deux effets de
-  // synchronisation plus bas. `null` tant qu'aucune synchro n'a eu lieu.
-  const lastSyncedCustomListsJsonRef = useRef<string | null>(null);
+  // File des listes perso pas encore envoyées au serveur depuis le dernier
+  // envoi (audit M4, « synchro incrémentale ») : clé = listId, valeur = objet
+  // {action} dédié (pas juste la chaîne "upsert"/"delete") pour que l'effet
+  // de push ci-dessous puisse détecter par égalité de référence qu'une liste
+  // a été modifiée À NOUVEAU pendant qu'un envoi de son état précédent était
+  // en vol, et ne pas effacer cette marque plus récente — même principe que
+  // `pendingOpsRef` pour la bibliothèque. Avant l'audit M4, chaque changement
+  // renvoyait TOUTES les listes du compte (voir l'historique git) ; chaque
+  // liste n'envoie désormais que son propre état.
+  const pendingCustomListOpsRef = useRef(new Map<string, { action: "upsert" | "delete" }>());
+  const markCustomListDirty = useCallback((listId: string, action: "upsert" | "delete") => {
+    pendingCustomListOpsRef.current.set(listId, { action });
+  }, []);
   // Tant que le pull initial (fusion) n'est pas allé à son terme, l'effet de
   // push ci-dessous reste inactif : sans ça, il pourrait renvoyer au serveur
   // l'état LOCAL seul (pas encore fusionné avec le serveur) pendant la
@@ -297,11 +302,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder la bibliothèque locale.", err);
-    }
+    storageSetJSON(LIBRARY_STORAGE_KEY, state);
+  }, [state]);
+
+  // Reflète `state` dans le store externe (voir libraryStore.ts) pour les
+  // sélecteurs fins (useIsWatched...), en layout effect pour rester
+  // synchrone avant peinture — un effet passif classique laisserait un
+  // MediaCard afficher brièvement l'ancien statut après un clic.
+  useLayoutEffect(() => {
+    setLibrarySnapshot(state);
   }, [state]);
 
   useEffect(() => {
@@ -309,11 +318,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstCustomListsRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(CUSTOM_LISTS_STORAGE_KEY, JSON.stringify(customLists));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder les listes personnalisées.", err);
-    }
+    storageSetJSON(CUSTOM_LISTS_STORAGE_KEY, customLists);
   }, [customLists]);
 
   useEffect(() => {
@@ -321,11 +326,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isFirstWatchlistOrderRender.current = false;
       return;
     }
-    try {
-      localStorage.setItem(WATCHLIST_ORDER_STORAGE_KEY, JSON.stringify(watchlistOrder));
-    } catch (err) {
-      logError("Seancy : impossible de sauvegarder l'ordre de la liste d'envies.", err);
-    }
+    storageSetJSON(WATCHLIST_ORDER_STORAGE_KEY, watchlistOrder);
   }, [watchlistOrder]);
 
   // Migration one-shot des listes perso créées avant la correction du bug
@@ -399,6 +400,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             [legacy.id]: { ...rest, items: [...current.items, ...recovered] },
           };
         });
+        markCustomListDirty(legacy.id, "upsert");
       }
     })();
 
@@ -431,7 +433,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         if (cancelled) {
           return;
         }
-        const alreadySyncedFor = localStorage.getItem(SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
           setState({ watched: remote.watched || {}, watchlist: remote.watchlist || {} });
           pendingOpsRef.current.clear();
@@ -444,7 +446,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         };
         setState(merged);
         pendingOpsRef.current.clear(); // le PUT complet ci-dessous couvre déjà tout `merged`
-        localStorage.setItem(SYNCED_FOR_KEY, email);
+        storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/library", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },
@@ -540,21 +542,18 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         if (cancelled) {
           return;
         }
-        const alreadySyncedFor = localStorage.getItem(CUSTOM_LISTS_SYNCED_FOR_KEY);
+        const alreadySyncedFor = storageGet(CUSTOM_LISTS_SYNCED_FOR_KEY);
         if (alreadySyncedFor === email) {
-          // Le serveur fait autorité : on remplace l'état local. Mémorisé
-          // AVANT setCustomLists pour que l'effet de push ci-dessous (qui
-          // watche `customLists`) reconnaisse cette valeur comme déjà à jour
-          // côté serveur et ne la lui renvoie pas aussitôt.
-          lastSyncedCustomListsJsonRef.current = JSON.stringify(remote || {});
+          // Le serveur fait autorité : on remplace l'état local. Aucune
+          // liste n'est "sale" après ça : rien à renvoyer, on vient de le
+          // recevoir.
           setCustomLists(remote || {});
           return null;
         }
         // Première synchro sur cet appareil pour ce compte : fusion.
         const merged = mergeCustomLists(customLists, remote || {});
-        lastSyncedCustomListsJsonRef.current = JSON.stringify(merged);
         setCustomLists(merged);
-        localStorage.setItem(CUSTOM_LISTS_SYNCED_FOR_KEY, email);
+        storageSet(CUSTOM_LISTS_SYNCED_FOR_KEY, email);
         return fetch("/api/custom-lists", {
           method: "PUT",
           headers: { "content-type": "application/json", ...syncClientHeaders() },
@@ -578,37 +577,52 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus, email]);
 
-  // Envoie l'état complet des listes perso au serveur à chaque changement,
-  // avec anti-rebond (voir l'effet équivalent pour `state` ci-dessus). Pas de
-  // synchronisation incrémentale ici : une liste perso change par opérations
-  // multi-lignes (création, renommage, glisser-déposer) qu'un diff
-  // compliquerait pour un gain nul à l'échelle de cette app. Comparé à
-  // `lastSyncedCustomListsJsonRef` (plutôt qu'à un simple booléen "en cours
-  // de sync") pour éviter de renvoyer inutilement au serveur ce qu'il vient
-  // de nous envoyer, quel que soit l'ordre exact de résolution des promesses.
+  // Envoie au serveur uniquement les listes perso modifiées depuis le
+  // dernier envoi (audit M4, voir pendingCustomListOpsRef), avec le même
+  // anti-rebond que l'effet équivalent pour `state` ci-dessus — pour
+  // regrouper les modifications rapprochées (ex. plusieurs glisser-déposer
+  // de suite) en un seul envoi par liste plutôt qu'un par étape.
   useEffect(() => {
     if (authStatus !== "authenticated" || !customListsSyncSettledRef.current) {
       return;
     }
-    const serialized = JSON.stringify(customLists);
-    if (serialized === lastSyncedCustomListsJsonRef.current) {
+    if (pendingCustomListOpsRef.current.size === 0) {
       return;
     }
     const timeoutId = setTimeout(() => {
-      fetch("/api/custom-lists", {
-        method: "PUT",
-        headers: { "content-type": "application/json", ...syncClientHeaders() },
-        body: serialized,
-      })
-        .then(() => {
-          lastSyncedCustomListsJsonRef.current = serialized;
-        })
-        .catch((err) =>
-          logWarn(
-            "Seancy : synchronisation des listes personnalisées impossible, nouvelle tentative au prochain changement.",
-            err
-          )
-        );
+      const opsSnapshot = new Map(pendingCustomListOpsRef.current);
+      const requests = Array.from(opsSnapshot, ([listId, op]) => {
+        const request =
+          op.action === "delete"
+            ? fetch(`/api/custom-lists/${encodeURIComponent(listId)}`, {
+                method: "DELETE",
+                headers: syncClientHeaders(),
+              })
+            : fetch(`/api/custom-lists/${encodeURIComponent(listId)}`, {
+                method: "PUT",
+                headers: { "content-type": "application/json", ...syncClientHeaders() },
+                // Lu au moment de l'envoi (pas au moment du toggle) : si la
+                // liste a encore changé depuis la mise en file, c'est bien
+                // sa dernière version qui part.
+                body: JSON.stringify(customLists[listId] || { name: "", items: [] }),
+              });
+        return request
+          .then(() => {
+            // Ne retire que si cette liste n'a pas été modifiée À NOUVEAU
+            // depuis la prise de cette snapshot (même garde que
+            // pendingOpsRef pour la bibliothèque, voir plus haut).
+            if (pendingCustomListOpsRef.current.get(listId) === op) {
+              pendingCustomListOpsRef.current.delete(listId);
+            }
+          })
+          .catch((err) =>
+            logWarn(
+              `Seancy : synchronisation de la liste perso "${listId}" impossible, nouvelle tentative au prochain changement.`,
+              err
+            )
+          );
+      });
+      void Promise.all(requests);
     }, SYNC_DEBOUNCE_MS);
     return () => clearTimeout(timeoutId);
   }, [customLists, authStatus]);
@@ -645,7 +659,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   useLiveSyncEvent("library", (event) => {
     // Tant que la fusion initiale de cet appareil n'a pas eu lieu, le pull
     // d'authentification ci-dessus s'en charge déjà.
-    if (!email || localStorage.getItem(SYNCED_FOR_KEY) !== email || syncingRef.current) {
+    if (!email || storageGet(SYNCED_FOR_KEY) !== email || syncingRef.current) {
       return;
     }
     const delta = event?.payload as RemoteLibraryDelta | undefined;
@@ -683,26 +697,21 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       .catch((err) => logWarn("Seancy : actualisation de la bibliothèque impossible.", err));
   });
 
-  // Listes perso : pas de delta (remplacement complet côté serveur), on
-  // recharge uniquement les listes — sauf changement local pas encore
-  // envoyé, qui partira au prochain push et fera foi (dernier écrit gagne,
+  // Listes perso : pas de delta (chaque liste est remplacée en entier côté
+  // serveur, voir upsertCustomListForUser), on recharge toutes les listes —
+  // sauf changement local pas encore envoyé (pendingCustomListOpsRef non
+  // vide), qui partira au prochain push et fera foi (dernier écrit gagne,
   // comme avant la synchro temps réel).
-  const customListsRef = useRef(customLists);
-  customListsRef.current = customLists;
   useLiveSyncEvent("custom-lists", () => {
-    if (
-      !customListsSyncSettledRef.current ||
-      JSON.stringify(customListsRef.current) !== lastSyncedCustomListsJsonRef.current
-    ) {
+    if (!customListsSyncSettledRef.current || pendingCustomListOpsRef.current.size > 0) {
       return;
     }
     fetch("/api/custom-lists")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("refresh failed"))))
       .then((remote: CustomListMap) => {
-        if (JSON.stringify(customListsRef.current) !== lastSyncedCustomListsJsonRef.current) {
+        if (pendingCustomListOpsRef.current.size > 0) {
           return; // modifié localement pendant la requête : le local l'emporte
         }
-        lastSyncedCustomListsJsonRef.current = JSON.stringify(remote || {});
         setCustomLists(remote || {});
       })
       .catch((err) => logWarn("Seancy : actualisation des listes personnalisées impossible.", err));
@@ -1044,58 +1053,74 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   // Listes personnalisées ------------------------------------------------
 
-  const createList = useCallback((name: string): string | null => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return null;
-    }
-    const id = makeListId();
-    setCustomLists((prev) => ({
-      ...prev,
-      [id]: { id, name: trimmed, items: [], createdAt: Date.now() },
-    }));
-    return id;
-  }, []);
-
-  const renameList = useCallback((listId: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
-    setCustomLists((prev) =>
-      prev[listId] ? { ...prev, [listId]: { ...prev[listId], name: trimmed } } : prev
-    );
-  }, []);
-
-  const deleteList = useCallback((listId: string) => {
-    setCustomLists((prev) => {
-      if (!prev[listId]) {
-        return prev;
+  const createList = useCallback(
+    (name: string): string | null => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return null;
       }
-      const next = { ...prev };
-      delete next[listId];
-      return next;
-    });
-  }, []);
+      const id = makeListId();
+      setCustomLists((prev) => ({
+        ...prev,
+        [id]: { id, name: trimmed, items: [], createdAt: Date.now() },
+      }));
+      markCustomListDirty(id, "upsert");
+      return id;
+    },
+    [markCustomListDirty]
+  );
+
+  const renameList = useCallback(
+    (listId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return;
+      }
+      setCustomLists((prev) =>
+        prev[listId] ? { ...prev, [listId]: { ...prev[listId], name: trimmed } } : prev
+      );
+      markCustomListDirty(listId, "upsert");
+    },
+    [markCustomListDirty]
+  );
+
+  const deleteList = useCallback(
+    (listId: string) => {
+      setCustomLists((prev) => {
+        if (!prev[listId]) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[listId];
+        return next;
+      });
+      markCustomListDirty(listId, "delete");
+    },
+    [markCustomListDirty]
+  );
 
   // Stocke l'item complet directement dans la liste perso (pas juste sa
   // clé) : contrairement à "vu"/"envie de voir", une liste perso doit rester
   // utilisable pour un titre qui n'est dans aucune des deux (cf. bug #32 —
   // "Ajouter à…" n'implique ni "vu" ni "envie de voir").
-  const addToList = useCallback((listId: string, item: LibraryItemInput) => {
-    const key = makeKey(item.mediaType, item.id);
-    setCustomLists((prev) => {
-      const list = prev[listId];
-      if (
-        !list ||
-        list.items.some((existing) => makeKey(existing.mediaType, existing.id) === key)
-      ) {
-        return prev;
-      }
-      const newItem: LibraryItem = { ...item, addedAt: Date.now(), updatedAt: Date.now() };
-      return { ...prev, [listId]: { ...list, items: [...list.items, newItem] } };
-    });
-  }, []);
+  const addToList = useCallback(
+    (listId: string, item: LibraryItemInput) => {
+      const key = makeKey(item.mediaType, item.id);
+      setCustomLists((prev) => {
+        const list = prev[listId];
+        if (
+          !list ||
+          list.items.some((existing) => makeKey(existing.mediaType, existing.id) === key)
+        ) {
+          return prev;
+        }
+        const newItem: LibraryItem = { ...item, addedAt: Date.now(), updatedAt: Date.now() };
+        return { ...prev, [listId]: { ...list, items: [...list.items, newItem] } };
+      });
+      markCustomListDirty(listId, "upsert");
+    },
+    [markCustomListDirty]
+  );
 
   const removeFromList = useCallback(
     (listId: string, mediaType: MediaType, id: number | string) => {
@@ -1113,8 +1138,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           },
         };
       });
+      markCustomListDirty(listId, "upsert");
     },
-    []
+    [markCustomListDirty]
   );
 
   const isInList = useCallback(
@@ -1161,8 +1187,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         nextItems.splice(insertAt, 0, list.items[fromIndex]);
         return { ...prev, [listId]: { ...list, items: nextItems } };
       });
+      markCustomListDirty(listId, "upsert");
     },
-    []
+    [markCustomListDirty]
   );
 
   const customListsArray = useMemo(
@@ -1187,22 +1214,34 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     });
   }, [state.watchlist, watchlistOrder]);
 
+  // Toute action utilisateur qui écrit dans la bibliothèque est réservée
+  // aux membres connectés : pour un visiteur anonyme, elle ouvre la modale
+  // de connexion au lieu de s'exécuter (voir MembersOnlyContext). Gardé ici
+  // plutôt qu'à chaque bouton pour ne jamais oublier un point d'entrée.
+  // setRuntime/setDirectors restent libres : ce sont des compléments de
+  // métadonnées déclenchés automatiquement, pas des actions de l'utilisateur.
+  const gated = useCallback(
+    <A extends unknown[], R>(fn: (...args: A) => R, blocked: R) =>
+      (...args: A): R =>
+        requireMember() ? fn(...args) : blocked,
+    [requireMember]
+  );
+
+  const actions = useMemo<LibraryActionsContextValue>(
+    () => ({
+      toggleWatched: gated(toggleWatched, undefined),
+      toggleWatchlist: gated(toggleWatchlist, undefined),
+    }),
+    [gated, toggleWatched, toggleWatchlist]
+  );
+
   const value = useMemo<LibraryContextValue>(() => {
-    // Toute action utilisateur qui écrit dans la bibliothèque est réservée
-    // aux membres connectés : pour un visiteur anonyme, elle ouvre la modale
-    // de connexion au lieu de s'exécuter (voir MembersOnlyContext). Gardé ici
-    // plutôt qu'à chaque bouton pour ne jamais oublier un point d'entrée.
-    // setRuntime/setDirectors restent libres : ce sont des compléments de
-    // métadonnées déclenchés automatiquement, pas des actions de l'utilisateur.
-    function gated<A extends unknown[], R>(fn: (...args: A) => R, blocked: R) {
-      return (...args: A): R => (requireMember() ? fn(...args) : blocked);
-    }
     return {
       watched: Object.values(state.watched).sort((a, b) => b.addedAt - a.addedAt),
       watchlist: orderedWatchlist,
       watchedIds: new Set(Object.keys(state.watched)),
-      toggleWatched: gated(toggleWatched, undefined),
-      toggleWatchlist: gated(toggleWatchlist, undefined),
+      toggleWatched: actions.toggleWatched,
+      toggleWatchlist: actions.toggleWatchlist,
       isWatched,
       isInWatchlist,
       getRating,
@@ -1226,11 +1265,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       reorderList: gated(reorderList, undefined),
     };
   }, [
-    requireMember,
+    gated,
+    actions,
     state,
     orderedWatchlist,
-    toggleWatched,
-    toggleWatchlist,
     isWatched,
     isInWatchlist,
     getRating,
@@ -1254,7 +1292,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     reorderList,
   ]);
 
-  return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
+  return (
+    <LibraryActionsContext.Provider value={actions}>
+      <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
+    </LibraryActionsContext.Provider>
+  );
+}
+
+export function useLibraryActions(): LibraryActionsContextValue {
+  const ctx = useContext(LibraryActionsContext);
+  if (!ctx) {
+    throw new Error("useLibraryActions doit être utilisé dans un LibraryProvider");
+  }
+  return ctx;
 }
 
 export function useLibrary(): LibraryContextValue {

@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../core/context/AuthContext.tsx";
-import { gravatarUrl } from "../../../shared/lib/gravatar.ts";
 import {
   loadAvatarSource,
   renderAvatarImage,
   type AvatarCrop,
 } from "../../../shared/lib/avatarImage.ts";
-import { Icon } from "../../../shared/components/index.ts";
+import { AccountAvatar, Icon } from "../../../shared/components/index.ts";
 import AvatarCropDialog from "./AvatarCropDialog.tsx";
 import EmailChangeForm from "./EmailChangeForm.tsx";
+import SignInMethods from "./SignInMethods.tsx";
 import { SettingsGroup, SettingsRow } from "./SettingsGroup.tsx";
+// Export et suppression de compte vivent désormais dans la page Réglages ›
+// Mes données (src/modules/settings/pages/DataPage.tsx), pas ici.
 import styles from "./AccountSettings.module.css";
 
 // Même règle que normalizeUsername côté Worker (worker/share-slug.ts) : on
@@ -23,51 +25,6 @@ function normalizeUsername(value: string): string {
 }
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid" | "error";
-
-/** Initiale affichée dans l'avatar quand il n'y a aucune photo. */
-function initial(name: string, fallback: string): string {
-  return (name.trim() || fallback).charAt(0).toUpperCase() || "?";
-}
-
-/**
- * Avatar du compte : photo personnelle si elle existe, sinon photo Gravatar,
- * sinon l'initiale. Chaque image qui ne se charge pas (404 Gravatar, photo
- * supprimée depuis un autre appareil) laisse la place à la suivante.
- */
-export function AccountAvatar({ name, className }: { name: string; className: string }) {
-  const { email, avatarVersion } = useAuth();
-  const sources = useMemo(
-    () =>
-      [
-        avatarVersion !== null ? `/api/account/avatar?v=${avatarVersion}` : null,
-        email ? gravatarUrl(email) : null,
-      ].filter((url): url is string => url !== null),
-    [email, avatarVersion]
-  );
-  const [failedCount, setFailedCount] = useState(0);
-  // Repart de la première source quand elles changent (nouvelle photo,
-  // connexion avec un autre compte), sinon un précédent échec resterait
-  // collé.
-  useEffect(() => {
-    setFailedCount(0);
-  }, [sources]);
-  const url = sources[failedCount];
-  return (
-    <div className={className} aria-hidden="true">
-      {url ? (
-        <img
-          key={url}
-          className={styles.avatarImg}
-          src={url}
-          alt=""
-          onError={() => setFailedCount((n) => n + 1)}
-        />
-      ) : (
-        initial(name, email || "?")
-      )}
-    </div>
-  );
-}
 
 // Choix / suppression de la photo personnelle, sous l'aperçu de l'identité.
 // La photo choisie s'ouvre d'abord dans la modale de recadrage, puis est
@@ -178,7 +135,6 @@ export default function AccountSettings() {
     checkUsername,
     logout,
     logoutAll,
-    deleteAccount,
   } = useAuth();
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
@@ -191,10 +147,6 @@ export default function AccountSettings() {
   const [confirmingLogoutAll, setConfirmingLogoutAll] = useState(false);
   const [loggingOutAll, setLoggingOutAll] = useState(false);
   const [logoutAllError, setLogoutAllError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
-  const [deletingAccount, setDeletingAccount] = useState(false);
-  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
 
   async function onLogoutAll() {
     setLoggingOutAll(true);
@@ -204,25 +156,6 @@ export default function AccountSettings() {
     } catch (err) {
       setLogoutAllError(err instanceof Error ? err.message : t("accountCard.logoutAllError"));
       setLoggingOutAll(false);
-    }
-  }
-
-  const deleteConfirmMatches =
-    deleteConfirmInput.trim().toLowerCase() === (email ?? "").trim().toLowerCase();
-
-  async function onDeleteAccount() {
-    if (!deleteConfirmMatches) {
-      return;
-    }
-    setDeletingAccount(true);
-    setDeleteAccountError(null);
-    try {
-      await deleteAccount();
-    } catch (err) {
-      setDeleteAccountError(
-        err instanceof Error ? err.message : t("accountCard.deleteAccountError")
-      );
-      setDeletingAccount(false);
     }
   }
 
@@ -452,6 +385,8 @@ export default function AccountSettings() {
         {emailChanged && <p className={styles.okHint}>{t("accountCard.emailChange.done")}</p>}
       </SettingsRow>
 
+      <SignInMethods />
+
       <SettingsRow label={t("accountCard.session")} description={t("accountCard.sessionHint")}>
         <button type="button" className={styles.secondaryBtn} onClick={logout}>
           {t("accountCard.logout")}
@@ -494,71 +429,6 @@ export default function AccountSettings() {
           </button>
         )}
         {logoutAllError && <p className={styles.errorHint}>{logoutAllError}</p>}
-      </SettingsRow>
-
-      <SettingsRow
-        label={t("accountCard.exportData")}
-        description={t("accountCard.exportDataHint")}
-      >
-        <a className={styles.secondaryBtn} href="/api/account/export" download="seancy-export.json">
-          {t("accountCard.exportDataButton")}
-        </a>
-      </SettingsRow>
-
-      <SettingsRow
-        label={t("accountCard.deleteAccount")}
-        description={t("accountCard.deleteAccountHint")}
-      >
-        {confirmingDelete ? (
-          <div className={styles.confirm} role="alertdialog">
-            <p>{t("accountCard.deleteAccountConfirmTitle")}</p>
-            <p>{t("accountCard.deleteAccountConfirmText", { email })}</p>
-            <input
-              type="text"
-              value={deleteConfirmInput}
-              onChange={(e) => setDeleteConfirmInput(e.target.value)}
-              placeholder={t("accountCard.deleteAccountConfirmPlaceholder")}
-              aria-label={t("accountCard.deleteAccountConfirmPlaceholder")}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              disabled={deletingAccount}
-            />
-            {deleteAccountError && <p className={styles.errorHint}>{deleteAccountError}</p>}
-            <div className={styles.inline}>
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                onClick={onDeleteAccount}
-                disabled={!deleteConfirmMatches || deletingAccount}
-              >
-                {deletingAccount
-                  ? t("accountCard.deleting")
-                  : t("accountCard.deleteAccountConfirmButton")}
-              </button>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => {
-                  setConfirmingDelete(false);
-                  setDeleteConfirmInput("");
-                  setDeleteAccountError(null);
-                }}
-                disabled={deletingAccount}
-              >
-                {t("accountCard.cancel")}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className={styles.secondaryBtn}
-            onClick={() => setConfirmingDelete(true)}
-          >
-            {t("accountCard.deleteAccountButton")}
-          </button>
-        )}
       </SettingsRow>
     </SettingsGroup>
   );

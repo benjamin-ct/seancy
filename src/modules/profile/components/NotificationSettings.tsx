@@ -8,6 +8,7 @@ import { logWarn } from "../../../core/logger.ts";
 import { PUSH_ENDPOINT_STORAGE_KEY as ENDPOINT_STORAGE_KEY } from "../../../core/sync/pushAccountLink.ts";
 import type { LibraryItem } from "../../../core/types/library.ts";
 import type { MediaType } from "../../../core/types/tmdb.ts";
+import { storageGet, storageRemove, storageSet } from "../../../shared/lib/storage.ts";
 import styles from "./SettingsPanel.module.css";
 
 const TOP_GENRES_FOR_NOTIFICATIONS = 8;
@@ -327,9 +328,7 @@ export default function NotificationSettings() {
   const { watchlist, watched } = useLibrary();
   const { locale } = useLocale();
   const { status: authStatus } = useAuth();
-  const [endpoint, setEndpoint] = useState<string | null>(() =>
-    localStorage.getItem(ENDPOINT_STORAGE_KEY)
-  );
+  const [endpoint, setEndpoint] = useState<string | null>(() => storageGet(ENDPOINT_STORAGE_KEY));
   const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const isFirstSync = useRef(true);
@@ -350,7 +349,7 @@ export default function NotificationSettings() {
           return;
         }
         lastSyncedRef.current = keysOf(watchlist, watched);
-        localStorage.setItem(ENDPOINT_STORAGE_KEY, newEndpoint);
+        storageSet(ENDPOINT_STORAGE_KEY, newEndpoint);
         setEndpoint(newEndpoint);
       })
       .catch((err) => logWarn("Seancy : resynchro de l'abonnement push échouée.", err));
@@ -422,7 +421,7 @@ export default function NotificationSettings() {
       await fullSyncSubscription(subEndpoint, keys, watchlist, watched, locale);
       lastSyncedRef.current = keysOf(watchlist, watched);
 
-      localStorage.setItem(ENDPOINT_STORAGE_KEY, subEndpoint);
+      storageSet(ENDPOINT_STORAGE_KEY, subEndpoint);
       setEndpoint(subEndpoint);
       setStatus("idle");
     } catch (err) {
@@ -441,7 +440,7 @@ export default function NotificationSettings() {
         await unregisterEndpoint(subscription.endpoint);
         await subscription.unsubscribe();
       }
-      localStorage.removeItem(ENDPOINT_STORAGE_KEY);
+      storageRemove(ENDPOINT_STORAGE_KEY);
       setEndpoint(null);
       setStatus("idle");
     } catch (err) {

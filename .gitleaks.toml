@@ -4,9 +4,11 @@ title = "gitleaks config — seancy"
 useDefault = true
 
 [allowlist]
-description = "Token Cloudflare Web Analytics — public par conception (exposé côté client), voir commentaire wrangler.jsonc ; clés localStorage « seancy.* » (ex. STORAGE_KEY = \"seancy.excludedGenres.v1\"), prises à tort pour des clés d'API par generic-api-key"
+description = "Token Cloudflare Web Analytics — public par conception (exposé côté client), voir commentaire wrangler.jsonc ; clés localStorage « seancy.*/bobine.* » (ex. STORAGE_KEY = \"seancy.excludedGenres.v1\", legacy \"bobine.*\" avant le renommage du repo), prises à tort pour des clés d'API par generic-api-key ; clé « site » reCAPTCHA v3 (RECAPTCHA_SITE_KEY) — publique par conception (embarquée côté client), à distinguer de RECAPTCHA_SECRET_KEY qui reste un vrai secret jamais commité ; valeur d'exemple de README (placeholder « ta_valeur_de_... »), jamais une vraie clé"
 regexTarget = "secret"
 regexes = [
   '''^d627aa22e73c4390952ff06afcc1f076$''',
-  '''^seancy\.[A-Za-z]+(\.[A-Za-z]+)*(\.v\d+)?$''',
+  '''^(seancy|bobine)\.[A-Za-z]+(\.[A-Za-z]+)*(\.v\d+)?$''',
+  '''^6Ldgj4ctAAAAACH345AamgXKs4vXMlF1D1p1HHxz$''',
+  '''^ta_valeur_de_[A-Za-z_]+$''',
 ]

@@ -1,5 +1,5 @@
-# Intégration continue : bloque toute PR (et tout push sur main) dont le
-# format, le lint, le typecheck, les vérifications de logique pure ou le
+# Intégration continue : bloque toute PR (et tout push sur main/develop) dont
+# le format, le lint, le typecheck, les vérifications de logique pure ou le
 # build échouent.
 #
 # Le lint (oxlint) est l'étape "linter bloquant" : il sort en code non nul
@@ -11,7 +11,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `develop` : environnement persistant (voir ticket Trello "Avenir du
+    # développement"), base D1 `seancy-develop` + vrai déploiement Worker
+    # `seancy-develop` (job deploy-develop, voir ticket Trello "Rendre
+    # develop iso-prod"). Migrations prod (apply-d1-migrations) restent
+    # strictement limitées à `main`, voir le garde-fou sur ce job.
+    branches: [main, develop]
   pull_request:
     # "closed" (fermeture ou merge) est nécessaire en plus des types par
     # défaut (opened/synchronize/reopened) pour déclencher le nettoyage de la
@@ -73,6 +78,15 @@ jobs:
       - name: Typecheck (TypeScript strict, bloquant)
         run: npm run typecheck
 
+      # Limité aux fichiers/dépendances jamais importés (signal fiable, faux
+      # positifs quasi nuls) — pas aux exports/types inutilisés : le projet en
+      # a un stock existant (barrels, types miroir de l'API TMDB/du schéma
+      # D1...) qui demanderait un nettoyage à part, hors scope de ce ticket
+      # (audit F5). Voir knip.json pour les points d'entrée (scripts/*.ts,
+      # infra/, public/theme-init.js — jamais importés par le bundle Vite).
+      - name: Code mort (knip, bloquant sur fichiers/dépendances inutilisés)
+        run: npm run check:dead-code
+
       - name: Vérifications de logique pure
         run: |
           npm run verify:upcoming-badge
@@ -88,7 +102,11 @@ jobs:
           npm run verify:tmdb-proxy-policy
           npm run verify:tmdb-retry-after
           npm run verify:tmdb-edge-cache
+          npm run verify:ai-suggestions
           npm run verify:security-headers
+          npm run verify:changeset-parsing
+          npm run verify:changelog-release
+          npm run verify:changelog-parser
 
       - name: Build
         run: npm run build
@@ -107,6 +125,59 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Fragment de changelog requis sur toute PR qui touche du code produit —
+  # voir .changeset/README.md et scripts/check-changeset.ts. fetch-depth: 0
+  # nécessaire pour calculer le diff contre la base réelle (le clone
+  # superficiel par défaut n'a pas cette réf).
+  check-changeset:
+    name: Gates release (fragment changelog + version intacte)
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/check-changeset.ts
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+      # Gate CI preprod (ticket Trello "Épique git-flow : CI preprod avancée
+      # sur develop") : le champ "version" de package.json n'est touché que
+      # par le job release-changelog, jamais à la main dans une PR — voir
+      # scripts/check-version-untouched.ts.
+      - run: node scripts/check-version-untouched.ts
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+
+  # Gates supplémentaires avant qu'une release `develop` → `main` ne soit
+  # jugée possible (ticket Trello "Épique git-flow : CI preprod avancée sur
+  # develop", portée précisée par Benjy_CT le 2026-10-10 : "les checks
+  # nécessaires à s'assurer que c'est bien prêt pour partir en prod" — audit
+  # plus restrictif que le job verify, scan anti-PII des fixtures). gitleaks
+  # tourne déjà sur ce push via secrets-scan (ci-dessus, sans restriction
+  # d'event) : pas dupliqué ici.
+  develop-release-gates:
+    name: Gates pré-release (develop)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Plus restrictif que le "high" du job verify (PR) : sur develop,
+      # juste avant une release possible, on veut voir les vulnérabilités
+      # modérées aussi, pas seulement les plus critiques.
+      - name: Audit dépendances (plus restrictif, pré-release)
+        run: npm audit --audit-level=moderate
+      - run: node scripts/check-pii-fixtures.ts
 
   deploy-preview:
     name: Deploy preview & comment
@@ -139,15 +210,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/preview-d1.ts provision ${{ github.event.pull_request.number }}
-
-      # Bascule Bobine → Seancy : version provisoire du Worker seancy tant
-      # qu'il n'a jamais été déployé, sinon ses réglages restent grisés dans
-      # le dashboard. Sans effet ensuite (voir scripts/seancy-bootstrap-worker.ts).
-      - name: Bootstrap Worker seancy (once)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/seancy-bootstrap-worker.ts
 
       - name: Generate branch slug for preview name
         id: branch-slug
@@ -185,9 +247,18 @@ jobs:
           --name "${{ steps.branch-slug.outputs.slug }}"
           --message "PR #${{ github.event.pull_request.number }}"
 
-      # Seule l'URL réellement renvoyée par Cloudflare est publiée : sans
-      # URL (Preview Deployments désactivés sur workers.dev...), le job
-      # échoue explicitement plutôt que d'annoncer une preview inutilisable.
+      # L'URL publiée doit être celle du Worker (*.workers.dev), jamais celle
+      # du domaine `preview.dev.seancy.com` : ce dernier est sujet à un cache
+      # d'edge qui sert trop souvent une version obsolète (ticket Trello
+      # "URL de preview"). preview_urls (alias stable, basé sur le nom de la
+      # PR, cf. --name ci-dessus) est préféré à deployment_urls (sous-domaine
+      # différent à chaque déploiement) pour retrouver le même comportement
+      # qu'avant l'introduction de `wrangler preview` : une URL stable sur
+      # toute la durée de la PR. Dans les deux cas, seule l'entrée
+      # *.workers.dev du tableau d'URLs renvoyé par Cloudflare est retenue.
+      # Sans URL correspondante (Preview Deployments désactivés sur
+      # workers.dev...), le job échoue explicitement plutôt que d'annoncer
+      # une preview inutilisable ou de retomber sur le domaine problématique.
       - name: Read preview URL
         id: preview-url
         env:
@@ -196,10 +267,11 @@ jobs:
           URL=$(node -e '
             const lines = require("node:fs").readFileSync(process.env.WRANGLER_OUTPUT_FILE_PATH, "utf8").split("\n");
             const entry = lines.filter(Boolean).map((line) => JSON.parse(line)).findLast((e) => e.type === "preview");
-            console.log(entry?.preview_urls?.[0] ?? entry?.deployment_urls?.[0] ?? "");
+            const urls = [...(entry?.preview_urls ?? []), ...(entry?.deployment_urls ?? [])];
+            console.log(urls.find((u) => u.includes(".workers.dev")) ?? "");
           ')
           if [ -z "$URL" ]; then
-            echo "::error::Cloudflare n'a renvoyé aucune URL pour cette preview (Preview Deployments activés sur workers.dev ?)."
+            echo "::error::Cloudflare n'a renvoyé aucune URL *.workers.dev pour cette preview (Preview Deployments désactivés sur workers.dev ?)."
             exit 1
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
@@ -252,7 +324,11 @@ jobs:
     needs:
       - verify
       - secrets-scan
-    if: github.event_name == 'push'
+    # Strictement limité à `main` : la base ciblée (seancy-notifications) est
+    # la prod. Sans ce garde-fou, un push sur `develop` rejouerait aussi les
+    # migrations en attente sur la prod avant même la release correspondante
+    # — voir deploy-develop pour l'équivalent sur `seancy-develop`.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -262,16 +338,6 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-
-      # Bascule Bobine → Seancy : copie unique de bobine-notifications vers
-      # seancy-notifications tant que celle-ci est vide, puis retrait de la
-      # tâche planifiée du Worker bobine dès que seancy a la sienne. Sans
-      # effet ensuite (voir scripts/seancy-copy-d1.ts).
-      - name: Copy bobine-notifications → seancy-notifications (once)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/seancy-copy-d1.ts
 
       # Applique toute migration ajoutée sous migrations/ pas encore jouée
       # sur la base D1 distante (voir migrations/README implicite : fichiers
@@ -285,3 +351,139 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply seancy-notifications --remote
+
+  # Release prod (ticket Trello "Épique git-flow : release develop→main
+  # automatisée") : au push sur `main` (donc au merge d'une release
+  # `develop` → `main`), compile les fragments de changelog accumulés depuis
+  # la dernière release (voir .changeset/README.md et
+  # scripts/changelogRelease.ts) en une entrée CHANGELOG.md + bump SemVer de
+  # package.json, puis commit directement sur `main`. Un garde-fou naturel
+  # contre la boucle : ce commit généré ne laisse plus aucun fragment, donc
+  # le run qu'il déclenche à son tour trouve .changeset/ vide et ne fait
+  # rien — pas besoin de `[skip ci]` pour éviter la boucle, et il ne faut
+  # surtout pas en mettre un : `CHANGELOG.md` est lu au build (voir
+  # ChangelogPage.tsx, `?raw`), donc c'est précisément CE commit que le
+  # déploiement Git Cloudflare Workers Builds doit builder pour que la prod
+  # affiche la nouvelle entrée. Cloudflare honore désormais `[skip ci]` (et
+  # variantes) dans le message de commit au même titre que GitHub Actions
+  # (ticket Trello "Changelog pas dispo en prod" : avec le tag, Workers
+  # Builds skippait silencieusement ce commit et la prod restait buildée sur
+  # le commit de merge précédent, donc sans le nouveau CHANGELOG.md).
+  #
+  # Avant le basculement complet sur `develop`/`main` (voir ticket "adapter
+  # le skill trello-ticket-pipeline"), aucune PR vers `main` n'ajoute encore
+  # de fragment .changeset/ (check-changeset.ts n'est pour l'instant exigé
+  # que sur les PR de cette branche d'intégration) : ce job tourne donc à
+  # chaque push sur `main` mais ne trouve rien à compiler, sans effet.
+  release-changelog:
+    name: Compile changelog & bump version
+    needs:
+      - verify
+      - secrets-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # `main` est protégée par le ruleset `main-protection` (push direct
+      # interdit, PR + status check requis) : le GITHUB_TOKEN du job ne peut
+      # pas y pousser. On authentifie le checkout/push avec un token
+      # d'installation de la GitHub App `seancy-release-bot`, ajoutée à la
+      # bypass list du ruleset (carte Trello "Fix : le job de release...").
+      - name: Generate release app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile changelog fragments
+        id: release
+        run: npm run release:changelog
+
+      - name: Commit version bump
+        if: steps.release.outputs.version != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md package.json package-lock.json .changeset
+          git commit -m "chore(release): v${{ steps.release.outputs.version }}"
+          git push origin HEAD:main
+
+  # Environnement `develop` persistant (voir ticket Trello "Avenir du
+  # développement") : une base D1 unique (seancy-develop, créée une fois,
+  # jamais supprimée) + un jeu de données fictives "full" (voir
+  # scripts/fixtures/develop-seed.sql), rejoué de façon additive à chaque
+  # push — contrairement aux previews de PR (une base par PR, nettoyée à la
+  # fermeture), pour servir de bac à sable d'équipe entre les previews
+  # éphémères et la prod.
+  #
+  # Vrai déploiement (`wrangler deploy`, ticket Trello "Rendre develop
+  # iso-prod") vers un Worker dédié `seancy-develop` — plus `wrangler
+  # preview`, qui est le même mécanisme qu'une preview de PR et ne supporte
+  # pas nativement les bindings `ai`/`ratelimits` (voir PR #312, deux bugs
+  # dus à cette hypothèse erronée). Toujours pas via l'intégration Git
+  # Cloudflare Workers Builds, qui reste réservée à la vraie prod sur `main` :
+  # ce Worker `seancy-develop` est déployé explicitement par ce job, avec son
+  # propre binding D1 (voir scripts/preview-d1.ts, writeDevelopConfig) mais
+  # les mêmes vars/bindings non sensibles que wrangler.jsonc. Les vrais
+  # secrets (TMDB_API_KEY, VAPID_PRIVATE_KEY, RECAPTCHA_SECRET_KEY) doivent
+  # être configurés une fois à la main sur ce nouveau Worker (dashboard
+  # Cloudflare → seancy-develop → Settings → Variables and Secrets) : sans ce
+  # réglage manuel, ses fonctionnalités dépendant de ces secrets restent en
+  # repli tant qu'il n'est pas fait.
+  deploy-develop:
+    name: Deploy develop environment
+    needs:
+      - verify
+      - secrets-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+
+      # Compile un aperçu (non commité) des fragments .changeset/*.md en
+      # attente dans CHANGELOG.md avant le build, pour que /changelog sur
+      # develop reflète ce qui serait publié à la prochaine release -- ticket
+      # Trello "Changelog pas à jour sur develop" : sans ça, cette page
+      # restait figée sur la dernière entrée compilée sur `main`, jamais
+      # reportée sur `develop`, tant qu'aucune release develop -> main n'a
+      # eu lieu (voir scripts/generateChangelogPreview.ts).
+      - name: Preview pending changelog
+        run: npm run preview:changelog
+
+      - name: Build
+        run: npm run build
+
+      # Crée (une fois) ou réutilise seancy-develop, applique les migrations
+      # en attente puis rejoue le seed "full" (additif, voir
+      # scripts/fixtures/develop-seed.sql). Génère
+      # wrangler.develop.generated.jsonc, utilisé par le déploiement
+      # ci-dessous.
+      - name: Provision develop D1 database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/preview-d1.ts provision-develop
+
+      - name: Deploy Worker develop environment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.develop.generated.jsonc
