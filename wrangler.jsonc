@@ -18,6 +18,13 @@
   // prochain déploiement (même mécanisme que "vars" ci-dessous — voir
   // README section Observabilité pour le reste : Sentry, Analytics Engine,
   // Web Analytics, health check).
+  //
+  // Traces échantillonnées à 10 % : chaque requête produit ~4 spans
+  // (fetch TMDB, cache_match, cache_put, D1), soit ~80 % des événements
+  // d'observabilité du compte. À 100 %, le passage d'Applebot (~85 000
+  // requêtes/jour) a épuisé le quota gratuit de 200 000 événements/jour
+  // partagé par tous les Workers du compte (ingestion coupée jusqu'à
+  // minuit UTC). Les logs restent à 100 % pour ne perdre aucune erreur.
   "observability": {
     "logs": {
       "enabled": true,
@@ -27,7 +34,7 @@
     },
     "traces": {
       "enabled": true,
-      "head_sampling_rate": 1,
+      "head_sampling_rate": 0.1,
       "persist": true
     }
   },
