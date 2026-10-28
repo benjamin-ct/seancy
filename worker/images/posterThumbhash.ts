@@ -144,9 +144,30 @@ async function storePosterThumbhash(env: Env, posterPath: string, hash: string):
 // enrichResponseWithPosterThumbhashes, worker/index.ts) toute affiche TMDB
 // proxée — plus seulement `popular_titles` — donc ce Set peut croître
 // au-delà de la poignée de titres d'origine sur la durée de vie d'un
-// isolate ; des chaînes de poster_path (~25 caractères), mémoire toujours
-// négligeable.
+// isolate : un isolate exposé longtemps à du trafic crawler (nombreuses
+// affiches distinctes, voir ticket Trello "Utilisation max") peut
+// accumuler des dizaines de milliers d'entrées, d'où la purge ci-dessous
+// (même principe que `pruneExpiredCounters` dans rate-limit-memory.ts).
 const scheduledOrDone = new Set<string>();
+const MAX_TRACKED_POSTERS = 10_000;
+
+// Purge opportuniste quand le Set dépasse une taille arbitraire, plutôt
+// qu'à chaque appel : l'ordre d'itération d'un Set suit l'ordre d'insertion,
+// donc retirer les premières entrées revient à retirer les plus anciennes.
+function pruneScheduledOrDone(): void {
+  if (scheduledOrDone.size < MAX_TRACKED_POSTERS) {
+    return;
+  }
+  const excess = scheduledOrDone.size - MAX_TRACKED_POSTERS / 2;
+  let removed = 0;
+  for (const posterPath of scheduledOrDone) {
+    if (removed >= excess) {
+      break;
+    }
+    scheduledOrDone.delete(posterPath);
+    removed++;
+  }
+}
 
 // Point d'entrée pour un appel `ctx.waitUntil` : ne lève jamais, une
 // affiche qui échoue à se calculer reste simplement sur le shimmer
@@ -155,6 +176,7 @@ export async function computeAndStorePosterThumbhash(env: Env, posterPath: strin
   if (scheduledOrDone.has(posterPath)) {
     return;
   }
+  pruneScheduledOrDone();
   scheduledOrDone.add(posterPath);
   try {
     const hash = await computePosterThumbhash(posterPath);

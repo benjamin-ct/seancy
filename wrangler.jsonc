@@ -18,16 +18,23 @@
   // prochain déploiement (même mécanisme que "vars" ci-dessous — voir
   // README section Observabilité pour le reste : Sentry, Analytics Engine,
   // Web Analytics, health check).
+  // `head_sampling_rate` à 0.2 (pas 1) : à 100%, le volume de requêtes du
+  // Worker (crawlers inclus) a dépassé le quota gratuit de 200k événements
+  // Observability/jour, ce qui a mis l'ingestion en pause pour le reste de
+  // la journée (ticket Trello "Utilisation max"). Les erreurs applicatives
+  // restent de toute façon capturées à 100% par Sentry (voir logger.ts),
+  // indépendant de ce quota — un échantillon à 20% reste largement
+  // suffisant pour le débogage de logs/traces natifs Workers.
   "observability": {
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1,
+      "head_sampling_rate": 0.2,
       "invocation_logs": true,
       "persist": true
     },
     "traces": {
       "enabled": true,
-      "head_sampling_rate": 1,
+      "head_sampling_rate": 0.2,
       "persist": true
     }
   },
