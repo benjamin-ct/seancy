@@ -2,6 +2,14 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.1.1 — 2026-10-28
+
+### Correctifs
+
+- Amélioration du diagnostic interne des erreurs techniques (aucun changement visible pour les utilisateurs).
+- Correction d'un bug pouvant occasionnellement ralentir ou faire échouer l'affichage des affiches sur certaines pages, le temps que leur miniature se génère.
+- Le site reste plus stable quand des robots d'indexation l'explorent en masse : ils ne déclenchent plus le calcul des aperçus flous d'affiches, qui saturait le serveur.
+
 ## 0.1.0 — 2026-10-23
 
 ### Nouveautés
