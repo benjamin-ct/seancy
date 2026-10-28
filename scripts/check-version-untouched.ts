@@ -12,12 +12,29 @@
 // BASE_REF doit pointer vers une réf déjà fetchée localement (voir le job
 // CI, qui checkout avec fetch-depth: 0) — absent, on considère qu'il n'y a
 // rien à vérifier (hors contexte de PR, ex. push direct sur develop/main).
+//
+// Exception structurelle : une release `develop` → `main` (HEAD_REF ===
+// "develop", BASE_REF === main) verra systématiquement un écart de version,
+// par construction — le bump du hotfix précédent (release-changelog, sur
+// `main` uniquement) n'est jamais backporté sur `develop` (voir le commit de
+// backport qui le retire explicitement). Le futur numéro de version est de
+// toute façon recalculé par release-changelog à partir du package.json de
+// `main`, jamais lu depuis celui de `develop` : rien à vérifier ici pour ce
+// cas précis.
 
 import { execFileSync } from "node:child_process";
 
 const baseRef = process.env.BASE_REF;
 if (!baseRef) {
   console.log("BASE_REF non fourni (pas une PR) : rien à vérifier.");
+  process.exit(0);
+}
+
+const isReleasePr = process.env.HEAD_REF === "develop" && baseRef.endsWith("/main");
+if (isReleasePr) {
+  console.log(
+    "Release develop → main : écart de version attendu, recalculé par release-changelog."
+  );
   process.exit(0);
 }
 

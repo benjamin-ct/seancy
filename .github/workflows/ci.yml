@@ -153,6 +153,7 @@ jobs:
       - run: node scripts/check-version-untouched.ts
         env:
           BASE_REF: origin/${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
 
   # Gates supplémentaires avant qu'une release `develop` → `main` ne soit
   # jugée possible (ticket Trello "Épique git-flow : CI preprod avancée sur
