@@ -7,7 +7,12 @@ import * as Sentry from "@sentry/cloudflare";
 export function logError(message: string, err: unknown): void {
   console.error(message, err);
   if (err instanceof Error) {
-    Sentry.captureException(err);
+    // `message` porte le contexte spécifique à l'appel (ex. posterPath,
+    // tmdbId, userId...) — sans l'attacher ici, Sentry ne groupe que par
+    // type d'erreur/stacktrace et perd toute indication de la ressource en
+    // cause (vécu sur SEANCY-LOGS-3N : impossible de savoir quelle affiche
+    // déclenchait le crash wasm de @jsquash/resize sans ça).
+    Sentry.captureException(err, { extra: { message } });
     return;
   }
   // `String(err)` tombe sur "[object Object]" pour un rejet non-Error (ex.
