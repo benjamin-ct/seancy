@@ -154,6 +154,12 @@ jobs:
         env:
           BASE_REF: origin/${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
+          # Un fork peut nommer sa branche "develop" à volonté : HEAD_REPO
+          # permet au script de s'assurer que la release vient bien de ce
+          # dépôt, pas d'un fork qui usurperait le nom pour contourner le
+          # garde-fou (voir le commentaire dans check-version-untouched.ts).
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
 
   # Gates supplémentaires avant qu'une release `develop` → `main` ne soit
   # jugée possible (ticket Trello "Épique git-flow : CI preprod avancée sur
