@@ -12,11 +12,18 @@ import type { Env } from "./types.ts";
 
 const BASE_URL = "https://api.themoviedb.org/3";
 const LANGUAGE = "fr-FR";
-// 10 pages × 20 résultats = ~200 titres par type, large marge au-delà de
-// toute franchise grand public. Le cron de sync tourne seul (voir
-// "30 7 * * *" dans wrangler.jsonc, dispatché séparément de runDailyCheck)
-// pour ne pas partager son budget de sous-requêtes avec les notifications.
-const PAGES_PER_MEDIA_TYPE = 10;
+// 20 pages × 20 résultats = ~400 titres par type, large marge au-delà de
+// toute franchise grand public pour l'usage recherche (voir plus bas). Sert
+// aussi de base au sitemap (serveSitemap dans page-meta.ts, qui liste tout
+// popular_titles sans LIMIT) : doublé par rapport à l'historique (10 pages)
+// pour lui donner plus de titres à indexer, et réduire la part du crawl
+// profond via les liens "similaires" (voir carte Trello "Vérifier
+// l'utilisation du site" — Applebot découvrait l'essentiel de son volume
+// via ces liens plutôt que le sitemap).
+// Le cron de sync tourne seul (voir "30 7 * * *" dans wrangler.jsonc,
+// dispatché séparément de runDailyCheck) pour ne pas partager son budget de
+// sous-requêtes avec les notifications.
+const PAGES_PER_MEDIA_TYPE = 20;
 const MAX_LOCAL_RESULTS = 10;
 // D1 limite la taille d'un batch : lots de 100 statements (DELETE inclus
 // dans le premier lot), chaque lot restant une transaction propre.

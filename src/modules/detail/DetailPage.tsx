@@ -973,7 +973,7 @@ export default function DetailPage() {
           </div>
           <div className={gridStyles.grid}>
             {recommendations.slice(0, 12).map((item) => (
-              <MediaCard key={item.id} item={toMediaItem(item, mediaType)} />
+              <MediaCard key={item.id} item={toMediaItem(item, mediaType)} nofollow />
             ))}
           </div>
         </section>
