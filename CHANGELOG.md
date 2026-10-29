@@ -2,6 +2,14 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.1.1 — 2026-10-29
+
+### Correctifs
+
+- Réduction du crawl excessif de robots d'indexation sur les fiches film/série : les suggestions
+  "Si vous avez aimé..." ne sont plus suivies automatiquement, et le sitemap référence davantage
+  de titres pour compenser.
+
 ## 0.1.0 — 2026-10-23
 
 ### Nouveautés
