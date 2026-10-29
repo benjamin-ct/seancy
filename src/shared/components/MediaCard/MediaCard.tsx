@@ -57,6 +57,13 @@ interface MediaCardProps {
    * recommandations. Absent ailleurs — un visiteur de Nouveautés ou de Ma
    * liste n'a pas cette action. */
   onNotInterested?: (item: MediaItem) => void;
+  /** Opt-in (fiche détail, section "Titres similaires") : empêche les
+   * crawlers de suivre ce lien pour découvrir de nouveaux ids en profondeur
+   * (Applebot crawlait ~98% de son volume via cette seule section plutôt
+   * que le sitemap, voir carte Trello "Vérifier l'utilisation du site").
+   * Absent ailleurs : les autres grilles (Découvrir, Nouveautés...) restent
+   * suivies normalement. */
+  nofollow?: boolean;
 }
 
 // Largeur affichée des affiches de la grille (voir mediaGrid.module.css : 2,
@@ -77,6 +84,7 @@ function MediaCard({
   ownerRating,
   position,
   onNotInterested,
+  nofollow = false,
 }: MediaCardProps) {
   const { t } = useTranslation();
   const { toggleWatched, toggleWatchlist } = useLibraryActions();
@@ -211,7 +219,11 @@ function MediaCard({
 
   return (
     <div className={styles.card}>
-      <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
+      <Link
+        to={`/media/${mediaType}/${item.id}`}
+        className={styles.link}
+        rel={nofollow ? "nofollow" : undefined}
+      >
         <div
           className={`${styles.poster} ${item.poster_path && !posterLoaded && !posterThumbhashStyle ? skeletonStyles.block : ""}`}
           style={posterThumbhashStyle}
