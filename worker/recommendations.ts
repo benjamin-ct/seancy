@@ -5,7 +5,7 @@
 //
 // Candidats : plutôt que d'appeler TMDB /discover en direct à chaque
 // requête (coût CPU + budget TMDB par utilisateur, voir contraintes du
-// ticket), on filtre/score le cache local `popular_titles` (~200 titres les
+// ticket), on filtre/score le cache local `popular_titles` (~400 titres les
 // plus populaires par type, resynchronisé quotidiennement — voir
 // search-index.ts). Compromis assumé pour ce v1 : le pool de candidats est
 // borné à ce cache (pas de /discover par genre ni /recommendations par
