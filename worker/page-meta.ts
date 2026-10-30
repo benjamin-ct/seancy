@@ -406,8 +406,13 @@ export async function servePageWithMeta(
 }
 
 // robots.txt : previews entièrement exclues ; en prod, pages privées ou
-// sans intérêt pour un moteur exclues. /api/ reste autorisé : Google en a
-// besoin pour afficher le contenu des pages qu'il indexe.
+// sans intérêt pour un moteur exclues. /api/ reste autorisé pour les
+// moteurs en général : Google en a besoin pour afficher le contenu des
+// pages qu'il indexe. Applebot est une exception ciblée (option G, carte
+// Trello mGxwbk06) : il ne suit pas le sitemap mais crawle en profondeur
+// via les liens "similaires", dispersant des dizaines de milliers de
+// requêtes/jour sur /media/ et /api/tmdb/person/ — sans gain d'indexation
+// mesurable en contrepartie.
 export function serveRobots(url: URL): Response {
   const body = isProductionHostname(url.hostname)
     ? [
@@ -416,6 +421,10 @@ export function serveRobots(url: URL): Response {
         "Disallow: /connexion",
         "Disallow: /auth/",
         "Disallow: /recherche",
+        "",
+        "User-agent: Applebot",
+        "Disallow: /media/",
+        "Disallow: /api/tmdb/person/",
         "",
         `Sitemap: ${url.origin}/sitemap.xml`,
         "",
