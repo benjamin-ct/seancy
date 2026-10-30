@@ -411,8 +411,8 @@ export async function servePageWithMeta(
 // pages qu'il indexe. Applebot est une exception ciblée (option G, carte
 // Trello mGxwbk06) : il ne suit pas le sitemap mais crawle en profondeur
 // via les liens "similaires", dispersant des dizaines de milliers de
-// requêtes/jour sur /media/ et /api/tmdb/person/ — sans gain d'indexation
-// mesurable en contrepartie. Un groupe User-agent dédié ne fusionne pas
+// requêtes/jour sur /media/, /personne/ et /api/tmdb/person/ — sans gain
+// d'indexation mesurable en contrepartie. Un groupe User-agent dédié ne fusionne pas
 // avec le groupe * (RFC 9309) : les Disallow communs doivent être répétés
 // ici, sinon Applebot regagnerait l'accès à /profil, /connexion, etc.
 const COMMON_DISALLOW = ["/profil", "/connexion", "/auth/", "/recherche"];
@@ -426,6 +426,7 @@ export function serveRobots(url: URL): Response {
         "User-agent: Applebot",
         ...COMMON_DISALLOW.map((path) => `Disallow: ${path}`),
         "Disallow: /media/",
+        "Disallow: /personne/",
         "Disallow: /api/tmdb/person/",
         "",
         `Sitemap: ${url.origin}/sitemap.xml`,
