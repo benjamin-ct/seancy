@@ -92,6 +92,8 @@ interface LibraryContextValue {
   isInWatchlist: (mediaType: MediaType, id: number | string) => boolean;
   getRating: (mediaType: MediaType, id: number | string) => number | null;
   rateWatched: (mediaType: MediaType, id: number | string, rating: number | null) => void;
+  getReview: (mediaType: MediaType, id: number | string) => string | null;
+  reviewWatched: (mediaType: MediaType, id: number | string, reviewText: string | null) => void;
   setRuntime: (mediaType: MediaType, id: number | string, runtimeMinutes: number) => void;
   setDirectors: (mediaType: MediaType, id: number | string, directors: DirectorRef[]) => void;
   getWatchedEpisodes: (mediaType: MediaType, id: number | string) => Set<string>;
@@ -844,6 +846,40 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const getReview = useCallback(
+    (mediaType: MediaType, id: number | string) =>
+      state.watched[makeKey(mediaType, id)]?.reviewText ?? null,
+    [state.watched]
+  );
+
+  // Avis texte libre, même principe que rateWatched : uniquement pour un
+  // titre déjà marqué comme vu, chaîne vide traitée comme "pas d'avis".
+  const reviewWatched = useCallback(
+    (mediaType: MediaType, id: number | string, reviewText: string | null) => {
+      const key = makeKey(mediaType, id);
+      const cleaned = reviewText?.trim() || null;
+      setState((prev) => {
+        if (!prev.watched[key]) {
+          return prev;
+        }
+        const updated: LibraryItem = {
+          ...prev.watched[key],
+          reviewText: cleaned,
+          updatedAt: Date.now(),
+        };
+        pendingOpsRef.current.set(key, {
+          action: "upsert",
+          mediaType,
+          id: Number(id),
+          status: "watched",
+          item: updated,
+        });
+        return { ...prev, watched: { ...prev.watched, [key]: updated } };
+      });
+    },
+    []
+  );
+
   // Complète après coup la durée d'un titre déjà marqué vu (cf. Stats), pour
   // les cas où elle n'était pas connue au moment du toggle.
   const setRuntime = useCallback(
@@ -1246,6 +1282,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isInWatchlist,
       getRating,
       rateWatched: gated(rateWatched, undefined),
+      getReview,
+      reviewWatched: gated(reviewWatched, undefined),
       setRuntime,
       setDirectors,
       getWatchedEpisodes,
@@ -1273,6 +1311,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     isInWatchlist,
     getRating,
     rateWatched,
+    getReview,
+    reviewWatched,
     setRuntime,
     setDirectors,
     getWatchedEpisodes,

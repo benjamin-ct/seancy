@@ -44,6 +44,8 @@ export interface TitleActivity {
     status: "watched" | "watchlist";
     /** Note sur 10, seulement pour un titre vu et noté. */
     rating: number | null;
+    /** Avis texte libre, seulement pour un titre vu et commenté. */
+    reviewText: string | null;
     /** Dernière mise à jour (ms) : « il y a 3 jours ». */
     updatedAt: number;
     /** Série entamée (encore en « envie de voir ») : dernier épisode vu,

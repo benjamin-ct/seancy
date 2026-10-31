@@ -78,6 +78,15 @@
   font-size: 12.5px;
 }
 
+.review {
+  color: var(--fg);
+  font-size: 12.5px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* « ★ 9 » : petite pastille dorée à droite. */
 .rating {
   flex: none;
