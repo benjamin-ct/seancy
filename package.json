@@ -54,7 +54,7 @@
     "@jsquash/png": "^3.1.1",
     "@jsquash/resize": "^2.1.1",
     "@sentry/cloudflare": "^10.73.0",
-    "@sentry/react": "^10.73.0",
+    "@sentry/react": "^11.10.0",
     "i18next": "^26.4.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
