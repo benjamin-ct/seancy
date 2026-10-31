@@ -723,7 +723,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "19 octobre 2026",
+    "lastUpdatedValue": "31 octobre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -736,7 +736,7 @@
       },
       "library": {
         "label": "Bibliothèque personnelle",
-        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour toi ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
+        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour toi ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, vos avis texte, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
       },
       "preferences": {
         "label": "Préférences",
@@ -764,7 +764,7 @@
       },
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
-        "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse email. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
+        "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, vos avis texte, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse email. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
       },
       "signInProviders": {
         "label": "Connexion avec Google ou Apple",
@@ -822,7 +822,7 @@
     },
     "retention": {
       "title": "Durée de conservation",
-      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
+      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : après confirmation par un code envoyé par email, la suppression a lieu 7 jours plus tard et reste annulable pendant ce délai (automatiquement si vous vous reconnectez, ou via un bouton dédié). Passé ce délai, toutes les données associées sont supprimées définitivement. Vous pouvez aussi en demander la suppression ",
       "textAfter": "."
     },
     "rights": {
