@@ -536,6 +536,58 @@
   background: currentColor;
 }
 
+.yourReview {
+  margin-top: 14px;
+}
+
+.yourReviewLabel {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.yourReviewInput {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.yourReviewFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.yourReviewCount {
+  color: var(--subtle);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.yourReviewSave {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.yourReviewSave:disabled {
+  opacity: 0.5;
+}
+
 /* ─── Sous le bloc : 2 colonnes sur desktop ─────────────────────────── */
 .body {
   display: grid;

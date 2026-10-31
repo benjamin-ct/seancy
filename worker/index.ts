@@ -51,7 +51,6 @@ import {
   updateSubscriptionLocale,
   linkSubscriptionToAccount,
   getSubscriptionsForUser,
-  deleteUserAccount,
   exportUserAccountData,
   type SubscriptionAccount,
 } from "./db.ts";
@@ -86,6 +85,10 @@ import {
   isEmailUsedByAnotherUser,
   sendEmailChangeCode,
   sendEmailChangedNotice,
+  createAccountDeletionRequest,
+  confirmAccountDeletion,
+  cancelPendingDeletion,
+  sendAccountDeletionCode,
   type EmailLocale,
   type AuthUser,
 } from "./auth.ts";
@@ -848,6 +851,9 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
 
   const user = await findOrCreateUser(env.DB, email);
   const sessionToken = await createSession(env.DB, user.id);
+  // Se reconnecter annule une suppression de compte programmée (ticket
+  // « Amélioration de la page de profil utilisateur ») — no-op sinon.
+  await cancelPendingDeletion(env.DB, user.id);
 
   return json(
     {
@@ -873,6 +879,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     displayName: user.displayName,
     shareSlug: user.shareSlug,
     username: user.username,
+    pendingDeletionAt: user.pendingDeletionAt,
     avatarVersion: await getAvatarVersion(env.DB, user.id),
   });
 }
@@ -1663,23 +1670,87 @@ async function handleLogoutAll(request: Request, env: Env): Promise<Response> {
   });
 }
 
-// Suppression de compte en libre-service (audit M14) : confirmation forte
-// déjà faite côté client (saisie de l'adresse e-mail dans AccountSettings),
-// ce endpoint ne la revérifie pas — la seule preuve d'identité qui compte
-// ici est la session (cookie httpOnly), comme pour tout autre endpoint
-// authentifié de ce fichier. Supprime toutes les tables liées en un seul
-// batch atomique (voir deleteUserAccount), puis ferme les WebSockets du
-// compte et efface le cookie de session, exactement comme une déconnexion.
-async function handleDeleteAccount(request: Request, env: Env): Promise<Response> {
-  const user = await getUserFromRequest(env.DB, request);
-  if (!user) {
-    return json({ error: "Non connecté." }, 401);
+// Suppression de compte en libre-service, en trois temps (ticket
+// « Amélioration de la page de profil utilisateur », remplace la
+// suppression immédiate de l'audit M14) : un code envoyé par email prouve
+// l'accès à la boîte mail (requestAccountDeletion), sa confirmation
+// programme la suppression dans 7 jours (confirmAccountDeletion) plutôt que
+// de l'exécuter tout de suite, et se reconnecter avant cette échéance
+// l'annule automatiquement (voir cancelPendingDeletion dans handleVerify)
+// ou via l'annulation explicite ci-dessous (cancelAccountDeletion). La
+// suppression effective a lieu via le cron (purgeAccountsPendingDeletion,
+// voir worker/scheduled.ts), pas depuis une requête HTTP.
+async function handleRequestAccountDeletion(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
   }
-  await deleteUserAccount(env.DB, user.id);
-  await revokeUserSockets(request, user.id, "all");
-  return json({ ok: true }, 200, {
-    "set-cookie": sessionCookieHeaders(request, null),
-  });
+  if (
+    !(await checkRateLimit(env.DB, `account-deletion-request:user:${user.id}`, {
+      limit: 5,
+      windowMs: 60 * 60_000,
+    }))
+  ) {
+    const retryAfter = secondsUntilWindowEnd(60 * 60_000);
+    return json({ error: "Trop de tentatives.", reason: "rate-limited", retryAfter }, 429, {
+      "retry-after": String(retryAfter),
+    });
+  }
+  const body = await readJsonObject(request);
+  const locale = sanitizeEmailLocale(body?.locale);
+  const code = await createAccountDeletionRequest(env.DB, user.id);
+  try {
+    const { skipped } = await sendAccountDeletionCode(env, user.email, code, locale);
+    const showDevCode = skipped || !isProductionHostname(new URL(request.url).hostname);
+    return json({ ok: true, devCode: showDevCode ? code : undefined });
+  } catch (err) {
+    logError("Échec de l'envoi du code de suppression de compte :", err);
+    return json(
+      { error: "Impossible d'envoyer le code pour le moment. Réessayez plus tard." },
+      502
+    );
+  }
+}
+
+async function handleConfirmAccountDeletion(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  // Seule vraie protection contre un bruteforce du code à 6 caractères,
+  // comme pour /api/account/email/confirm.
+  if (
+    !(await checkRateLimit(env.DB, `account-deletion-confirm:user:${user.id}`, {
+      limit: 10,
+      windowMs: 15 * 60_000,
+    }))
+  ) {
+    const retryAfter = secondsUntilWindowEnd(15 * 60_000);
+    return json({ error: "Trop de tentatives.", reason: "rate-limited", retryAfter }, 429, {
+      "retry-after": String(retryAfter),
+    });
+  }
+  const body = await readJsonObject(request);
+  if (!body) {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const result = await confirmAccountDeletion(env.DB, user.id, optionalString(body.code));
+  if (!result.ok) {
+    return json(
+      { error: "Ce code est invalide, expiré, ou déjà utilisé.", reason: "invalid-code" },
+      400
+    );
+  }
+  return json({ ok: true, pendingDeletionAt: result.pendingDeletionAt });
+}
+
+async function handleCancelAccountDeletion(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  await cancelPendingDeletion(env.DB, user.id);
+  return json({ ok: true });
 }
 
 // Export de compte en libre-service (audit M14, droit à la portabilité) :
@@ -3112,8 +3183,14 @@ async function routeRequest(
     return handleLogoutAll(request, env);
   }
 
-  if (url.pathname === "/api/account" && request.method === "DELETE") {
-    return handleDeleteAccount(request, env);
+  if (url.pathname === "/api/account/delete/request" && request.method === "POST") {
+    return handleRequestAccountDeletion(request, env);
+  }
+  if (url.pathname === "/api/account/delete/confirm" && request.method === "POST") {
+    return handleConfirmAccountDeletion(request, env);
+  }
+  if (url.pathname === "/api/account/delete/cancel" && request.method === "POST") {
+    return handleCancelAccountDeletion(request, env);
   }
 
   if (url.pathname === "/api/account/export" && request.method === "GET") {

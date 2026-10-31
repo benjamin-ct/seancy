@@ -10,6 +10,7 @@ import {
 } from "./follows.ts";
 import { getAvatar } from "./avatars.ts";
 import { getRemindersForUser, type ReminderSummary } from "./reminders.ts";
+import { logError } from "./logger.ts";
 import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
 import type {
   CleanCustomList,
@@ -1422,6 +1423,33 @@ export async function deleteUserAccount(db: D1Database, userId: number): Promise
       .bind(userId),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ]);
+}
+
+// Balayage quotidien (voir worker/scheduled.ts, runDailyCheck) : exécute les
+// suppressions de compte dont le délai de grâce de 7 jours est passé (voir
+// migration 0023, confirmAccountDeletion dans auth.ts). Un compte à la fois
+// pour qu'un échec isolé (ex. contrainte FK inattendue) n'empêche pas les
+// autres, même logique que purgeExpiredRows.
+export async function purgeAccountsPendingDeletion(
+  db: D1Database,
+  now = Date.now()
+): Promise<number> {
+  const { results } = await db
+    .prepare(
+      "SELECT id FROM users WHERE pending_deletion_at IS NOT NULL AND pending_deletion_at <= ?"
+    )
+    .bind(now)
+    .all<{ id: number }>();
+  let deleted = 0;
+  for (const { id } of results) {
+    try {
+      await deleteUserAccount(db, id);
+      deleted++;
+    } catch (err) {
+      logError(`Suppression de compte en échec (user ${id}) :`, err);
+    }
+  }
+  return deleted;
 }
 
 export interface AccountExport {

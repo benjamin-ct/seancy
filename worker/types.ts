@@ -114,6 +114,7 @@ export interface UserRow {
   share_slug: string | null;
   username: string | null;
   created_at: number;
+  pending_deletion_at: number | null;
 }
 
 // Typage de `exports` (module cloudflare:workers) / `ctx.exports` : déclare
