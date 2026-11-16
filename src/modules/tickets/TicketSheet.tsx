@@ -294,6 +294,9 @@ export default function TicketSheet({
   const head = [
     t.status === "idea" ? "Idée" : "Ticket",
     columnName(t.status),
+    t.author
+      ? `${t.status === "idea" ? "notée" : "créé"} par ${t.author}${t.createdAt ? ` le ${day(t.createdAt)}` : ""}`
+      : "",
     t.status === "done" ? `fait le ${day(t.doneAt)}` : "",
   ].filter(Boolean);
 
@@ -687,7 +690,8 @@ export default function TicketSheet({
                 className={`${styles.bubble} ${e.who === "auto" ? styles.auto : styles.me}`}
               >
                 <b>
-                  {e.who === "auto" ? "Validation automatique" : "Toi"} <small>{when(e.at)}</small>
+                  {e.who === "auto" ? "Validation automatique" : e.by || "Vous"}{" "}
+                  <small>{when(e.at)}</small>
                 </b>
                 <Text text={e.text ?? ""} />
               </li>
@@ -702,7 +706,8 @@ export default function TicketSheet({
           }
           return (
             <li key={i} className={`${styles.event} ${e.kind === "valide" ? styles.good : ""}`}>
-              {EVENTS[e.kind] ?? e.kind} · {when(e.at)}
+              {EVENTS[e.kind] ?? e.kind}
+              {e.by ? ` par ${e.by}` : ""} · {when(e.at)}
               {pr}
             </li>
           );

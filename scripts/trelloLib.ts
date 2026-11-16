@@ -63,6 +63,8 @@ export interface ImportedTicket {
   doneAt: number;
   history: { at: number; who: "moi" | "claude"; kind: string; text?: string; pr?: string }[];
   trello: { url: string; list: string; comments: { at: number; author: string; text: string }[] };
+  /** Créateur de la carte sur Trello (nom affiché), auteur du ticket. */
+  author: string;
 }
 
 export const FILE_MAX = 1_500_000;
@@ -115,7 +117,8 @@ export function checklistText(lists: TrelloChecklist[] = []): string {
 export function cardToTicket(
   card: TrelloCard,
   listName: string,
-  comments: TrelloComment[]
+  comments: TrelloComment[],
+  creator = ""
 ): ImportedTicket {
   const { status, label } = statusOfList(listName);
   const names = card.labels.map((l) => (l.name || "").trim()).filter(Boolean);
@@ -174,6 +177,7 @@ export function cardToTicket(
       list: listName,
       comments: sorted.map((c) => ({ at: c.at, author: c.author, text: c.text })),
     },
+    author: creator,
   };
 }
 
@@ -189,7 +193,8 @@ export const isImportableFile = (a: TrelloAttachment) =>
 export function boardToTickets(
   lists: { id: string; name: string; pos: number }[],
   cards: TrelloCard[],
-  comments: TrelloComment[]
+  comments: TrelloComment[],
+  creators: Map<string, string> = new Map()
 ): ImportedTicket[] {
   const listOf = new Map(lists.map((l) => [l.id, l]));
   const byCard = new Map<string, TrelloComment[]>();
@@ -204,7 +209,7 @@ export function boardToTickets(
         card: c,
         list,
         rank: statusOfList(list.name).rank,
-        ticket: cardToTicket(c, list.name, byCard.get(c.id) ?? []),
+        ticket: cardToTicket(c, list.name, byCard.get(c.id) ?? [], creators.get(c.id) ?? ""),
       };
     });
   rows.sort((a, b) => a.rank - b.rank || a.list.pos - b.list.pos || a.card.pos - b.card.pos);

@@ -337,6 +337,25 @@
 .meta small {
   margin-left: auto;
 }
+/* Initiale de l'auteur du ticket (deux administrateurs partagent le tableau) */
+.who {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 700;
+}
+/* Poussée à droite, sauf derrière la date (déjà poussée) */
+.meta > .who {
+  margin-left: auto;
+}
+.meta small + .who {
+  margin-left: 0;
+}
 .bar {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -789,10 +808,12 @@
 .segs {
   display: inline-flex;
   gap: 4px;
-  margin-bottom: 8px;
   padding: 3px;
   border-radius: 999px;
   background: var(--surface);
+}
+.reply .segs {
+  margin-bottom: 8px;
 }
 .seg {
   padding: 6px 12px;

@@ -12,6 +12,7 @@ export interface HistoryEvent {
   kind: string;
   text?: string;
   pr?: string;
+  by?: string;
 }
 export interface TicketFile {
   id: string;
@@ -53,6 +54,10 @@ export interface Ticket {
     comments: { at: number; author: string; text: string }[];
   } | null;
   files: TicketFile[];
+  /** Qui a créé le ticket (nom affiché) ; « Claude » pour un ticket créé par une session Claude. */
+  author: string;
+  authorEmail: string;
+  createdAt: number;
 }
 export interface TicketsConfig {
   github: boolean;

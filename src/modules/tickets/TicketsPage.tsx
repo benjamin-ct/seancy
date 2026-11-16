@@ -156,6 +156,15 @@ function Mini({
         )}
         {prNo && <span>#{prNo}</span>}
         {date && <small>{date}</small>}
+        {t.author && (
+          <span
+            className={styles.who}
+            title={`Ticket de ${t.author}`}
+            aria-label={`Ticket de ${t.author}`}
+          >
+            {t.author.slice(0, 1).toUpperCase()}
+          </span>
+        )}
       </span>
     </button>
   );
@@ -412,11 +421,13 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
 
 export default function TicketsPage() {
   useDocumentTitle("Tickets");
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, email } = useAuth();
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [config, setConfig] = useState<TicketsConfig | null>(null);
   const [denied, setDenied] = useState<{ status: number; message: string } | null>(null);
   const [query, setQuery] = useState("");
+  // « Les miens » : tickets créés par le compte connecté (les deux administrateurs partagent le tableau)
+  const [mine, setMine] = useState(false);
   const [sheet, setSheet] = useState<{ id: string; mode: ReplyMode | "" } | null>(null);
   const [creating, setCreating] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -492,7 +503,14 @@ export default function TicketsPage() {
   );
   const ask: Ask = useCallback((text, ok, job) => setConfirm({ text, ok, job }), []);
 
-  const cols = useMemo(() => columns(tickets ?? [], query), [tickets, query]);
+  const cols = useMemo(
+    () =>
+      columns(
+        (tickets ?? []).filter((t) => !mine || t.authorEmail === (email ?? "").toLowerCase()),
+        query
+      ),
+    [tickets, query, mine, email]
+  );
   const byId = useMemo(() => new Map((tickets ?? []).map((t) => [t.id, t])), [tickets]);
   const open = sheet ? byId.get(sheet.id) : undefined;
 
@@ -710,6 +728,24 @@ export default function TicketsPage() {
             aria-label="Chercher un ticket"
             onChange={(e) => setQuery(e.target.value)}
           />
+          <div className={styles.segs} role="group" aria-label="Tickets montrés">
+            <button
+              type="button"
+              className={styles.seg}
+              aria-pressed={!mine}
+              onClick={() => setMine(false)}
+            >
+              Tous
+            </button>
+            <button
+              type="button"
+              className={styles.seg}
+              aria-pressed={mine}
+              onClick={() => setMine(true)}
+            >
+              Les miens
+            </button>
+          </div>
           <button type="button" className={styles.btn} onClick={() => setSettings(true)}>
             Réglages
           </button>

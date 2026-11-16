@@ -26,6 +26,8 @@ export interface HistoryEvent {
   kind: string;
   text?: string;
   pr?: string;
+  /** Qui a fait l'action (nom du compte administrateur) ; vide pour Claude et la validation automatique. */
+  by?: string;
 }
 export interface TrelloComment {
   at: number;
@@ -73,9 +75,14 @@ export interface TicketData {
   doneAt: number;
   history: HistoryEvent[];
   trello: TrelloOrigin | null;
+  /** Qui a créé le ticket (nom affiché) et son adresse, pour le filtre « Les miens » ; « Claude » s'il vient d'une
+   * session Claude (sentry-triage…), le créateur de la carte pour un ticket importé de Trello. Jamais modifiable. */
+  author: string;
+  authorEmail: string;
 }
 export interface Ticket extends TicketData {
   id: string;
+  createdAt: number;
   status: TicketStatus;
   position: number;
   files: TicketFile[];
@@ -122,6 +129,8 @@ export const EMPTY_DATA: TicketData = {
   doneAt: 0,
   history: [],
   trello: null,
+  author: "",
+  authorEmail: "",
 };
 
 const LONG = new Set(["answer", "feedback", "followUp", "notes"]);
@@ -154,6 +163,12 @@ export function cleanData(
     if (has(k) && out[k] && !/^https:\/\//.test(out[k])) {
       out[k] = "";
     }
+  }
+  if (has("author")) {
+    out.author = str(input.author, 80).trim();
+  }
+  if (has("authorEmail")) {
+    out.authorEmail = str(input.authorEmail, 200).trim().toLowerCase();
   }
   if (has("issue")) {
     out.issue = /^\d{1,9}$/.test(String(input.issue)) ? String(input.issue) : "";
@@ -244,6 +259,9 @@ function cleanHistory(h: unknown): HistoryEvent[] {
       if (o.pr) {
         ev.pr = str(o.pr, 400);
       }
+      if (o.by) {
+        ev.by = str(o.by, 80);
+      }
       return ev;
     })
     .filter((e) => e.kind);
@@ -291,7 +309,8 @@ const EDITABLE = ["title", "detail", "labels", "links", "model", "effort", "urge
 export function applyAction(
   t: { status: TicketStatus; data: TicketData },
   a: Action,
-  now: number
+  now: number,
+  by = ""
 ): { status: TicketStatus; data: TicketData } {
   const d = t.data;
   const from = t.status;
@@ -466,6 +485,12 @@ export function applyAction(
     case "preview":
       patch = { preview: a.url };
       break;
+  }
+  // Événements de l'utilisateur : signés du nom de l'administrateur qui a fait l'action
+  for (const e of ev) {
+    if (e.who === "moi" && by) {
+      e.by = by;
+    }
   }
   const data = cleanData(patch, d);
   if (a.type === "answer" && data.answer) {

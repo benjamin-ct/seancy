@@ -190,6 +190,22 @@ refused("Titre vidé refusé", () =>
   applyAction(ticket("todo"), { type: "edit", fields: { title: " " } }, T0)
 );
 
+const signed = applyAction(ticket("todo"), { type: "send" }, T0, "Benjamin");
+check("Action signée du nom de l'administrateur", signed.data.history.at(-1)?.by, "Benjamin");
+check(
+  "Réponse de Claude jamais signée d'un administrateur",
+  applyAction(signed, { type: "answer", text: "ok" }, T0, "Benjamin").data.history.at(-1)?.by,
+  undefined
+);
+check(
+  "Auteur jamais modifiable après coup",
+  applyAction(
+    ticket("todo", { author: "Benjamin" }),
+    { type: "edit", fields: { author: "Autre" } },
+    T0
+  ).data.author,
+  "Benjamin"
+);
 check(
   "Issue : réglages lisibles par le workflow",
   /Modèle : sonnet\. Effort : xhigh\. Hotfix : oui/.test(
@@ -376,6 +392,11 @@ const main = async () => {
     { cardId: "c1", at: 1, author: "Benjamin", text: "Vu sur mobile" },
   ]);
   check("Carte : réglages repris", [t.model, t.effort, t.urgent], ["sonnet", "xhigh", true]);
+  check(
+    "Carte : créateur Trello = auteur du ticket",
+    cardToTicket(card, "Idées", [], "Benjamin C.").author,
+    "Benjamin C."
+  );
   check("Carte : étiquettes de réglage retirées", t.labels, ["Bug"]);
   check(
     "Carte : checklist dans la description",

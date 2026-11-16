@@ -69,26 +69,32 @@ async function tickets<T>(
 
 interface Action {
   id: string;
+  type: string;
   date: string;
   data: { text?: string; card?: { id: string } };
   memberCreator?: { fullName?: string; username?: string };
 }
 
-async function allComments(): Promise<TrelloComment[]> {
-  const out: TrelloComment[] = [];
+// Commentaires des cartes et créateur de chaque carte (création, copie, carte faite d'un élément de checklist)
+async function allActions(): Promise<{ comments: TrelloComment[]; creators: Map<string, string> }> {
+  const comments: TrelloComment[] = [];
+  const creators = new Map<string, string>();
   let before = "";
   for (let page = 0; page < 50; page++) {
     const batch = await trello<Action[]>(
-      `/boards/${board}/actions?filter=commentCard&limit=1000&memberCreator_fields=fullName,username${before ? `&before=${before}` : ""}`
+      `/boards/${board}/actions?filter=commentCard,createCard,copyCard,convertToCardFromCheckItem,emailCard&limit=1000&memberCreator_fields=fullName,username${before ? `&before=${before}` : ""}`
     );
     for (const a of batch) {
-      if (a.data.card?.id && a.data.text) {
-        out.push({
+      const who = a.memberCreator?.fullName || a.memberCreator?.username || "";
+      if (a.type === "commentCard" && a.data.card?.id && a.data.text) {
+        comments.push({
           cardId: a.data.card.id,
           at: Date.parse(a.date) || 0,
-          author: a.memberCreator?.fullName || a.memberCreator?.username || "",
+          author: who,
           text: a.data.text,
         });
+      } else if (a.type !== "commentCard" && a.data.card?.id && who) {
+        creators.set(a.data.card.id, who);
       }
     }
     if (batch.length < 1000) {
@@ -96,7 +102,7 @@ async function allComments(): Promise<TrelloComment[]> {
     }
     before = batch.at(-1)!.id;
   }
-  return out;
+  return { comments, creators };
 }
 
 async function main() {
@@ -116,11 +122,12 @@ async function main() {
   const cards = await trello<TrelloCard[]>(
     `/boards/${board}/cards/open?fields=name,desc,idList,pos,shortUrl,dateLastActivity,labels&attachments=true&attachment_fields=id,name,url,mimeType,bytes,isUpload&checklists=all&checklist_fields=name`
   );
-  const comments = await allComments();
+  const { comments, creators } = await allActions();
   const list = boardToTickets(
     lists.filter((l) => !l.closed),
     cards,
-    comments
+    comments,
+    creators
   );
   const count: Record<string, number> = {};
   for (const t of list) {
@@ -138,7 +145,7 @@ async function main() {
     console.log("Essai à blanc (--dry-run) : rien n'a été envoyé.");
     for (const t of list.slice(0, 15)) {
       console.log(
-        `  [${t.status}] ${t.title}${t.labels.length ? ` (${t.labels.join(", ")})` : ""}${t.pr ? ` · ${t.pr}` : ""}`
+        `  [${t.status}] ${t.title}${t.labels.length ? ` (${t.labels.join(", ")})` : ""}${t.author ? ` · par ${t.author}` : ""}${t.pr ? ` · ${t.pr}` : ""}`
       );
     }
     return;

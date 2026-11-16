@@ -74,6 +74,9 @@ const siteOf = (env: Env) => (env.TICKETS_SITE_URL || "https://seancy.com").repl
 interface Access {
   admin: boolean;
   key: boolean;
+  /** Administrateur connecté (nom affiché, adresse) : signe ses tickets et ses actions. */
+  name: string;
+  email: string;
 }
 async function accessOf(request: Request, env: Env): Promise<Access> {
   const k = request.headers.get("x-tickets-key") || "";
@@ -86,12 +89,14 @@ async function accessOf(request: Request, env: Env): Promise<Access> {
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  let admin = false;
   if (admins.length && request.headers.get("cookie")) {
     const user = await getUserFromRequest(env.DB, request);
-    admin = !!user && admins.includes(user.email.toLowerCase());
+    if (user && admins.includes(user.email.toLowerCase())) {
+      const name = user.displayName || user.username || user.email.split("@")[0];
+      return { admin: true, key, name, email: user.email.toLowerCase() };
+    }
   }
-  return { admin, key };
+  return { admin: false, key, name: "", email: "" };
 }
 
 async function getMeta(env: Env, k: string): Promise<string | null> {
@@ -116,6 +121,7 @@ interface Row {
   data: string;
   trello_id: string | null;
   version: number;
+  created_at: number;
 }
 const statusOf = (s: string): TicketStatus =>
   (STATUSES as readonly string[]).includes(s) ? (s as TicketStatus) : "todo";
@@ -126,6 +132,7 @@ function toTicket(row: Row, files: TicketFile[] = []): Ticket {
     id: row.id,
     status: statusOf(row.status),
     position: row.position,
+    createdAt: row.created_at,
     files,
   };
 }
@@ -150,7 +157,7 @@ async function filesOf(env: Env, ids?: string[]): Promise<Map<string, TicketFile
 
 async function loadRow(env: Env, id: string): Promise<Row | null> {
   return env.DB.prepare(
-    "SELECT id, status, position, data, trello_id, version FROM tickets WHERE id = ?"
+    "SELECT id, status, position, data, trello_id, version, created_at FROM tickets WHERE id = ?"
   )
     .bind(id)
     .first<Row>();
@@ -161,7 +168,7 @@ async function loadTicket(env: Env, id: string): Promise<Ticket | null> {
 }
 async function loadAll(env: Env): Promise<Ticket[]> {
   const { results } = await env.DB.prepare(
-    "SELECT id, status, position, data, trello_id, version FROM tickets ORDER BY position"
+    "SELECT id, status, position, data, trello_id, version, created_at FROM tickets ORDER BY position"
   ).all<Row>();
   const files = await filesOf(env);
   return results.map((r) => toTicket(r, files.get(r.id)));
@@ -217,8 +224,8 @@ async function mutate(
   }
   throw new TicketError("Ticket modifié en même temps ailleurs : réessaie", 409);
 }
-const act = (env: Env, id: string, a: Action, now = Date.now()) =>
-  mutate(env, id, (t) => applyAction(t, a, now), now);
+const act = (env: Env, id: string, a: Action, now = Date.now(), by = "") =>
+  mutate(env, id, (t) => applyAction(t, a, now, by), now);
 
 async function columnOf(env: Env, status: TicketStatus) {
   const { results } = await env.DB.prepare("SELECT id, position FROM tickets WHERE status = ?")
@@ -361,7 +368,13 @@ async function autoFix(env: Env, t: Ticket, check: Check, now: number): Promise<
 }
 
 /** PR fusionnée (squash), branche supprimée, issues fermées ; hotfix : main refusionné dans develop. */
-async function mergeTicket(env: Env, t: Ticket, pr: PullRequest, now: number): Promise<Ticket> {
+async function mergeTicket(
+  env: Env,
+  t: Ticket,
+  pr: PullRequest,
+  now: number,
+  by = ""
+): Promise<Ticket> {
   const call = gh(env);
   const repo = repoOf(env);
   if (pr.draft) {
@@ -400,7 +413,7 @@ async function mergeTicket(env: Env, t: Ticket, pr: PullRequest, now: number): P
       backport = " · ⚠️ main n'a pas pu être refusionné dans develop (conflit) : à faire à la main";
     }
   }
-  const next = await act(env, t.id, t.followUp ? { type: "followup" } : { type: "done" }, now);
+  const next = await act(env, t.id, t.followUp ? { type: "followup" } : { type: "done" }, now, by);
   if (t.followUp) {
     await openIssue(env, next, true);
   }
@@ -411,24 +424,24 @@ async function mergeTicket(env: Env, t: Ticket, pr: PullRequest, now: number): P
   return next;
 }
 
-async function validate(env: Env, t: Ticket, followUp: string, now: number) {
+async function validate(env: Env, t: Ticket, followUp: string, now: number, by: string) {
   const n = prNumber(t.pr);
   if (!n) {
     // Ticket sans PR (rien à coder) : fait, ou la suite repart chez Claude
     if (followUp) {
-      await act(env, t.id, { type: "queue", followUp }, now);
-      const next = await act(env, t.id, { type: "followup" }, now);
+      await act(env, t.id, { type: "queue", followUp }, now, by);
+      const next = await act(env, t.id, { type: "followup" }, now, by);
       await openIssue(env, next, true);
       return { ok: true, merged: 0 };
     }
-    await act(env, t.id, { type: "done" }, now);
+    await act(env, t.id, { type: "done" }, now, by);
     await closeTicketIssues(env, t.id).catch(() => {});
     return { ok: true, merged: 0 };
   }
   const pr = await gh(env)<PullRequest>(`/repos/${repoOf(env)}/pulls/${n}`);
   const all = await loadAll(env);
   const ahead = all.filter((x) => x.queued && x.status !== "done" && x.id !== t.id);
-  const queued = await act(env, t.id, { type: "queue", followUp }, now);
+  const queued = await act(env, t.id, { type: "queue", followUp }, now, by);
   let check: Check | null = pr.merged
     ? null
     : ahead.length
@@ -438,13 +451,13 @@ async function validate(env: Env, t: Ticket, followUp: string, now: number) {
     check = await autoFix(env, { ...queued, autofix: 0 }, check, now);
   }
   if (check?.fail) {
-    await act(env, t.id, { type: "unqueue" }, now);
+    await act(env, t.id, { type: "unqueue" }, now, by);
     throw new TicketError(check.fail, 409);
   }
   if (check?.wait) {
     return { ok: true, queued: true, position: ahead.length + 1, why: check.wait };
   }
-  await mergeTicket(env, queued, pr, now);
+  await mergeTicket(env, queued, pr, now, by);
   return { ok: true, merged: Number(n) };
 }
 
@@ -710,7 +723,14 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
     }
     if (!parts.length && m === "POST") {
       const b = await body(request);
-      const data = cleanData(b);
+      // Seuls les champs d'un nouveau ticket ; l'auteur est celui qui fait la requête (Claude avec la clé)
+      const data = cleanData(
+        Object.fromEntries(
+          ["title", "detail", "labels", "links", "model", "effort", "urgent"].map((k) => [k, b[k]])
+        )
+      );
+      data.author = access.admin ? access.name : "Claude";
+      data.authorEmail = access.admin ? access.email : "";
       if (!data.title) {
         const first = data.detail.split("\n").find((l) => l.trim()) ?? "";
         data.title = first.trim().slice(0, 120);
@@ -731,11 +751,11 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
         now
       );
       if (b.send) {
-        const t = await act(env, id, { type: "send" }, now);
+        const t = await act(env, id, { type: "send" }, now, access.name);
         try {
           await openIssue(env, t);
         } catch (err) {
-          await act(env, id, { type: "unsend" }, now).catch(() => {});
+          await act(env, id, { type: "unsend" }, now, access.name).catch(() => {});
           throw err;
         }
       }
@@ -769,7 +789,7 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
       adminOnly();
       return json({
         ok: true,
-        ticket: await act(env, id, { type: "edit", fields: await body(request) }, now),
+        ticket: await act(env, id, { type: "edit", fields: await body(request) }, now, access.name),
       });
     }
     if (!sub && m === "DELETE") {
@@ -839,7 +859,7 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
         issue: text(b.issue, 12),
       };
       const before = await loadTicket(env, id);
-      const t = await act(env, id, a, now);
+      const t = await act(env, id, a, now, access.name);
       const msg = before?.stage !== a.stage ? noticeFor(a, t.title) : null;
       if (msg) {
         await notify(env, msg);
@@ -855,20 +875,23 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
       }
       const action = String(b.action);
       if (action === "unsend") {
-        const next = await act(env, id, { type: "unsend" }, now);
+        const next = await act(env, id, { type: "unsend" }, now, access.name);
         if (env.GITHUB_TICKETS_TOKEN && !prNumber(t.pr)) {
           await closeTicketIssues(env, id).catch(() => {});
         }
         return json({ ok: true, ticket: next });
       }
       if (action === "unqueue") {
-        return json({ ok: true, ticket: await act(env, id, { type: "unqueue" }, now) });
+        return json({
+          ok: true,
+          ticket: await act(env, id, { type: "unqueue" }, now, access.name),
+        });
       }
       requireGitHub(env);
       // Ticket parti chez Claude : si GitHub refuse (jeton expiré, panne), il
       // revient tel qu'il était plutôt que de rester « En cours » sans Claude
       const toClaude = async (a: Action, job: (next: Ticket) => Promise<void>) => {
-        const next = await act(env, id, a, now);
+        const next = await act(env, id, a, now, access.name);
         try {
           await job(next);
         } catch (err) {
@@ -905,7 +928,7 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
         if (t.status !== "review") {
           throw new TicketError("Seul un ticket à valider se valide", 409);
         }
-        return json(await validate(env, t, text(b.text).trim(), now));
+        return json(await validate(env, t, text(b.text).trim(), now, access.name));
       }
       throw new TicketError("Action inconnue");
     }
