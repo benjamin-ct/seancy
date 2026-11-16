@@ -2,6 +2,12 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.1.4 — 2026-11-16
+
+### Correctifs
+
+- Mises à jour techniques (bibliothèques du site et suivi des erreurs), sans changement visible.
+
 ## 0.1.3 — 2026-11-16
 
 ### Correctifs
