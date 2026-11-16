@@ -19,6 +19,7 @@ import {
   ADMIN_HOSTNAME,
   PREPROD_HOSTNAME,
   PRODUCTION_HOSTNAME,
+  REDIRECTED_TO_PRODUCTION_HOSTNAMES,
   isProductionHostname,
 } from "./sentry.ts";
 import type { Env } from "./types.ts";
@@ -59,7 +60,10 @@ export async function accessGate(request: Request, env: Env): Promise<boolean> {
 // administrateurs, pour essayer l'espace admin sous /admin. Jamais en
 // production, sur le domaine admin, ni sur l'environnement develop.
 const isPreviewHost = (host: string) =>
-  !isProductionHostname(host) && host !== PREPROD_HOSTNAME && !isAdminHostname(host);
+  !isProductionHostname(host) &&
+  host !== PREPROD_HOSTNAME &&
+  !isAdminHostname(host) &&
+  !REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(host);
 const isDemoAdmin = (email: string, host: string) =>
   isPreviewHost(host) && email.toLowerCase().endsWith("@exemple.test");
 
@@ -69,6 +73,8 @@ export async function adminOf(request: Request, env: Env): Promise<AuthUser | nu
   const admins = adminEmails(env);
   if (
     host === PRODUCTION_HOSTNAME ||
+    // Adresses workers.dev et www : seule la clé des sessions Claude y ouvre l'API des tickets
+    REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(host) ||
     (!admins.length && !isPreviewHost(host)) ||
     !request.headers.get("cookie")
   ) {

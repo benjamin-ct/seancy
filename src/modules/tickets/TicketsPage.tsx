@@ -50,6 +50,10 @@ import TicketSheet, { type Ask, type ReplyMode, type Run } from "./TicketSheet.t
 import styles from "./TicketsPage.module.css";
 
 const POLL_MS = 15_000;
+const SMALL_KEY = "seancy.tickets.small";
+// Flèches vers l'intérieur (réduire) ou vers l'extérieur (agrandir)
+const ZOOM_IN = "M14 10l7-7M14 10h5M14 10V5M10 14l-7 7M10 14H5M10 14v5";
+const ZOOM_OUT = "M21 3l-7 7M21 3h-5M21 3v5M3 21l7-7M3 21h5M3 21v-5";
 const LONG_PRESS_MS = 350;
 
 interface Drag {
@@ -439,6 +443,57 @@ export default function TicketsPage() {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [target, setTarget] = useState<{ col: TicketStatus; before: string } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  // Tableau réduit (bouton rond en bas à droite, ou pincement à deux doigts) :
+  // choix gardé sur cet appareil
+  const [small, setSmallState] = useState(() => {
+    try {
+      return localStorage.getItem(SMALL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setSmall = useCallback((on: boolean) => {
+    setSmallState(on);
+    try {
+      localStorage.setItem(SMALL_KEY, on ? "1" : "0");
+    } catch {
+      // stockage bloqué : le choix vaut pour cette visite
+    }
+  }, []);
+  // Pincement à deux doigts sur le tableau : écarter agrandit, rapprocher réduit
+  // (le tableau n'existe qu'une fois les tickets chargés)
+  const boardReady = tickets !== null;
+  useEffect(() => {
+    const b = boardRef.current;
+    if (!b) {
+      return;
+    }
+    let start = 0;
+    const span = (e: TouchEvent) =>
+      Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    const begin = (e: TouchEvent) => {
+      start = e.touches.length === 2 ? span(e) : 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (!start || e.touches.length !== 2) {
+        return;
+      }
+      const ratio = span(e) / start;
+      if (ratio < 0.75 || ratio > 1.33) {
+        setSmall(ratio < 1);
+        start = 0;
+      }
+    };
+    b.addEventListener("touchstart", begin, { passive: true });
+    b.addEventListener("touchmove", move, { passive: true });
+    return () => {
+      b.removeEventListener("touchstart", begin);
+      b.removeEventListener("touchmove", move);
+    };
+  }, [setSmall, boardReady]);
   const dragEnd = useRef(0);
 
   const load = useCallback(async () => {
@@ -763,7 +818,7 @@ export default function TicketsPage() {
       {!tickets ? (
         <p className={styles.muted}>Chargement…</p>
       ) : (
-        <div className={styles.board} ref={boardRef}>
+        <div className={`${styles.board} ${small ? styles.boardSmall : ""}`} ref={boardRef}>
           {COLUMNS.map((c) => {
             const list = cols[c.key];
             const off = dragged && !canMove(dragged, c.key);
@@ -859,6 +914,20 @@ export default function TicketsPage() {
             );
           })}
         </div>
+      )}
+      {tickets && (
+        <button
+          type="button"
+          className={styles.zoom}
+          aria-pressed={small}
+          aria-label={small ? "Agrandir le tableau" : "Réduire le tableau"}
+          title={small ? "Agrandir le tableau" : "Réduire le tableau"}
+          onClick={() => setSmall(!small)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d={small ? ZOOM_OUT : ZOOM_IN} />
+          </svg>
+        </button>
       )}
       {drag && dragged && (
         <div
