@@ -4,3 +4,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Git-flow : les mises à jour passent par develop, comme toute PR, puis
+    # partent en production avec la release develop → main suivante.
+    target-branch: "develop"
+    # Une seule PR par semaine pour les mises à jour mineures et correctives
+    # (au lieu d'une par paquet) ; les versions majeures restent à part.
+    groups:
+      mineures-et-correctifs:
+        update-types: ["minor", "patch"]
