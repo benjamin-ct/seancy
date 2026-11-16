@@ -262,8 +262,10 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
   sous-agents `reviewer` / `ui-reviewer`), ouvre la PR en brouillon et écrit son compte rendu dans le ticket
   (`node scripts/tickets.ts answer …`). Modèle (Opus ou Sonnet), effort et case **Hotfix** se choisissent par ticket.
 - **Validation** : « Valider et fusionner » fusionne la PR (squash) si elle contient toute sa base et que la CI est
-  passée ; sinon le ticket attend **en file** et la tâche planifiée (toutes les 2 minutes) met la PR à jour, attend
-  la CI et fusionne, un ticket à la fois. Conflit ou CI rouge : le ticket repart tout seul chez Claude (2 essais au
+  passée ; sinon le ticket attend **en file** : la page Tickets ouverte (au plus toutes les 90 s) et le workflow
+  **Tickets (passage)** (toutes les 10 minutes, `.github/workflows/tickets-tick.yml`) mettent la PR à jour, attendent
+  la CI et fusionnent, un ticket à la fois. Pas de tâche planifiée Cloudflare : le forfait gratuit en compte 5 pour
+  tout le compte. Conflit ou CI rouge : le ticket repart tout seul chez Claude (2 essais au
   plus). Hotfix : fusion dans `main`, puis `main` refusionné dans `develop`. « Valider et commenter » fusionne puis
   renvoie le commentaire à Claude (nouvelle PR). « Retouche » relance Claude sur la même PR, « Rouvrir » repart
   d'une branche neuve.

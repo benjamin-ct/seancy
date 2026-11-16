@@ -9,7 +9,7 @@
 // Contents et Actions sur le dépôt) ; le workflow la traite, ouvre la PR puis
 // écrit son compte rendu (POST /api/tickets/<id>/answer). Valider fusionne la
 // PR dès qu'elle contient toute sa base et que la CI est passée, sinon le
-// ticket attend en file (tâche planifiée toutes les 2 minutes, runTicketsCron).
+// ticket attend en file, avancée par runTicketsCron (voir « Passages » plus bas).
 // Notifications sur Discord (secret DISCORD_TICKETS_WEBHOOK_URL, facultatif).
 import { adminName, adminOf } from "./admin.ts";
 import { hashToken } from "./auth.ts";
@@ -44,7 +44,12 @@ import {
 } from "./tickets-logic.ts";
 import type { Env } from "./types.ts";
 
-export const TICKETS_CRON = "*/2 * * * *";
+// Passages de la file de validation, des relances et des previews : pas de
+// tâche planifiée Cloudflare (forfait gratuit : 5 par compte, toutes prises),
+// mais les rafraîchissements de la page Tickets (au plus un passage toutes les
+// 90 s) et le workflow GitHub « Tickets (passage) » toutes les 10 minutes
+// (POST /api/tickets/tick, gratuit sur un dépôt public).
+const TICK_EVERY_MS = 90_000;
 const FILE_MAX = 1_500_000;
 const FILES_PER_TICKET = 30;
 const FILE_TYPES = new Set([
@@ -562,6 +567,23 @@ async function findPreviews(env: Env, now: number): Promise<void> {
   }
 }
 
+/** Passage si le dernier date de plus de 90 s (rafraîchissements de la page, réponses de Claude). */
+async function maybeTick(
+  env: Env,
+  ctx: ExecutionContext | undefined,
+  now = Date.now()
+): Promise<void> {
+  if (!ctx || !env.GITHUB_TICKETS_TOKEN) {
+    return;
+  }
+  const last = Number(await getMeta(env, "tick")) || 0;
+  if (now - last < TICK_EVERY_MS) {
+    return;
+  }
+  await setMeta(env, "tick", String(now));
+  ctx.waitUntil(runTicketsCron(env, now));
+}
+
 export async function runTicketsCron(env: Env, now = Date.now()): Promise<void> {
   for (const [name, job] of [
     ["file de validation", () => validateQueue(env, now)],
@@ -688,7 +710,12 @@ async function importTickets(env: Env, items: unknown[]): Promise<Response> {
   return json({ ok: true, created, skipped });
 }
 
-export async function handleTickets(request: Request, env: Env, url: URL): Promise<Response> {
+export async function handleTickets(
+  request: Request,
+  env: Env,
+  url: URL,
+  ctx?: ExecutionContext
+): Promise<Response> {
   const access = await accessOf(request, env);
   if (!access.admin && !access.key) {
     return json({ error: "Réservé aux administrateurs de Seancy" }, 403);
@@ -706,6 +733,7 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
   const now = Date.now();
   try {
     if (!parts.length && m === "GET") {
+      await maybeTick(env, ctx, now);
       return json({
         tickets: await loadAll(env),
         config: {
@@ -763,6 +791,12 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
         .join("");
       await setMeta(env, "key", await hashToken(key));
       return json({ key });
+    }
+    // Passage demandé par le workflow « Tickets (passage) » (toutes les 10 minutes)
+    if (parts[0] === "tick" && m === "POST") {
+      await setMeta(env, "tick", String(now));
+      await runTicketsCron(env, now);
+      return json({ ok: true });
     }
     if (parts[0] === "import" && m === "POST") {
       const b = await body(request);
@@ -829,6 +863,7 @@ export async function handleTickets(request: Request, env: Env, url: URL): Promi
       return json({ ok: true, ticket: t });
     }
     if (sub === "answer" && m === "POST") {
+      await maybeTick(env, ctx, now);
       const b = await body(request);
       const t = await act(
         env,
