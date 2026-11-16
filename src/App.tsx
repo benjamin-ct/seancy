@@ -45,6 +45,8 @@ const PrivacyPolicyPage = lazy(() =>
 const ChangelogPage = lazy(() =>
   import("./modules/changelog/index.ts").then((m) => ({ default: m.ChangelogPage }))
 );
+// Page réservée aux administrateurs (tickets envoyés à Claude), non référencée.
+const Tickets = lazy(() => import("./modules/tickets/index.ts"));
 const NotFound = lazy(() => import("./modules/not-found/index.ts"));
 
 // Pendant le téléchargement d'une page : rien les 300 premières ms (cas
@@ -132,6 +134,7 @@ export default function App() {
               <Route path="/conditions-utilisation" element={<TermsPage />} />
               <Route path="/confidentialite" element={<PrivacyPolicyPage />} />
               <Route path="/changelog" element={<ChangelogPage />} />
+              <Route path="/tickets" element={<Tickets />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

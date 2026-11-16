@@ -21,6 +21,7 @@ Les données (catalogue, affiches, plateformes de streaming) viennent de [TMDB](
 - [Notifications push (optionnel)](#notifications-push-optionnel)
 - [Déploiement (Cloudflare Workers)](#déploiement-cloudflare-workers)
 - [Observabilité](#observabilité)
+- [Tickets (Claude)](#tickets-claude)
 - [Sécurité](#sécurité)
 - [Hooks Git locaux (Husky)](#hooks-git-locaux-husky)
 - [Fonctionnalités en stub](#fonctionnalités-en-stub)
@@ -208,6 +209,60 @@ Tant que les branches `feature/*` ciblent encore `main` (le pipeline Trello → 
 - **Dashboard unique** : [Grafana Cloud](https://grafana.com) (gratuit), avec les datasources Sentry et Cloudflare
   Analytics branchées sur un board réunissant les trois sections ci-dessus — configuration faite une fois depuis
   l'interface Grafana, en dehors de ce repo.
+
+## Tickets (Claude)
+
+Les demandes de développement ne passent plus par Trello : elles vivent dans Seancy, sur la page **`/tickets`**
+(réservée aux administrateurs, non référencée), un tableau façon Trello repris de Paddock Live : **Idées**,
+**À faire**, **En cours**, **À valider**, **Faits**. Une carte glissée d'une colonne à l'autre fait l'action de la
+colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec confirmation.
+
+- **Envoi** : le Worker (`worker/tickets.ts`, logique pure dans `worker/tickets-logic.ts`, tables de la migration
+  `0023`) ouvre une issue `Ticket <id>` avec `@claude`. Le workflow **Tickets (Claude)**
+  (`.github/workflows/claude-tickets.yml`) la traite aussitôt en suivant le skill `.claude/skills/ticket/SKILL.md`
+  (mêmes règles que l'ancien pipeline Trello : reprise de l'historique, feature ou hotfix, contrôles, changeset,
+  sous-agents `reviewer` / `ui-reviewer`), ouvre la PR en brouillon et écrit son compte rendu dans le ticket
+  (`node scripts/tickets.ts answer …`). Modèle (Opus ou Sonnet), effort et case **Hotfix** se choisissent par ticket.
+- **Validation** : « Valider et fusionner » fusionne la PR (squash) si elle contient toute sa base et que la CI est
+  passée ; sinon le ticket attend **en file** et la tâche planifiée (toutes les 2 minutes) met la PR à jour, attend
+  la CI et fusionne, un ticket à la fois. Conflit ou CI rouge : le ticket repart tout seul chez Claude (2 essais au
+  plus). Hotfix : fusion dans `main`, puis `main` refusionné dans `develop`. « Valider et commenter » fusionne puis
+  renvoie le commentaire à Claude (nouvelle PR). « Retouche » relance Claude sur la même PR, « Rouvrir » repart
+  d'une branche neuve.
+- **Quota Claude épuisé** : ticket en pause, relancé tout seul une heure après (8 fois au plus). La preview de la PR
+  (commentaire de la CI) est notée toute seule dans le ticket.
+- **Notifications** : sur Discord (prêt à valider, arrêté, en pause, fusionné, validation impossible).
+- **Sessions Claude** : `node scripts/tickets.ts` (`inbox`, `answer`, `progress`, `file`, `add`, `list`, `get`), avec
+  la clé `SEANCY_TICKETS_KEY` (créée sur la page Tickets → Réglages ; seule son empreinte est gardée).
+
+### Mise en route (une fois)
+
+1. **Release** `develop` → `main` (le Worker de production ne se déploie que depuis `main` ; la migration `0023` est
+   appliquée par la CI).
+2. **Secrets du Worker** `seancy` (dashboard Cloudflare → Settings → Variables and Secrets, type **Secret**) :
+   `TICKETS_ADMIN_EMAILS` (adresse(s) e-mail des comptes administrateurs, séparées par des virgules),
+   `GITHUB_TICKETS_TOKEN` (jeton GitHub _fine-grained_ sur le dépôt `seancy` : Contents, Issues et Pull requests en
+   écriture, Actions en lecture ; ajouter Workflows en écriture si Claude doit pouvoir modifier `.github/workflows`),
+   et facultativement `DISCORD_TICKETS_WEBHOOK_URL` (webhook Discord du salon des notifications).
+3. **Clé des sessions** : sur `seancy.com/tickets` → **Réglages** → **Créer la clé**.
+4. **Secrets du dépôt** (GitHub → Settings → Secrets and variables → Actions) : `CLAUDE_CODE_OAUTH_TOKEN` (le même
+   que sur le NAS), `TICKETS_GITHUB_TOKEN` (le même jeton qu'à l'étape 2 : les pushes et la PR passent par lui pour
+   que la CI et la preview se lancent), `SEANCY_TICKETS_KEY` (la clé de l'étape 3) ; facultatifs : `TMDB_API_KEY`,
+   `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` (captures des previews). Variable facultative `SEANCY_RUNNER`
+   (`self-hosted` pour faire tourner Claude sur un runner du NAS au lieu des machines de GitHub).
+
+### Bascule depuis Trello
+
+1. Ajouter les secrets `TRELLO_KEY` et `TRELLO_TOKEN` au dépôt (les mêmes valeurs que le `.env` du NAS).
+2. Actions → **Import Trello** → _Run workflow_ avec l'adresse du board, d'abord en **essai à blanc** (liste de ce qui
+   serait importé), puis pour de vrai (`scripts/trello-import.ts`, conversion dans `scripts/trelloLib.ts`). Toutes
+   les cartes ouvertes sont recopiées avec leur description, leurs checklists, étiquettes, commentaires et pièces
+   jointes (fichiers de 1,5 Mo au plus recopiés, les autres gardés en liens). Rien n'est envoyé à Claude : les cartes
+   « En cours » arrivent dans **À faire** (étiquette « Était en cours sur Trello »), « To merge » dans **À valider**.
+   L'import est rejouable : une carte déjà importée est sautée.
+3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Le skill `trello-ticket-pipeline` et la
+   création de cartes Trello par `sentry-triage` seront retirés ou adaptés (`node scripts/tickets.ts add`) une fois
+   la bascule faite.
 
 ## Sécurité
 

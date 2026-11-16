@@ -415,7 +415,7 @@ export async function servePageWithMeta(
 // d'indexation mesurable en contrepartie. Un groupe User-agent dédié ne fusionne pas
 // avec le groupe * (RFC 9309) : les Disallow communs doivent être répétés
 // ici, sinon Applebot regagnerait l'accès à /profil, /connexion, etc.
-const COMMON_DISALLOW = ["/profil", "/connexion", "/auth/", "/recherche"];
+const COMMON_DISALLOW = ["/profil", "/connexion", "/auth/", "/recherche", "/tickets"];
 
 export function serveRobots(url: URL): Response {
   const body = isProductionHostname(url.hostname)

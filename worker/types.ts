@@ -57,6 +57,17 @@ export interface Env {
   APPLE_KEY_ID?: string;
   /** Clé privée .p8 (PEM PKCS#8 ; les « \n » littéraux sont acceptés). */
   APPLE_PRIVATE_KEY?: string;
+  // Tickets de développement envoyés à Claude (page /tickets, voir
+  // worker/tickets.ts) : adresses e-mail des administrateurs (séparées par
+  // des virgules), jeton GitHub (Issues, Pull requests, Contents et Actions
+  // sur le dépôt), webhook Discord des notifications (facultatif).
+  TICKETS_ADMIN_EMAILS?: string;
+  GITHUB_TICKETS_TOKEN?: string;
+  DISCORD_TICKETS_WEBHOOK_URL?: string;
+  /** Dépôt des tickets (benjamin-ct/seancy par défaut). */
+  GITHUB_TICKETS_REPO?: string;
+  /** Adresse du site dans les notifications (https://seancy.com par défaut). */
+  TICKETS_SITE_URL?: string;
 
   // Variables non sensibles (commitées dans wrangler.jsonc, voir vars).
   VAPID_PUBLIC_KEY: string;

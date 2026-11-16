@@ -107,6 +107,7 @@ jobs:
           npm run verify:changeset-parsing
           npm run verify:changelog-release
           npm run verify:changelog-parser
+          npm run verify:tickets
 
       - name: Build
         run: npm run build
