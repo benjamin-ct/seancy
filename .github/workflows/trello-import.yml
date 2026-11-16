@@ -21,7 +21,7 @@ on:
         default: true
       target:
         description: "Serveur des tickets"
-        default: "https://seancy.com/api/tickets"
+        default: "https://seancy.creusatbenjamin.workers.dev/api/tickets"
 
 permissions:
   contents: read

@@ -850,6 +850,97 @@
   border: 1px solid var(--accent);
 }
 
+/* ---------- Tableau réduit (bouton de zoom, pincement) ---------- */
+
+.board {
+  touch-action: pan-x pan-y; /* le pincement règle le tableau, pas la page */
+}
+.boardSmall {
+  grid-auto-columns: minmax(180px, 220px);
+  gap: 8px;
+}
+.boardSmall .colHead {
+  padding: 9px 9px 6px;
+}
+.boardSmall .colHead h2 {
+  font-size: 14px;
+}
+.boardSmall .cards {
+  gap: 6px;
+  padding: 2px 6px 6px;
+}
+.boardSmall .mini {
+  gap: 4px;
+  padding: 7px 8px;
+}
+.boardSmall .miniTitle {
+  font-size: 12.5px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.boardSmall .lab {
+  padding: 1px 4px;
+  font-size: 9.5px;
+}
+.boardSmall .meta {
+  gap: 2px 8px;
+  font-size: 10.5px;
+}
+.boardSmall .who {
+  width: 18px;
+  height: 18px;
+  font-size: 9.5px;
+}
+.boardSmall .cover {
+  width: calc(100% + 16px);
+  max-height: 56px;
+  margin: -7px -8px 1px;
+}
+.boardSmall .compose,
+.boardSmall .add {
+  font-size: 13px;
+}
+.boardSmall .empty {
+  font-size: 12px;
+}
+
+.zoom {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--fg);
+  box-shadow: var(--shadow-lift);
+  cursor: pointer;
+}
+.zoom:hover {
+  background: var(--surface-3);
+}
+.zoom:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.zoom svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* ---------- Téléphone ---------- */
 
 @media (max-width: 860px) {
@@ -865,12 +956,21 @@
     flex: 1 1 100%;
     width: auto;
   }
+  /* Une colonne = l'écran (comme Trello et Paddock Live), aimantées en
+     défilant de côté ; place en bas pour le bouton de zoom */
   .board {
-    grid-auto-columns: 86%;
+    grid-auto-columns: 100%;
+    gap: 10px;
     margin: 0 -16px;
-    padding: 0 16px 12px;
+    padding: 0 16px 76px;
     scroll-snap-type: x mandatory;
     scroll-padding: 0 16px;
+  }
+  /* Tableau réduit : deux colonnes et un bout de la suivante */
+  .board.boardSmall {
+    grid-auto-columns: calc((100% - 8px) / 2.15);
+    gap: 8px;
+    scroll-snap-type: x proximity;
   }
   .col {
     max-height: calc(100dvh - var(--header-height) - var(--tabbar-offset) - 190px);

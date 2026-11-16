@@ -7,6 +7,7 @@ name: Tickets (passage)
 # planifiée Cloudflare : le forfait gratuit n'en compte que 5 pour tout le
 # compte. Gratuit ici (dépôt public). La page Tickets ouverte fait aussi
 # avancer la file à chaque rafraîchissement.
+# Adresse workers.dev : le Bot Fight Mode de seancy.com bloque les machines de GitHub.
 # Secret du dépôt : SEANCY_TICKETS_KEY (sans lui, rien n'est fait).
 
 on:
@@ -30,6 +31,6 @@ jobs:
           SEANCY_TICKETS_KEY: ${{ secrets.SEANCY_TICKETS_KEY }}
         run: |
           if [ -z "$SEANCY_TICKETS_KEY" ]; then echo "SEANCY_TICKETS_KEY absente : rien à faire"; exit 0; fi
-          code=$(curl -s -o /tmp/r.json -w '%{http_code}' -X POST -H "x-tickets-key: $SEANCY_TICKETS_KEY" https://seancy.com/api/tickets/tick)
+          code=$(curl -s -o /tmp/r.json -w '%{http_code}' -X POST -H "x-tickets-key: $SEANCY_TICKETS_KEY" https://seancy.creusatbenjamin.workers.dev/api/tickets/tick)
           echo "HTTP $code : $(cat /tmp/r.json)"
           [ "$code" = 200 ]

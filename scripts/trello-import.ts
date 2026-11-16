@@ -9,7 +9,8 @@
 // Lancé par le workflow « Import Trello » (onglet Actions), ou à la main :
 //   TRELLO_KEY=… TRELLO_TOKEN=… SEANCY_TICKETS_KEY=… node scripts/trello-import.ts <board> [--dry-run]
 // <board> : identifiant ou adresse du board (https://trello.com/b/<id>/…).
-// Serveur des tickets : SEANCY_TICKETS_URL (https://seancy.com/api/tickets par défaut).
+// Serveur des tickets : SEANCY_TICKETS_URL (https://seancy.creusatbenjamin.workers.dev/api/tickets
+// par défaut : hors de la zone seancy.com, dont le Bot Fight Mode bloque les machines de GitHub).
 import {
   boardToTickets,
   isImportableFile,
@@ -19,10 +20,9 @@ import {
 
 const KEY = process.env.TRELLO_KEY || "";
 const TOKEN = process.env.TRELLO_TOKEN || "";
-const TICKETS = (process.env.SEANCY_TICKETS_URL || "https://seancy.com/api/tickets").replace(
-  /\/$/,
-  ""
-);
+const TICKETS = (
+  process.env.SEANCY_TICKETS_URL || "https://seancy.creusatbenjamin.workers.dev/api/tickets"
+).replace(/\/$/, "");
 const TICKETS_KEY = process.env.SEANCY_TICKETS_KEY || "";
 const argv = process.argv.slice(2);
 const dry = argv.includes("--dry-run");

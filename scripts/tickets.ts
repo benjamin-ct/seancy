@@ -2,8 +2,8 @@
 // Tickets de la page /tickets, lus et tenus par les sessions Claude (workflow
 // « Tickets (Claude) », sentry-triage…). Clé : variable SEANCY_TICKETS_KEY
 // (créée sur la page Tickets → Réglages ; jamais dans une conversation ni un
-// fichier). Serveur : SEANCY_TICKETS_URL (https://seancy.com/api/tickets par
-// défaut).
+// fichier). Serveur : SEANCY_TICKETS_URL (https://seancy.creusatbenjamin.workers.dev/api/tickets par
+// défaut : hors de la zone seancy.com, dont le Bot Fight Mode bloque les machines de GitHub).
 //
 //   node scripts/tickets.ts inbox <id>                     le ticket à traiter : description, liens, fichiers
 //                                                          (copiés dans .cache/tickets/<id>/), carte Trello et
@@ -17,10 +17,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const BASE = (process.env.SEANCY_TICKETS_URL || "https://seancy.com/api/tickets").replace(
-  /\/$/,
-  ""
-);
+const BASE = (
+  process.env.SEANCY_TICKETS_URL || "https://seancy.creusatbenjamin.workers.dev/api/tickets"
+).replace(/\/$/, "");
 const KEY = process.env.SEANCY_TICKETS_KEY || "";
 const [cmd = "", ...rest] = process.argv.slice(2);
 

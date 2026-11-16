@@ -2915,7 +2915,14 @@ async function handleTmdbProxy(
 export default withSentry({
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(url.hostname)) {
+    // Exception : l'API des tickets appelée avec la clé des sessions Claude
+    // (workflows GitHub, import Trello) passe par l'adresse workers.dev, hors
+    // de la zone seancy.com, dont le Bot Fight Mode (forfait gratuit, sans
+    // exception possible) bloque les machines de GitHub. Seule la clé y ouvre
+    // l'accès : aucune session admin sur ces adresses (voir worker/admin.ts).
+    const ticketsByKey =
+      /^\/api\/tickets(\/|$)/.test(url.pathname) && request.headers.has("x-tickets-key");
+    if (REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(url.hostname) && !ticketsByKey) {
       return Response.redirect(`https://${PRODUCTION_HOSTNAME}${url.pathname}${url.search}`, 301);
     }
     // `run_worker_first` (wrangler.jsonc) route surtout /api/* ici : les
