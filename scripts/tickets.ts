@@ -16,6 +16,7 @@
 //   node scripts/tickets.ts get <id>                        ticket complet (JSON)
 import fs from "node:fs";
 import path from "node:path";
+import { shrinkImage } from "./shrinkImage.ts";
 
 const BASE = (
   process.env.SEANCY_TICKETS_URL || "https://seancy.creusatbenjamin.workers.dev/api/tickets"
@@ -205,12 +206,18 @@ const commands: Record<string, () => Promise<void>> = {
       if (!type) {
         throw new Error(`${f} : type non pris en charge (${Object.keys(TYPES).join(" ")})`);
       }
-      await call(`/${pos[0]}/files?name=${encodeURIComponent(path.basename(f))}`, {
-        method: "PUT",
-        raw: fs.readFileSync(f),
+      // Image de plus de 200 Ko : réduite en WebP (limite de calcul du Worker, voir scripts/shrinkImage.ts)
+      const file = await shrinkImage({
+        bytes: new Uint8Array(fs.readFileSync(f)),
         type,
+        name: path.basename(f),
       });
-      console.log(`${path.basename(f)} joint au ticket`);
+      await call(`/${pos[0]}/files?name=${encodeURIComponent(file.name)}`, {
+        method: "PUT",
+        raw: Buffer.from(file.bytes),
+        type: file.type,
+      });
+      console.log(`${file.name} joint au ticket`);
     }
   },
   async add() {

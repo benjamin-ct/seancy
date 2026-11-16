@@ -35,6 +35,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      # Dépendances : sharp, pour réduire les images avant l'envoi (scripts/shrinkImage.ts)
+      - run: npm ci
       - name: Import
         env:
           TRELLO_KEY: ${{ secrets.TRELLO_KEY }}

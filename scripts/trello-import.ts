@@ -11,6 +11,7 @@
 // <board> : identifiant ou adresse du board (https://trello.com/b/<id>/…).
 // Serveur des tickets : SEANCY_TICKETS_URL (https://seancy.creusatbenjamin.workers.dev/api/tickets
 // par défaut : hors de la zone seancy.com, dont le Bot Fight Mode bloque les machines de GitHub).
+import { shrinkImage, storedName } from "./shrinkImage.ts";
 import {
   boardToTickets,
   isImportableFile,
@@ -57,7 +58,7 @@ async function tickets<T>(
   const res = await fetch(`${TICKETS}${path}`, {
     method: init.method ?? "POST",
     headers: { "x-tickets-key": TICKETS_KEY, "content-type": init.type ?? "application/json" },
-    body: init.raw ? init.raw : JSON.stringify(init.body ?? {}),
+    body: init.raw ? init.raw : init.method === "GET" ? undefined : JSON.stringify(init.body ?? {}),
     signal: AbortSignal.timeout(120_000),
   });
   const d = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -150,36 +151,68 @@ async function main() {
     }
     return;
   }
+  // Tickets créés et déjà importés : les pièces jointes manquantes sont envoyées dans les deux cas (relancer l'import
+  // complète les fichiers en échec d'un lancement précédent, sans doublon)
   const created = new Map<string, string>();
+  const known = new Map<string, string>();
   let skipped = 0;
   for (let i = 0; i < list.length; i += 50) {
-    const r = await tickets<{ created: { trelloId: string; id: string }[]; skipped: unknown[] }>(
-      "/import",
-      {
-        body: { tickets: list.slice(i, i + 50) },
-      }
-    );
+    const r = await tickets<{
+      created: { trelloId: string; id: string }[];
+      skipped: { trelloId: string; id: string }[];
+    }>("/import", {
+      body: { tickets: list.slice(i, i + 50) },
+    });
     for (const c of r.created) {
       created.set(c.trelloId, c.id);
+    }
+    for (const c of r.skipped) {
+      known.set(c.trelloId, c.id);
     }
     skipped += r.skipped.length;
     console.log(`  ${Math.min(i + 50, list.length)}/${list.length} envoyés`);
   }
   let files = 0;
   let failed = 0;
+  let present = 0;
   for (const card of cards) {
-    const id = created.get(card.id);
-    for (const a of id ? (card.attachments ?? []).filter(isImportableFile) : []) {
+    const id = created.get(card.id) ?? known.get(card.id);
+    const wanted = id ? (card.attachments ?? []).filter(isImportableFile) : [];
+    if (!id || !wanted.length) {
+      continue;
+    }
+    // Déjà recopiée : même nom et même taille (envoyée telle quelle), ou son nom converti (WebP, identifiant inclus)
+    const have = known.has(card.id)
+      ? (
+          await tickets<{ ticket: { files: { name: string; size: number }[] } }>(`/${id}`, {
+            method: "GET",
+          })
+        ).ticket.files
+      : [];
+    for (const a of wanted) {
+      const suffix = `-${a.id.slice(-6)}`;
+      const converted = storedName(`${a.name.replace(/\.\w+$/, "")}${suffix}.webp`);
+      if (
+        have.some(
+          (f) => (f.name === storedName(a.name) && f.size === a.bytes) || f.name === converted
+        )
+      ) {
+        present++;
+        continue;
+      }
       try {
         const res = await fetch(a.url, { headers: auth, signal: AbortSignal.timeout(60_000) });
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        await tickets(`/${id}/files?name=${encodeURIComponent(a.name)}`, {
+        const file = await shrinkImage(
+          { bytes: new Uint8Array(await res.arrayBuffer()), type: a.mimeType ?? "", name: a.name },
+          suffix
+        );
+        await tickets(`/${id}/files?name=${encodeURIComponent(file.name)}`, {
           method: "PUT",
-          raw: bytes,
-          type: a.mimeType ?? "",
+          raw: file.bytes,
+          type: file.type,
         });
         files++;
       } catch (err) {
@@ -191,7 +224,7 @@ async function main() {
     }
   }
   console.log(
-    `Import terminé : ${created.size} tickets créés, ${skipped} déjà importés (sautés), ${files} fichiers recopiés${failed ? `, ${failed} fichiers en échec` : ""}.`
+    `Import terminé : ${created.size} tickets créés, ${skipped} déjà importés (sautés), ${files} fichiers recopiés, ${present} déjà présents${failed ? `, ${failed} fichiers en échec` : ""}.`
   );
 }
 
