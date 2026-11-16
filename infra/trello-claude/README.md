@@ -177,6 +177,18 @@ pour vérifier son travail. Deux cibles possibles :
 
 Sans les étapes 1-2, les captures fonctionnent quand même, mais uniquement sur le serveur local.
 
+**Pages connectées avec synchro temps réel (SSE/WebSocket, voir `core/sync/liveSync.ts`)** : par défaut,
+`seancy-screenshot` attend `networkidle` avant de capturer — une page qui ouvre une connexion SSE/WS
+persistante n'atteint jamais cet état, et l'outil la considère comme jamais chargée. Utiliser
+`--ready <sélecteur CSS>` pour attendre un état applicatif précis à la place :
+
+```bash
+# <sélecteur> : un élément CSS présent seulement une fois la page réellement chargée
+# (ex. un élément du contenu principal, absent pendant le spinner/skeleton initial)
+docker exec -u claudeuser seancy-repo seancy-screenshot https://<preview>.dev.seancy.com/profil /tmp/profil.png \
+  --cookie seancy_session=<jeton> --ready '<sélecteur>'
+```
+
 ## Déploiement initial sur le serveur
 
 ```bash
