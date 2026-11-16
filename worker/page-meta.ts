@@ -14,7 +14,7 @@ import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
 import { detectKnownCrawler } from "./bots.ts";
 import { checkRateLimitInMemory } from "./rate-limit-memory.ts";
 import { logError } from "./logger.ts";
-import { isProductionHostname } from "./sentry.ts";
+import { ADMIN_HOSTNAME, isProductionHostname } from "./sentry.ts";
 import type { Env } from "./types.ts";
 
 const SITE_NAME = "Seancy";
@@ -360,7 +360,7 @@ export async function servePageWithMeta(
   const lang = langFromRequest(request);
   const canonical = `${url.origin}${url.pathname.replace(/\/$/, "")}`;
   // Les previews ne doivent jamais être indexées.
-  const noindex = !isProductionHostname(url.hostname);
+  const noindex = !isProductionHostname(url.hostname) || url.hostname === ADMIN_HOSTNAME;
   const [, mediaType, mediaId, profileHandle, listSlug] = match;
   try {
     let meta: PageMeta | null = null;
@@ -418,21 +418,23 @@ export async function servePageWithMeta(
 const COMMON_DISALLOW = ["/profil", "/connexion", "/auth/", "/recherche", "/tickets"];
 
 export function serveRobots(url: URL): Response {
-  const body = isProductionHostname(url.hostname)
-    ? [
-        "User-agent: *",
-        ...COMMON_DISALLOW.map((path) => `Disallow: ${path}`),
-        "",
-        "User-agent: Applebot",
-        ...COMMON_DISALLOW.map((path) => `Disallow: ${path}`),
-        "Disallow: /media/",
-        "Disallow: /personne/",
-        "Disallow: /api/tmdb/person/",
-        "",
-        `Sitemap: ${url.origin}/sitemap.xml`,
-        "",
-      ].join("\n")
-    : "User-agent: *\nDisallow: /\n";
+  // Espace admin : rien à indexer
+  const body =
+    isProductionHostname(url.hostname) && url.hostname !== ADMIN_HOSTNAME
+      ? [
+          "User-agent: *",
+          ...COMMON_DISALLOW.map((path) => `Disallow: ${path}`),
+          "",
+          "User-agent: Applebot",
+          ...COMMON_DISALLOW.map((path) => `Disallow: ${path}`),
+          "Disallow: /media/",
+          "Disallow: /personne/",
+          "Disallow: /api/tmdb/person/",
+          "",
+          `Sitemap: ${url.origin}/sitemap.xml`,
+          "",
+        ].join("\n")
+      : "User-agent: *\nDisallow: /\n";
   return new Response(body, {
     headers: {
       "content-type": "text/plain; charset=utf-8",

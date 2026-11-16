@@ -58,6 +58,7 @@ import {
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { TICKETS_CRON, handleTickets, runTicketsCron } from "./tickets.ts";
+import { accessGate, handleAdmin, isAdminHostname } from "./admin.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
   buildTasteProfile,
@@ -2946,6 +2947,11 @@ export default withSentry({
     // page d'erreur Cloudflare en HTML (sans en-têtes de sécurité), que le
     // client ne sait pas lire.
     try {
+      // Espace admin : tout appel /api de son domaine doit porter un jeton
+      // Cloudflare Access valide (en plus de la connexion admin de Seancy).
+      if (isAdminHostname(url.hostname) && !(await accessGate(request, env))) {
+        return withSecurityHeaders(json({ error: "Accès refusé (Cloudflare Access)." }, 403));
+      }
       // Poignée de main WebSocket de la synchro temps réel : la réponse 101
       // ne doit pas passer par withSecurityHeaders (voir openSyncSocket).
       if (url.pathname === "/api/sync/socket" && request.method === "GET") {
@@ -2987,8 +2993,12 @@ async function routeRequest(
   url: URL,
   ctx: ExecutionContext
 ): Promise<Response> {
-  // Tickets de développement envoyés à Claude (page /tickets) : réservés aux
-  // administrateurs et aux sessions Claude (voir worker/tickets.ts).
+  // Espace admin (tableau de bord, outils) et tickets envoyés à Claude :
+  // réservés aux administrateurs et aux sessions Claude (voir worker/admin.ts
+  // et worker/tickets.ts).
+  if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) {
+    return handleAdmin(request, env, url, ctx);
+  }
   if (url.pathname === "/api/tickets" || url.pathname.startsWith("/api/tickets/")) {
     return handleTickets(request, env, url);
   }

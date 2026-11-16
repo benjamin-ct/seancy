@@ -21,8 +21,14 @@ export const REDIRECTED_TO_PRODUCTION_HOSTNAMES: readonly string[] = [
   "seancy.creusatbenjamin.workers.dev",
 ];
 
+// Espace admin (voir worker/admin.ts) : même Worker, domaine à part derrière
+// Cloudflare Access. Compté comme la prod partout où le domaine décide d'un
+// comportement de dev (identifiants de connexion renvoyés dans la réponse,
+// outils de validation des previews…), mais jamais indexé (voir page-meta.ts).
+export const ADMIN_HOSTNAME = "admin.seancy.com";
+
 export function isProductionHostname(hostname: string): boolean {
-  return hostname === PRODUCTION_HOSTNAME;
+  return hostname === PRODUCTION_HOSTNAME || hostname === ADMIN_HOSTNAME;
 }
 
 // Hostname de l'environnement `develop` persistant (voir ticket Trello

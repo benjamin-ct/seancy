@@ -1,6 +1,6 @@
 // Tickets de développement envoyés à Claude : routes /api/tickets/*, appelées
-// par la page /tickets (administrateurs connectés : secret
-// TICKETS_ADMIN_EMAILS) et par les sessions Claude du workflow « Tickets
+// par la page Tickets de l'espace admin (administrateurs connectés : secret
+// ADMIN_EMAILS, voir worker/admin.ts) et par les sessions Claude du workflow « Tickets
 // (Claude) » (en-tête X-Tickets-Key, clé créée depuis la page, seule son
 // empreinte est gardée). Logique pure dans worker/tickets-logic.ts.
 //
@@ -11,7 +11,8 @@
 // PR dès qu'elle contient toute sa base et que la CI est passée, sinon le
 // ticket attend en file (tâche planifiée toutes les 2 minutes, runTicketsCron).
 // Notifications sur Discord (secret DISCORD_TICKETS_WEBHOOK_URL, facultatif).
-import { getUserFromRequest, hashToken } from "./auth.ts";
+import { adminName, adminOf } from "./admin.ts";
+import { hashToken } from "./auth.ts";
 import {
   AUTOFIX_MAX,
   FIX_TEXT,
@@ -67,7 +68,8 @@ const newId = () =>
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 const repoOf = (env: Env) => env.GITHUB_TICKETS_REPO || "benjamin-ct/seancy";
-const siteOf = (env: Env) => (env.TICKETS_SITE_URL || "https://seancy.com").replace(/\/$/, "");
+const siteOf = (env: Env) =>
+  (env.TICKETS_SITE_URL || "https://admin.seancy.com").replace(/\/$/, "");
 
 // ---------- Accès ----------
 
@@ -85,18 +87,11 @@ async function accessOf(request: Request, env: Env): Promise<Access> {
     const saved = await getMeta(env, "key");
     key = !!saved && (await hashToken(k)) === saved;
   }
-  const admins = (env.TICKETS_ADMIN_EMAILS || "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  if (admins.length && request.headers.get("cookie")) {
-    const user = await getUserFromRequest(env.DB, request);
-    if (user && admins.includes(user.email.toLowerCase())) {
-      const name = user.displayName || user.username || user.email.split("@")[0];
-      return { admin: true, key, name, email: user.email.toLowerCase() };
-    }
-  }
-  return { admin: false, key, name: "", email: "" };
+  // Administrateur : même porte que tout l'espace admin (worker/admin.ts)
+  const user = await adminOf(request, env);
+  return user
+    ? { admin: true, key, name: adminName(user), email: user.email.toLowerCase() }
+    : { admin: false, key, name: "", email: "" };
 }
 
 async function getMeta(env: Env, k: string): Promise<string | null> {

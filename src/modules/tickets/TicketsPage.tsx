@@ -705,8 +705,8 @@ export default function TicketsPage() {
       <div className={styles.page}>
         <h1 className={styles.title}>Tickets</h1>
         <p className={styles.muted}>
-          {denied.message}. L'adresse e-mail du compte doit figurer dans le secret
-          TICKETS_ADMIN_EMAILS du Worker.
+          {denied.message}. L'adresse e-mail du compte doit figurer dans le secret ADMIN_EMAILS du
+          Worker.
         </p>
       </div>
     );
