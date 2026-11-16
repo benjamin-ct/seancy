@@ -15,7 +15,12 @@ import { logError } from "./logger.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { syncPopularTitles } from "./search-index.ts";
-import { ADMIN_HOSTNAME, PRODUCTION_HOSTNAME } from "./sentry.ts";
+import {
+  ADMIN_HOSTNAME,
+  PREPROD_HOSTNAME,
+  PRODUCTION_HOSTNAME,
+  isProductionHostname,
+} from "./sentry.ts";
 import type { Env } from "./types.ts";
 
 const json = (data: unknown, status = 200) =>
@@ -48,14 +53,31 @@ export async function accessGate(request: Request, env: Env): Promise<boolean> {
 }
 
 /** Administrateur connecté (compte Seancy dans ADMIN_EMAILS), jamais sur le site public. */
+// Previews de PR (derrière le Cloudflare Access des previews, connexion par
+// code affiché à l'écran) : les comptes de démo du seed
+// (scripts/fixtures/develop-seed.sql, adresses @exemple.test) sont aussi
+// administrateurs, pour essayer l'espace admin sous /admin. Jamais en
+// production, sur le domaine admin, ni sur l'environnement develop.
+const isPreviewHost = (host: string) =>
+  !isProductionHostname(host) && host !== PREPROD_HOSTNAME && !isAdminHostname(host);
+const isDemoAdmin = (email: string, host: string) =>
+  isPreviewHost(host) && email.toLowerCase().endsWith("@exemple.test");
+
+/** Administrateur connecté (compte Seancy dans ADMIN_EMAILS), jamais sur le site public. */
 export async function adminOf(request: Request, env: Env): Promise<AuthUser | null> {
   const host = new URL(request.url).hostname;
   const admins = adminEmails(env);
-  if (host === PRODUCTION_HOSTNAME || !admins.length || !request.headers.get("cookie")) {
+  if (
+    host === PRODUCTION_HOSTNAME ||
+    (!admins.length && !isPreviewHost(host)) ||
+    !request.headers.get("cookie")
+  ) {
     return null;
   }
   const user = await getUserFromRequest(env.DB, request);
-  return user && admins.includes(user.email.toLowerCase()) ? user : null;
+  return user && (admins.includes(user.email.toLowerCase()) || isDemoAdmin(user.email, host))
+    ? user
+    : null;
 }
 export const adminName = (u: AuthUser) => u.displayName || u.username || u.email.split("@")[0];
 
