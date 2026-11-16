@@ -57,6 +57,22 @@ export interface Env {
   APPLE_KEY_ID?: string;
   /** Clé privée .p8 (PEM PKCS#8 ; les « \n » littéraux sont acceptés). */
   APPLE_PRIVATE_KEY?: string;
+  // Espace admin (admin.seancy.com, voir worker/admin.ts) : adresses e-mail
+  // des comptes administrateurs (séparées par des virgules) ; Cloudflare
+  // Access devant le domaine : équipe (<équipe>.cloudflareaccess.com) et
+  // « Application Audience (AUD) Tag » de l'application (worker/access.ts).
+  ADMIN_EMAILS?: string;
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
+  // Tickets envoyés à Claude (worker/tickets.ts) : jeton GitHub (Issues, Pull
+  // requests, Contents et Actions sur le dépôt), webhook Discord des
+  // notifications (facultatif).
+  GITHUB_TICKETS_TOKEN?: string;
+  DISCORD_TICKETS_WEBHOOK_URL?: string;
+  /** Dépôt des tickets (benjamin-ct/seancy par défaut). */
+  GITHUB_TICKETS_REPO?: string;
+  /** Adresse de l'espace admin dans les notifications (https://admin.seancy.com par défaut). */
+  TICKETS_SITE_URL?: string;
 
   // Variables non sensibles (commitées dans wrangler.jsonc, voir vars).
   VAPID_PUBLIC_KEY: string;

@@ -57,6 +57,8 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
+import { TICKETS_CRON, handleTickets, runTicketsCron } from "./tickets.ts";
+import { accessGate, handleAdmin, isAdminHostname } from "./admin.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
   buildTasteProfile,
@@ -2945,6 +2947,11 @@ export default withSentry({
     // page d'erreur Cloudflare en HTML (sans en-têtes de sécurité), que le
     // client ne sait pas lire.
     try {
+      // Espace admin : tout appel /api de son domaine doit porter un jeton
+      // Cloudflare Access valide (en plus de la connexion admin de Seancy).
+      if (isAdminHostname(url.hostname) && !(await accessGate(request, env))) {
+        return withSecurityHeaders(json({ error: "Accès refusé (Cloudflare Access)." }, 403));
+      }
       // Poignée de main WebSocket de la synchro temps réel : la réponse 101
       // ne doit pas passer par withSecurityHeaders (voir openSyncSocket).
       if (url.pathname === "/api/sync/socket" && request.method === "GET") {
@@ -2967,6 +2974,11 @@ export default withSentry({
   // invocation plutôt que dans celle de runDailyCheck, pour ne pas partager
   // son budget de sous-requêtes TMDB avec les notifications quotidiennes.
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // File de validation des tickets, relances et previews (toutes les 2 min).
+    if (event.cron === TICKETS_CRON) {
+      ctx.waitUntil(runTicketsCron(env));
+      return;
+    }
     if (event.cron === SEARCH_INDEX_SYNC_CRON) {
       ctx.waitUntil(syncPopularTitles(env));
       return;
@@ -2981,6 +2993,15 @@ async function routeRequest(
   url: URL,
   ctx: ExecutionContext
 ): Promise<Response> {
+  // Espace admin (tableau de bord, outils) et tickets envoyés à Claude :
+  // réservés aux administrateurs et aux sessions Claude (voir worker/admin.ts
+  // et worker/tickets.ts).
+  if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) {
+    return handleAdmin(request, env, url, ctx);
+  }
+  if (url.pathname === "/api/tickets" || url.pathname.startsWith("/api/tickets/")) {
+    return handleTickets(request, env, url);
+  }
   if (url.pathname === "/api/vapid-public-key" && request.method === "GET") {
     if (!env.VAPID_PUBLIC_KEY) {
       return json({ error: "VAPID_PUBLIC_KEY non configurée." }, 503);
