@@ -1,0 +1,35 @@
+name: Tickets (passage)
+
+# Fait avancer les tickets envoyés à Claude toutes les 10 minutes : fusion des
+# tickets validés en file (une fois la PR à jour et la CI verte), relance des
+# tickets en pause faute de quota Claude, preview notée dans les tickets à
+# valider (POST /api/tickets/tick, worker/tickets.ts). Remplace une tâche
+# planifiée Cloudflare : le forfait gratuit n'en compte que 5 pour tout le
+# compte. Gratuit ici (dépôt public). La page Tickets ouverte fait aussi
+# avancer la file à chaque rafraîchissement.
+# Secret du dépôt : SEANCY_TICKETS_KEY (sans lui, rien n'est fait).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: tickets-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Passage
+        env:
+          SEANCY_TICKETS_KEY: ${{ secrets.SEANCY_TICKETS_KEY }}
+        run: |
+          if [ -z "$SEANCY_TICKETS_KEY" ]; then echo "SEANCY_TICKETS_KEY absente : rien à faire"; exit 0; fi
+          code=$(curl -s -o /tmp/r.json -w '%{http_code}' -X POST -H "x-tickets-key: $SEANCY_TICKETS_KEY" https://seancy.com/api/tickets/tick)
+          echo "HTTP $code : $(cat /tmp/r.json)"
+          [ "$code" = 200 ]

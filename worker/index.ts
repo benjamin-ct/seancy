@@ -57,7 +57,7 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
-import { TICKETS_CRON, handleTickets, runTicketsCron } from "./tickets.ts";
+import { handleTickets } from "./tickets.ts";
 import { accessGate, handleAdmin, isAdminHostname } from "./admin.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
@@ -2974,11 +2974,6 @@ export default withSentry({
   // invocation plutôt que dans celle de runDailyCheck, pour ne pas partager
   // son budget de sous-requêtes TMDB avec les notifications quotidiennes.
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    // File de validation des tickets, relances et previews (toutes les 2 min).
-    if (event.cron === TICKETS_CRON) {
-      ctx.waitUntil(runTicketsCron(env));
-      return;
-    }
     if (event.cron === SEARCH_INDEX_SYNC_CRON) {
       ctx.waitUntil(syncPopularTitles(env));
       return;
@@ -3000,7 +2995,7 @@ async function routeRequest(
     return handleAdmin(request, env, url, ctx);
   }
   if (url.pathname === "/api/tickets" || url.pathname.startsWith("/api/tickets/")) {
-    return handleTickets(request, env, url);
+    return handleTickets(request, env, url, ctx);
   }
   if (url.pathname === "/api/vapid-public-key" && request.method === "GET") {
     if (!env.VAPID_PUBLIC_KEY) {

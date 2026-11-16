@@ -193,7 +193,12 @@ jobs:
     needs:
       - verify
       - secrets-scan
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    # Pas sur les PR de Dependabot : GitHub ne leur donne que les secrets
+    # « Dependabot » (pas de CLOUDFLARE_API_TOKEN), le job échouait donc
+    # toujours. Volontairement pas de jeton Cloudflare de ce côté : le code
+    # d'une dépendance mise à jour tournerait avec. Une mise à jour de
+    # dépendance se vérifie par le job verify (lint, types, tests, build).
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -301,7 +306,7 @@ jobs:
     # Ni verify/secrets-scan ni deploy-preview n'ont besoin d'avoir réussi
     # pour nettoyer : indépendant du sort de la PR (mergée ou simplement
     # fermée), on veut toujours libérer la base D1 si elle a été créée.
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
