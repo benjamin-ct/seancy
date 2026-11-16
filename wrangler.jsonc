@@ -126,10 +126,10 @@
   // les notifications push (voir worker/scheduled.ts) ; 7h30 UTC resynchronise
   // l'index local des titres populaires utilisé par la recherche (voir
   // worker/search-index.ts). Décalé de 30 min pour ne pas partager son
-  // budget de sous-requêtes TMDB avec le premier. Toutes les 2 min : file de
-  // validation des tickets envoyés à Claude, relances et previews (voir
-  // worker/tickets.ts ; ne fait rien sans le secret GITHUB_TICKETS_TOKEN).
+  // budget de sous-requêtes TMDB avec le premier. Pas de troisième tâche : le forfait
+  // gratuit en compte 5 pour tout le compte (prod + develop + autres Workers) ;
+  // la file des tickets avance autrement (voir worker/tickets.ts, maybeTick).
   "triggers": {
-    "crons": ["0 7 * * *", "30 7 * * *", "*/2 * * * *"]
+    "crons": ["0 7 * * *", "30 7 * * *"]
   }
 }
