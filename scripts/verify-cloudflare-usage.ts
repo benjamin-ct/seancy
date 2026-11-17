@@ -89,6 +89,53 @@ check("7 derniers jours, le plus récent d'abord", u.history, [
   { date: "2026-11-16", requests: 900, errors: 9, neurons: 50, rowsWritten: 3 },
 ]);
 
+check(
+  "Bases sans la liste D1 : celles qui ont une taille, la prod nommée et en tête",
+  [u.dbNames, u.databases.map((d) => [d.name, d.prod, d.size, d.rowsRead, d.rowsWritten])],
+  [
+    false,
+    [
+      ["seancy-notifications", true, 1000, 0, 0],
+      ["", false, 500, 5, 1],
+    ],
+  ]
+);
+const named = summarize(raw, day, [
+  {
+    uuid: "b",
+    name: "seancy-develop",
+    created_at: "2026-10-19T12:35:08Z",
+    num_tables: 30,
+    file_size: 600,
+  },
+  { uuid: "c", name: "seancy-preview-pr-344", num_tables: 30, file_size: 9000 },
+  {
+    uuid: "3403301e-2ef9-4f70-9f2e-e10d577beda0",
+    name: "seancy-notifications",
+    num_tables: 31,
+    file_size: 2000,
+  },
+]);
+check(
+  "Bases avec la liste D1 : noms, tables, prod en tête puis la plus grosse, total recalculé",
+  [
+    named.dbNames,
+    named.storage,
+    named.prodStorage,
+    named.databases.map((d) => [d.name, d.tables, d.size, d.rowsRead]),
+  ],
+  [
+    true,
+    11600,
+    2000,
+    [
+      ["seancy-notifications", 31, 2000, 0],
+      ["seancy-preview-pr-344", 30, 9000, 0],
+      ["seancy-develop", 30, 600, 5],
+    ],
+  ]
+);
+
 const main = async () => {
   const env = {};
   check("Sans secret : signalé comme réglage manquant", await cloudflareUsage(env), {

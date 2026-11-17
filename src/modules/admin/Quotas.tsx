@@ -19,6 +19,17 @@ interface Usage {
   rowsWritten: number;
   storage: number;
   prodStorage: number;
+  databases: {
+    id: string;
+    name: string;
+    prod: boolean;
+    created: string;
+    tables: number | null;
+    size: number;
+    rowsRead: number;
+    rowsWritten: number;
+  }[];
+  dbNames: boolean;
   history: {
     date: string;
     requests: number;
@@ -36,6 +47,7 @@ const FREE = {
   rowsRead: 5_000_000,
   rowsWritten: 100_000,
   storage: 5 * 1024 ** 3,
+  databases: 10,
 };
 const nf = new Intl.NumberFormat("fr-FR");
 // Pages du tableau de bord Cloudflare (« :account » : le compte ouvert, choisi par Cloudflare)
@@ -137,7 +149,8 @@ export default function Quotas() {
               Mon profil → Jetons d'API ↗
             </a>{" "}
             → Créer un jeton → <b>Jeton personnalisé</b> : autorisation{" "}
-            <b>Compte · Account Analytics · Lecture</b>, sur le compte de Seancy.
+            <b>Compte · Account Analytics · Lecture</b> et <b>Compte · D1 · Lecture</b> (noms et
+            tables des bases), sur le compte de Seancy.
           </li>
           <li>
             <a href={LINKS.secrets} {...ext}>
@@ -188,6 +201,12 @@ export default function Quotas() {
             value={u.storage}
             limit={FREE.storage}
             show={mo}
+            href={LINKS.d1}
+          />
+          <Meter
+            label="D1 · bases"
+            value={u.databases.length}
+            limit={FREE.databases}
             href={LINKS.d1}
           />
         </div>
@@ -243,6 +262,62 @@ export default function Quotas() {
               ))}
               {!u.byModel.length && <li className={styles.muted}>Pas d'appel aujourd'hui</li>}
             </ul>
+          </div>
+        </div>
+        <div className={styles.card}>
+          <h3>
+            Bases D1{" "}
+            <small>
+              {u.databases.length} sur {FREE.databases}
+            </small>
+          </h3>
+          {!u.dbNames && (
+            <p className={styles.muted}>
+              Ajoute la permission <b>D1 · Lecture</b> au jeton pour voir le nom et les tables de
+              chaque base.
+            </p>
+          )}
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th scope="col">Base</th>
+                  <th scope="col">Tables</th>
+                  <th scope="col">Taille</th>
+                  <th scope="col">Lignes lues aujourd'hui</th>
+                  <th scope="col">Lignes écrites aujourd'hui</th>
+                  <th scope="col">Créée le</th>
+                </tr>
+              </thead>
+              <tbody>
+                {u.databases.map((d) => (
+                  <tr key={d.id}>
+                    <th scope="row">
+                      <a href={`${LINKS.d1}/databases/${d.id}`} {...ext}>
+                        {d.name || `${d.id.slice(0, 8)}…`}
+                      </a>
+                      {d.prod && <span className={styles.tag}>prod</span>}
+                      {/^seancy-preview-pr-/.test(d.name) && (
+                        <span className={styles.tag}>preview</span>
+                      )}
+                    </th>
+                    <td>{d.tables ?? "–"}</td>
+                    <td>{mo(d.size)}</td>
+                    <td>{nf.format(d.rowsRead)}</td>
+                    <td>{nf.format(d.rowsWritten)}</td>
+                    <td>
+                      {d.created
+                        ? new Date(d.created).toLocaleDateString("fr-FR", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "–"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
         <div className={styles.card}>
