@@ -65,6 +65,39 @@ check(
   1
 );
 check("Rapport vide : rien ne bloque", blocking({}, "high", "2026-11-17", ex), []);
+check(
+  "Correctif seulement par une version majeure : l'exception tient",
+  ids(
+    blocking(
+      {
+        vulnerabilities: {
+          picomatch: {
+            ...report.vulnerabilities!.picomatch,
+            fixAvailable: { name: "vite", version: "6.2.7", isSemVerMajor: true },
+          },
+        },
+      },
+      "high",
+      "2026-11-17",
+      ex
+    )
+  ),
+  []
+);
+check(
+  "Correctif simple publié : l'exception tombe, avec la marche à suivre",
+  blocking(
+    {
+      vulnerabilities: {
+        picomatch: { ...report.vulnerabilities!.picomatch, fixAvailable: true },
+      },
+    },
+    "high",
+    "2026-11-17",
+    ex
+  ).map((x) => [x.id, /npm audit fix/.test(x.why)]),
+  [["GHSA-aaaa-bbbb-cccc", true]]
+);
 
 console.log(`\n${passed} OK, ${failed} en échec`);
 process.exit(failed ? 1 : 0);
