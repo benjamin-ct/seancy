@@ -51,7 +51,7 @@ import {
 } from "./board.ts";
 import Dialog from "./Dialog.tsx";
 import { Label } from "./Labels.tsx";
-import { MarkdownInput } from "./Markdown.tsx";
+import { MarkdownInput, TYPING } from "./Markdown.tsx";
 import TicketSheet, { type Ask, type ReplyMode, type Run } from "./TicketSheet.tsx";
 import styles from "./TicketsPage.module.css";
 
@@ -242,6 +242,7 @@ function NewTicket({
     >
       <h2>Nouveau ticket</h2>
       <input
+        {...TYPING}
         value={title}
         maxLength={200}
         placeholder="Titre (facultatif : sinon la 1re ligne de la description)"
@@ -558,6 +559,7 @@ function IdeaCompose({ run }: { run: Run }) {
       }}
     >
       <textarea
+        {...TYPING}
         rows={2}
         value={idea}
         placeholder="Une idée (1re ligne : le titre), ou colle une image"
