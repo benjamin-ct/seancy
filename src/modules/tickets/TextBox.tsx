@@ -32,6 +32,9 @@ interface Props {
   autoFocus?: boolean;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
   onPaste?: ClipboardEventHandler<HTMLElement>;
+  /** Une seule ligne (titre) : Entrée n'ajoute pas de ligne, un retour à la ligne collé devient une espace. */
+  single?: boolean;
+  maxLength?: number;
 }
 
 let plainOnly: boolean | null = null;
@@ -141,9 +144,25 @@ function setSelection(root: HTMLElement, a: number, b: number) {
 }
 
 export const TextBox = forwardRef<TextBoxHandle, Props>(function TextBox(
-  { value, onChange, rows = 3, placeholder, autoFocus, onKeyDown, onPaste, ...aria },
+  {
+    value,
+    onChange,
+    rows = 3,
+    placeholder,
+    autoFocus,
+    onKeyDown,
+    onPaste,
+    single = false,
+    maxLength,
+    ...aria
+  },
   handle
 ) {
+  // Titre : une ligne, longueur bornée
+  const clean = (v: string) => {
+    const t = single ? v.replace(/\s*\n\s*/g, " ") : v;
+    return maxLength ? t.slice(0, maxLength) : t;
+  };
   const plain = supportsPlainOnly();
   const box = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -214,13 +233,31 @@ export const TextBox = forwardRef<TextBoxHandle, Props>(function TextBox(
     },
   }));
 
+  const keyDown: KeyboardEventHandler<HTMLElement> = (e) => {
+    if (single && e.key === "Enter") {
+      e.preventDefault();
+    }
+    onKeyDown?.(e);
+  };
   if (!plain) {
-    return (
+    return single ? (
+      <input
+        {...TYPING}
+        value={value}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={keyDown}
+        onPaste={onPaste}
+        {...aria}
+      />
+    ) : (
       <textarea
         {...TYPING}
         ref={area}
         rows={rows}
         value={value}
+        maxLength={maxLength}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
@@ -232,10 +269,10 @@ export const TextBox = forwardRef<TextBoxHandle, Props>(function TextBox(
   return (
     <div
       ref={box}
-      className={styles.textBox}
+      className={`${styles.textBox} ${single ? styles.textBoxSingle : ""}`}
       contentEditable="plaintext-only"
       role="textbox"
-      aria-multiline="true"
+      aria-multiline={!single}
       aria-placeholder={placeholder}
       data-placeholder={placeholder}
       data-empty={value ? undefined : ""}
@@ -243,12 +280,17 @@ export const TextBox = forwardRef<TextBoxHandle, Props>(function TextBox(
       autoCorrect={TYPING.autoCorrect}
       autoCapitalize={TYPING.autoCapitalize}
       spellCheck
-      style={{ minHeight: `calc(${rows} * 1.45em + 20px)` }}
+      style={single ? undefined : { minHeight: `calc(${rows} * 1.45em + 20px)` }}
       onInput={(e) => {
         const el = e.currentTarget;
-        const next = textOf(el);
-        // Balises ajoutées par le navigateur (bloc, plusieurs <br>…) : texte simple, curseur gardé
-        if ([...el.childNodes].some((c) => c.nodeType !== Node.TEXT_NODE && c.nodeName !== "BR")) {
+        const raw = textOf(el);
+        const next = clean(raw);
+        // Balises ajoutées par le navigateur (bloc, plusieurs <br>…), ou retour à la ligne et longueur d'un titre :
+        // texte simple, curseur gardé
+        if (
+          next !== raw ||
+          [...el.childNodes].some((c) => c.nodeType !== Node.TEXT_NODE && c.nodeName !== "BR")
+        ) {
           const [a] = (() => {
             const sel = el.ownerDocument.getSelection();
             return sel?.rangeCount
@@ -256,12 +298,12 @@ export const TextBox = forwardRef<TextBoxHandle, Props>(function TextBox(
               : [next.length];
           })();
           render(el, next);
-          setSelection(el, a, a);
+          setSelection(el, Math.min(a, next.length), Math.min(a, next.length));
         }
         shown.current = next;
         onChange(next);
       }}
-      onKeyDown={onKeyDown}
+      onKeyDown={keyDown}
       onPaste={onPaste}
       {...aria}
     />

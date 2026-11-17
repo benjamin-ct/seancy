@@ -25,11 +25,24 @@ interface ReleasePr extends PullRequest {
   html_url: string;
 }
 
+type Bump = "patch" | "minor" | "major";
+/** Entrée du journal (fragment .changeset/*.md ajouté sur develop depuis la dernière release). */
+export interface Note {
+  bump: Bump;
+  summary: string;
+}
+
 export interface ReleaseState {
   /** Version en ligne (package.json de main). */
   version: string;
+  /** Version qu'aura la release (bump le plus fort des fragments, comme scripts/changelogRelease.ts). */
+  next: string;
+  /** Entrées du journal qui partiront avec la release (sans doublons). */
+  notes: Note[];
   /** Changements de develop pas encore dans main (titres des commits, sans les fusions). */
   pending: string[];
+  /** Date du plus ancien changement en attente (ms) ; 0 sans changement. */
+  since: number;
   /** Release en cours ; null sans release en cours. */
   pr: { number: number; url: string; state: "wait" | "fail" | "merged"; why: string } | null;
 }
@@ -50,6 +63,32 @@ export function parisStamp(now: number): { day: string; time: string } {
       .map((x) => [x.type, x.value])
   );
   return { day: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}h${p.minute}` };
+}
+
+// Même lecture des fragments et même calcul de version que scripts/changesetLib.ts et
+// scripts/changelogRelease.ts (qui lisent le disque, inutilisables ici) : comparés dans verify-release.ts
+const SEVERITY: Record<Bump, number> = { patch: 1, minor: 2, major: 3 };
+
+/** Fragment de journal (« ---\nbump: patch\n---\n<texte> ») ; null s'il est mal formé. */
+export function parseFragment(content: string): Note | null {
+  const m = content.replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const bump = m?.[1].match(/^bump:\s*(\S+)\s*$/m)?.[1];
+  const summary = m?.[2].trim();
+  return bump && bump in SEVERITY && summary ? { bump: bump as Bump, summary } : null;
+}
+
+export function nextVersion(current: string, notes: Note[]): string {
+  const m = current.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) {
+    return "";
+  }
+  const bump = notes.reduce<Bump>((a, n) => (SEVERITY[n.bump] > SEVERITY[a] ? n.bump : a), "patch");
+  const [major, minor, patch] = m.slice(1).map(Number);
+  return bump === "major"
+    ? `${major + 1}.0.0`
+    : bump === "minor"
+      ? `${major}.${minor + 1}.0`
+      : `${major}.${minor}.${patch + 1}`;
 }
 
 export async function openRelease(d: ReleaseDeps): Promise<ReleasePr | null> {
@@ -109,9 +148,13 @@ export async function finishRelease(
 
 export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
   const [cmp, pkg, pr] = await Promise.all([
-    d.gh<{ commits?: { commit: { message: string }; parents: unknown[] }[] }>(
-      `/repos/${d.repo}/compare/main...develop`
-    ),
+    d.gh<{
+      commits?: {
+        commit: { message: string; committer?: { date?: string } };
+        parents: unknown[];
+      }[];
+      files?: { filename: string; status: string }[];
+    }>(`/repos/${d.repo}/compare/main...develop`),
     d
       .gh<{ content?: string }>(`/repos/${d.repo}/contents/package.json?ref=main`)
       .catch(() => ({ content: "" })),
@@ -125,13 +168,47 @@ export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
   } catch {
     // package.json illisible : version non montrée
   }
+  const own = (cmp.commits ?? []).filter((c) => c.parents.length < 2);
+  // Fragments du journal ajoutés sur develop depuis la dernière release
+  const fragments = (cmp.files ?? [])
+    .filter(
+      (f) =>
+        f.status === "added" &&
+        /^\.changeset\/[^/]+\.md$/.test(f.filename) &&
+        !/README/i.test(f.filename)
+    )
+    .slice(0, 20);
+  const notes: Note[] = [];
+  for (const f of fragments) {
+    const file = await d
+      .gh<{ content?: string }>(`/repos/${d.repo}/contents/${f.filename}?ref=develop`)
+      .catch(() => ({ content: "" }));
+    let note: Note | null = null;
+    try {
+      note = parseFragment(
+        new TextDecoder().decode(
+          Uint8Array.from(atob((file.content ?? "").replace(/\s/g, "")), (c) => c.charCodeAt(0))
+        )
+      );
+    } catch {
+      // fragment illisible : ignoré ici (la CI le refuse de toute façon)
+    }
+    if (note && !notes.some((n) => n.summary === note.summary && n.bump === note.bump)) {
+      notes.push(note);
+    }
+  }
   return {
     version,
-    pending: (cmp.commits ?? [])
-      .filter((c) => c.parents.length < 2)
+    next: own.length ? nextVersion(version, notes) : "",
+    notes,
+    pending: own
       .map((c) => c.commit.message.split("\n")[0])
       .reverse()
       .slice(0, 30),
+    since: own.reduce((min, c) => {
+      const t = Date.parse(c.commit.committer?.date ?? "") || 0;
+      return t && (!min || t < min) ? t : min;
+    }, 0),
     pr: await finishRelease(d, pr),
   };
 }
@@ -184,4 +261,69 @@ export async function startRelease(d: ReleaseDeps, now: number): Promise<Release
     },
   });
   return releaseState(d);
+}
+
+// ---------- Dépendances : PR de Dependabot vers develop ----------
+
+export interface DepPr {
+  number: number;
+  title: string;
+  url: string;
+  /** ok : CI passée, fusionnable ; wait : CI en cours ; fail : CI en échec. */
+  state: "ok" | "wait" | "fail";
+}
+
+interface OpenPr extends PullRequest {
+  html_url: string;
+  user?: { login?: string };
+}
+
+const isDependabot = (p: OpenPr) => p.user?.login === "dependabot[bot]" && p.base.ref === "develop";
+
+/** État de la CI sur le dernier commit d'une PR (sans rien changer à la PR). */
+export async function ciState(d: ReleaseDeps, sha: string): Promise<DepPr["state"]> {
+  const { workflow_runs: all = [] } = await d.gh<{
+    workflow_runs?: { status: string; conclusion: string | null }[];
+  }>(`/repos/${d.repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=10`);
+  const runs = all.filter(
+    (r) => !["action_required", "cancelled", "skipped", "stale"].includes(r.conclusion ?? "")
+  );
+  if (runs.some((r) => r.conclusion === "success")) {
+    return "ok";
+  }
+  return !runs.length || runs.some((r) => r.status !== "completed") ? "wait" : "fail";
+}
+
+export async function dependencies(d: ReleaseDeps): Promise<DepPr[]> {
+  const prs = (
+    await d.gh<OpenPr[]>(`/repos/${d.repo}/pulls?state=open&base=develop&per_page=50`)
+  ).filter(isDependabot);
+  return Promise.all(
+    prs.map(async (p) => ({
+      number: p.number,
+      title: p.title,
+      url: p.html_url,
+      state: await ciState(d, p.head.sha),
+    }))
+  );
+}
+
+/** PR de Dependabot fusionnée (squash) si elle contient tout develop et que sa CI est passée. */
+export async function mergeDependency(d: ReleaseDeps, number: number): Promise<string> {
+  const pr = await d.gh<OpenPr>(`/repos/${d.repo}/pulls/${number}`);
+  if (!isDependabot(pr) || pr.state !== "open") {
+    throw new TicketError("Ce n'est pas une PR de Dependabot ouverte vers develop", 409);
+  }
+  const check = await testedOnBase(d.gh, d.repo, pr);
+  if (check?.wait) {
+    return `PR #${number} : ${check.wait} ; réessaie quand la CI est passée`;
+  }
+  if (check?.fail) {
+    throw new TicketError(`PR #${number} : ${check.fail} (à régler dans une session Claude)`, 409);
+  }
+  await d.gh(`/repos/${d.repo}/pulls/${number}/merge`, {
+    method: "PUT",
+    body: { merge_method: "squash", sha: pr.head.sha, commit_title: `${pr.title} (#${number})` },
+  });
+  return `PR #${number} fusionnée dans develop`;
 }

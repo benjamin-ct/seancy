@@ -55,7 +55,6 @@ import Dialog from "./Dialog.tsx";
 import { Label } from "./Labels.tsx";
 import { MarkdownInput } from "./Markdown.tsx";
 import { TextBox } from "./TextBox.tsx";
-import { TYPING } from "./typing.ts";
 import TicketSheet, { type Ask, type ReplyMode, type Run } from "./TicketSheet.tsx";
 import styles from "./TicketsPage.module.css";
 
@@ -80,8 +79,10 @@ function Mini({
   onOpen,
   onDown,
   dragging,
+  ci,
 }: {
   t: Ticket;
+  ci?: "ok" | "wait" | "fail";
   onOpen: () => void;
   onDown: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   dragging: boolean;
@@ -103,6 +104,15 @@ function Mini({
   }
   if (t.status === "review" && t.queued) {
     labs.push({ text: "En file pour la fusion", tone: styles.labOk });
+  } else if (t.status === "review" && ci) {
+    // CI de la PR : valider sans ouvrir GitHub (relue toutes les quelques minutes)
+    labs.push(
+      ci === "ok"
+        ? { text: "CI ✓", tone: styles.labOk }
+        : ci === "fail"
+          ? { text: "CI en échec", tone: styles.labBad }
+          : { text: "CI en cours", tone: styles.labWait }
+    );
   }
   if (t.status !== "done" && t.status !== "idea") {
     labs.push({ text: `${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}` });
@@ -245,13 +255,13 @@ function NewTicket({
       }}
     >
       <h2>Nouveau ticket</h2>
-      <input
-        {...TYPING}
+      <TextBox
+        single
         value={title}
         maxLength={200}
         placeholder="Titre (facultatif : sinon la 1re ligne de la description)"
         aria-label="Titre"
-        onChange={(e) => setTitle(e.target.value)}
+        onChange={setTitle}
       />
       <MarkdownInput
         value={detail}
@@ -653,6 +663,8 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[] | null>(lastList?.data.tickets ?? null);
   const [config, setConfig] = useState<TicketsConfig | null>(lastList?.data.config ?? null);
   const [labelDefs, setLabelDefs] = useState<LabelDef[]>(lastList?.data.labels ?? []);
+  // CI des PR à valider (pastille sur la carte), relue par le serveur à son passage régulier
+  const [ci, setCi] = useState(lastList?.data.ci ?? {});
   const [denied, setDenied] = useState<{ status: number; message: string } | null>(null);
   const [query, setQuery] = useState("");
   // Téléphone : champ de recherche montré par la loupe de l'en-tête
@@ -783,6 +795,7 @@ export default function TicketsPage() {
       setTickets(r.tickets);
       setConfig(r.config);
       setLabelDefs(r.labels ?? []);
+      setCi(r.ci ?? {});
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setDenied({ status: err.status, message: err.message });
@@ -1231,6 +1244,7 @@ export default function TicketsPage() {
                       >
                         <Mini
                           t={t}
+                          ci={ci[t.id]}
                           dragging={drag?.id === t.id}
                           onDown={onDown(t)}
                           onOpen={() => {

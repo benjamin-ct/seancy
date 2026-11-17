@@ -28,7 +28,7 @@ import {
 } from "./board.ts";
 import { Label, LabelPicker } from "./Labels.tsx";
 import Markdown, { MarkdownInput } from "./Markdown.tsx";
-import { TYPING } from "./typing.ts";
+import { TextBox } from "./TextBox.tsx";
 import styles from "./TicketsPage.module.css";
 import Viewer from "./Viewer.tsx";
 
@@ -488,16 +488,17 @@ export default function TicketSheet({
       <h3>Description</h3>
       {editing ? (
         <div className={styles.form}>
-          <label>
+          <div className={styles.field}>
             Titre
-            <input
-              {...TYPING}
+            <TextBox
+              single
               value={title}
               maxLength={200}
-              onChange={(e) => setTitle(e.target.value)}
+              aria-label="Titre"
+              onChange={setTitle}
               autoFocus
             />
-          </label>
+          </div>
           {/* Pas de <label> : il viserait le premier bouton de la barre d'outils (« Gras ») */}
           <div className={styles.field}>
             Description
@@ -613,12 +614,13 @@ export default function TicketSheet({
             onChange={(e) => setLink({ ...link, url: e.target.value })}
             autoFocus
           />
-          <input
-            {...TYPING}
+          <TextBox
+            single
             placeholder="Titre (facultatif)"
             value={link.title}
+            maxLength={200}
             aria-label="Titre du lien"
-            onChange={(e) => setLink({ ...link, title: e.target.value })}
+            onChange={(v) => setLink({ ...link, title: v })}
           />
           <button
             type="button"
