@@ -307,9 +307,11 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
    jointes (fichiers de 1,5 Mo au plus recopiés, les autres gardés en liens). Rien n'est envoyé à Claude : les cartes
    « En cours » arrivent dans **À faire** (étiquette « Était en cours sur Trello »), « To merge » dans **À valider**.
    L'import est rejouable : une carte déjà importée est sautée.
-3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Le skill `trello-ticket-pipeline` et la
-   création de cartes Trello par `sentry-triage` seront retirés ou adaptés (`node scripts/tickets.ts add`) une fois
-   la bascule faite.
+3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Les règles de `trello-ticket-pipeline` sont
+   reprises dans le skill `ticket` ; l'ancien skill ne fait plus que prévenir sur Discord qu'un webhook Trello est
+   arrivé. `sentry-triage` crée ses tickets avec `node scripts/tickets.ts add` : ajouter `SEANCY_TICKETS_KEY` (la
+   clé de la page Tickets) au `.env` du NAS (passée au conteneur par `docker-compose-seancy.yml`), puis `seancy-pull` et
+   `seancy-rebuild claude`.
 
 ## Sécurité
 

@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Contrôle qualité, architecture et sécurité d'une PR Seancy avant passage en revue humaine. Premier sous-agent du chantier "workflow de développement IA autonome" (carte Trello https://trello.com/c/Kwr35vrC) — câblé en pré-merge dans le skill trello-ticket-pipeline (étape 2c.4.2), toujours en lecture seule et sans blocage automatique.
+description: Contrôle qualité, architecture et sécurité d'une PR Seancy avant passage en revue humaine. Lancé en pré-merge par le skill ticket (étape 4.3, page Tickets) et par sentry-triage, toujours en lecture seule et sans blocage automatique.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
