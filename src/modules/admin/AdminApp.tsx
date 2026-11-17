@@ -4,13 +4,23 @@
 // (worker/admin.ts) n'ouvre ses routes qu'aux comptes listés dans le secret
 // ADMIN_EMAILS ; cette page ne fait qu'en tirer l'affichage.
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { Link, Navigate, NavLink, Route, Routes, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import { hideInitialLoader } from "../../core/initialLoader.ts";
 import { adminPrefix, isAdminHost } from "../../core/lib/adminHost.ts";
+import Icon, { type IconName } from "../../shared/components/Icon/Icon.tsx";
 import TicketLogo from "../../shared/components/TicketLogo/TicketLogo.tsx";
 import { LoginForm, VerifyAuthPage } from "../auth/index.ts";
 import styles from "./Admin.module.css";
+import { HeaderSlot } from "./headerSlot.ts";
 
 const Dashboard = lazy(() => import("./Dashboard.tsx"));
 const Tools = lazy(() => import("./Tools.tsx"));
@@ -40,6 +50,16 @@ export default function AdminApp() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
   const siteUrl = isAdminHost() ? "https://seancy.com" : "/";
+  const { pathname } = useLocation();
+  // Boutons de la page dans l'en-tête sur téléphone (HeaderActions)
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const sections: { to: string; label: string; short: string; icon: IconName; end?: boolean }[] = [
+    { to: base, label: "Tableau de bord", short: "Accueil", icon: "grid", end: true },
+    { to: `${prefix}/tickets`, label: "Tickets", short: "Tickets", icon: "list" },
+    { to: `${prefix}/outils`, label: "Outils", short: "Outils", icon: "settings" },
+  ];
+  const current =
+    sections.find((s) => s.to !== base && pathname.startsWith(s.to))?.label ?? sections[0].label;
 
   useEffect(() => {
     hideInitialLoader();
@@ -158,26 +178,24 @@ export default function AdminApp() {
           aria-label="Espace admin de Seancy, tableau de bord"
         >
           <TicketLogo className={styles.logo} />
-          <span>Seancy</span>
+          <span className={styles.brandName}>Seancy</span>
           <span className={styles.badge}>Admin</span>
         </Link>
+        {/* Téléphone : titre de la page et ses boutons, comme le panneau de Paddock Live */}
+        {me?.admin && <span className={styles.pageName}>{current}</span>}
+        <div ref={setSlot} className={styles.actions} />
         {me?.admin && (
           <nav className={styles.nav} aria-label="Espace admin">
-            <NavLink to={base} end className={({ isActive }) => (isActive ? styles.active : "")}>
-              Tableau de bord
-            </NavLink>
-            <NavLink
-              to={`${prefix}/tickets`}
-              className={({ isActive }) => (isActive ? styles.active : "")}
-            >
-              Tickets
-            </NavLink>
-            <NavLink
-              to={`${prefix}/outils`}
-              className={({ isActive }) => (isActive ? styles.active : "")}
-            >
-              Outils
-            </NavLink>
+            {sections.map((s) => (
+              <NavLink
+                key={s.to}
+                to={s.to}
+                end={s.end}
+                className={({ isActive }) => (isActive ? styles.active : "")}
+              >
+                {s.label}
+              </NavLink>
+            ))}
           </nav>
         )}
         <div className={styles.side}>
@@ -188,17 +206,41 @@ export default function AdminApp() {
         </div>
       </header>
       <main id="contenu" className={styles.main} tabIndex={-1}>
-        <Suspense fallback={<p className={styles.muted}>Chargement…</p>}>
-          <Routes>
-            <Route path="auth/verify" element={<AdminVerify base={base} />} />
-            <Route index element={guarded(<Dashboard />)} />
-            <Route path="tickets" element={guarded(<Tickets />)} />
-            <Route path="tickets/:ticketId" element={guarded(<Tickets />)} />
-            <Route path="outils" element={guarded(<Tools />)} />
-            <Route path="*" element={<Navigate to={base} replace />} />
-          </Routes>
-        </Suspense>
+        <HeaderSlot.Provider value={slot}>
+          <Suspense fallback={<p className={styles.muted}>Chargement…</p>}>
+            <Routes>
+              <Route path="auth/verify" element={<AdminVerify base={base} />} />
+              <Route index element={guarded(<Dashboard />)} />
+              <Route path="tickets" element={guarded(<Tickets />)} />
+              <Route path="tickets/:ticketId" element={guarded(<Tickets />)} />
+              <Route path="outils" element={guarded(<Tools />)} />
+              <Route path="*" element={<Navigate to={base} replace />} />
+            </Routes>
+          </Suspense>
+        </HeaderSlot.Provider>
       </main>
+      {/* Téléphone : barre d'onglets flottante en bas, comme celle du site */}
+      {me?.admin && (
+        <nav className={styles.tabbar} aria-label="Espace admin (onglets)">
+          {sections.map((s) => (
+            <NavLink
+              key={s.to}
+              to={s.to}
+              end={s.end}
+              className={({ isActive }) =>
+                isActive ? `${styles.tab} ${styles.tabActive}` : styles.tab
+              }
+            >
+              <Icon name={s.icon} size={22} />
+              <span>{s.short}</span>
+            </NavLink>
+          ))}
+          <a href={siteUrl} className={styles.tab}>
+            <Icon name="external" size={22} />
+            <span>Le site</span>
+          </a>
+        </nav>
+      )}
     </div>
   );
 }

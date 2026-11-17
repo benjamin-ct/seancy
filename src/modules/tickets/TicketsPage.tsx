@@ -16,7 +16,9 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
+import Icon from "../../shared/components/Icon/Icon.tsx";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
+import HeaderActions from "../admin/HeaderActions.tsx";
 import {
   ApiError,
   createTicket,
@@ -624,6 +626,9 @@ export default function TicketsPage() {
   const [labelDefs, setLabelDefs] = useState<LabelDef[]>([]);
   const [denied, setDenied] = useState<{ status: number; message: string } | null>(null);
   const [query, setQuery] = useState("");
+  // Téléphone : champ de recherche montré par la loupe de l'en-tête
+  const [searching, setSearching] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
   // « Les miens » : tickets créés par le compte connecté (les deux administrateurs partagent le tableau)
   const [mine, setMine] = useState(false);
   // Fiche ouverte : son adresse est /tickets/<id> (lien à partager, bouton Retour qui la ferme) ;
@@ -1011,15 +1016,51 @@ export default function TicketsPage() {
   return (
     <LabelsContext.Provider value={labelsInfo}>
       <div className={styles.page}>
+        <HeaderActions>
+          <button
+            type="button"
+            className={styles.headBtn}
+            aria-label="Chercher un ticket"
+            aria-pressed={searching}
+            onClick={() => {
+              const open = !searching;
+              setSearching(open);
+              if (open) {
+                requestAnimationFrame(() => searchRef.current?.focus());
+              } else {
+                setQuery("");
+              }
+            }}
+          >
+            <Icon name="search" size={22} />
+          </button>
+          <button
+            type="button"
+            className={styles.headBtn}
+            aria-label="Réglages des tickets"
+            onClick={() => setSettings(true)}
+          >
+            <Icon name="sliders" size={22} />
+          </button>
+          <button
+            type="button"
+            className={`${styles.headBtn} ${styles.headNew}`}
+            aria-label="Nouveau ticket"
+            onClick={() => setCreating(true)}
+          >
+            <Icon name="plus" size={24} strokeWidth={2.4} />
+          </button>
+        </HeaderActions>
         <header className={styles.top}>
-          <div>
+          <div className={styles.pageHead}>
             <p className={styles.eyebrow}>Développement · Claude</p>
             <h1 className={styles.title}>Tickets</h1>
           </div>
           <div className={styles.tools}>
             <input
+              ref={searchRef}
               type="search"
-              className={styles.search}
+              className={`${styles.search} ${searching || query ? styles.searchOpen : ""}`}
               value={query}
               placeholder="Chercher…"
               aria-label="Chercher un ticket"
@@ -1043,10 +1084,18 @@ export default function TicketsPage() {
                 Les miens
               </button>
             </div>
-            <button type="button" className={styles.btn} onClick={() => setSettings(true)}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.deskOnly}`}
+              onClick={() => setSettings(true)}
+            >
               Réglages
             </button>
-            <button type="button" className={styles.primary} onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              className={`${styles.primary} ${styles.deskOnly}`}
+              onClick={() => setCreating(true)}
+            >
               Nouveau ticket
             </button>
           </div>
