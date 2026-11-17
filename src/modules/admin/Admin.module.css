@@ -514,6 +514,12 @@
 }
 
 @media (max-width: 860px) {
+  /* <body> garde déjà en bas la place de la barre d'onglets : la page ne
+     prend que le reste de l'écran (sinon elle défile de cette hauteur) */
+  :global(#root):has(> .shell),
+  .shell {
+    min-height: calc(100dvh - var(--tabbar-offset));
+  }
   /* En-tête compact, comme le panneau de Paddock Live : logo, titre de la
      page et ses boutons (HeaderActions) ; les onglets passent en bas. */
   .top {
