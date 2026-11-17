@@ -38,6 +38,18 @@ const FREE = {
   storage: 5 * 1024 ** 3,
 };
 const nf = new Intl.NumberFormat("fr-FR");
+// Pages du tableau de bord Cloudflare (« :account » : le compte ouvert, choisi par Cloudflare)
+const CF = "https://dash.cloudflare.com/?to=/:account";
+const LINKS = {
+  workers: `${CF}/workers-and-pages`,
+  worker: `${CF}/workers/services/view/seancy/production`,
+  secrets: `${CF}/workers/services/view/seancy/production/settings`,
+  ai: `${CF}/ai/workers-ai`,
+  d1: `${CF}/workers/d1`,
+  billing: `${CF}/billing/billable-usage`,
+  tokens: "https://dash.cloudflare.com/profile/api-tokens",
+};
+const ext = { target: "_blank", rel: "noopener noreferrer" } as const;
 const mo = (b: number) =>
   b >= 1024 ** 3
     ? `${(b / 1024 ** 3).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} Go`
@@ -55,8 +67,10 @@ function Meter({
   value,
   limit,
   show = nf.format,
+  href,
 }: {
   label: string;
+  href: string;
   value: number;
   limit: number;
   show?: (n: number) => string;
@@ -83,6 +97,9 @@ function Meter({
       <small>
         {show(value)} sur {show(limit)} · reste {show(Math.max(0, limit - value))}
       </small>
+      <a className={styles.cfLink} href={href} {...ext} aria-label={`${label} sur Cloudflare`}>
+        Voir sur Cloudflare ↗
+      </a>
     </div>
   );
 }
@@ -115,12 +132,19 @@ export default function Quotas() {
         <h3>À régler une fois</h3>
         <ol className={styles.steps}>
           <li>
-            Cloudflare → Mon profil → Jetons d'API → Créer un jeton → <b>Jeton personnalisé</b> :
-            autorisation <b>Compte · Account Analytics · Lecture</b>, sur le compte de Seancy.
+            Cloudflare →{" "}
+            <a href={LINKS.tokens} {...ext}>
+              Mon profil → Jetons d'API ↗
+            </a>{" "}
+            → Créer un jeton → <b>Jeton personnalisé</b> : autorisation{" "}
+            <b>Compte · Account Analytics · Lecture</b>, sur le compte de Seancy.
           </li>
           <li>
-            Workers et Pages → <b>seancy</b> → Paramètres → Variables et secrets → ajouter le secret{" "}
-            <code>CF_ANALYTICS_TOKEN</code> avec ce jeton.
+            <a href={LINKS.secrets} {...ext}>
+              Workers et Pages → seancy → Paramètres ↗
+            </a>{" "}
+            → Variables et secrets → ajouter le secret <code>CF_ANALYTICS_TOKEN</code> avec ce
+            jeton.
           </li>
         </ol>
         <p className={styles.muted}>
@@ -135,15 +159,46 @@ export default function Quotas() {
     body = (
       <>
         <div className={styles.meters}>
-          <Meter label="Requêtes des Workers" value={u.requests} limit={FREE.requests} />
-          <Meter label="Workers AI (neurones)" value={u.neurons} limit={FREE.neurons} />
-          <Meter label="D1 · lignes lues" value={u.rowsRead} limit={FREE.rowsRead} />
-          <Meter label="D1 · lignes écrites" value={u.rowsWritten} limit={FREE.rowsWritten} />
-          <Meter label="D1 · stockage" value={u.storage} limit={FREE.storage} show={mo} />
+          <Meter
+            label="Requêtes des Workers"
+            value={u.requests}
+            limit={FREE.requests}
+            href={LINKS.workers}
+          />
+          <Meter
+            label="Workers AI (neurones)"
+            value={u.neurons}
+            limit={FREE.neurons}
+            href={LINKS.ai}
+          />
+          <Meter
+            label="D1 · lignes lues"
+            value={u.rowsRead}
+            limit={FREE.rowsRead}
+            href={LINKS.d1}
+          />
+          <Meter
+            label="D1 · lignes écrites"
+            value={u.rowsWritten}
+            limit={FREE.rowsWritten}
+            href={LINKS.d1}
+          />
+          <Meter
+            label="D1 · stockage"
+            value={u.storage}
+            limit={FREE.storage}
+            show={mo}
+            href={LINKS.d1}
+          />
         </div>
         <div className={styles.configGrid}>
           <div className={styles.card}>
-            <h3>Worker seancy aujourd'hui</h3>
+            <h3>
+              Worker seancy aujourd'hui{" "}
+              <a className={styles.cfLink} href={LINKS.worker} {...ext}>
+                Métriques et journaux ↗
+              </a>
+            </h3>
             <ul className={styles.facts}>
               <li>
                 <span>Erreurs</span>
@@ -222,12 +277,22 @@ export default function Quotas() {
   }
   return (
     <section aria-labelledby="dash-quotas" className={styles.section}>
-      <h2 id="dash-quotas">
-        Quotas Cloudflare{" "}
-        <small className={styles.muted}>
-          aujourd'hui · forfait gratuit, remis à zéro à {reset} (minuit UTC)
-        </small>
-      </h2>
+      <div className={styles.sectionHead}>
+        <h2 id="dash-quotas">
+          Quotas Cloudflare{" "}
+          <small className={styles.muted}>
+            aujourd'hui · forfait gratuit, remis à zéro à {reset} (minuit UTC)
+          </small>
+        </h2>
+        <div className={styles.row}>
+          <a className={styles.btn} href={LINKS.workers} {...ext}>
+            Ouvrir Cloudflare ↗
+          </a>
+          <a className={styles.btn} href={LINKS.billing} {...ext}>
+            Utilisation du compte ↗
+          </a>
+        </div>
+      </div>
       {body}
     </section>
   );

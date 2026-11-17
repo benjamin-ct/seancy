@@ -401,6 +401,28 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+.cfLink {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.cfLink:hover {
+  text-decoration: underline;
+}
+.cfLink:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.meter .cfLink {
+  display: block;
+  width: fit-content;
+}
+.card h3 .cfLink {
+  margin: 0 0 0 6px;
+}
 .facts {
   display: grid;
   gap: 8px;
