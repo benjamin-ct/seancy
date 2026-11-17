@@ -4,8 +4,10 @@
 //   node scripts/audit.ts high       (PR)
 //   node scripts/audit.ts moderate   (develop, avant une release)
 //
-// Une exception ne vaut que pour l'avis nommé et jusqu'à sa date : après,
-// l'audit bloque de nouveau. Toute autre alerte au niveau demandé bloque.
+// Une exception ne vaut que pour l'avis nommé, jusqu'à sa date, et tant
+// qu'aucun correctif simple n'existe : dès que `npm audit fix` sait corriger
+// sans version majeure, l'audit bloque de nouveau (le correctif est à mettre).
+// Toute autre alerte au niveau demandé bloque.
 
 import { execFileSync } from "node:child_process";
 
@@ -26,7 +28,15 @@ interface Via {
   severity?: string;
 }
 export interface AuditReport {
-  vulnerabilities?: Record<string, { severity: string; via: (string | Via)[] }>;
+  vulnerabilities?: Record<
+    string,
+    {
+      severity: string;
+      via: (string | Via)[];
+      /** true : `npm audit fix` corrige sans version majeure ; objet : seulement via un changement majeur. */
+      fixAvailable?: boolean | { name: string; version: string; isSemVerMajor: boolean };
+    }
+  >;
 }
 
 /** Avis au niveau demandé ou au-dessus qui bloquent (exceptions expirées comprises). */
@@ -46,13 +56,18 @@ export function blocking(
       }
       const id = /GHSA-[\w-]+/.exec(via.url ?? "")?.[0] ?? String(via.source ?? "?");
       const ex = exceptions[id];
-      if (ex && today <= ex.until) {
+      const fixed = v.fixAvailable === true;
+      if (ex && today <= ex.until && !fixed) {
         continue;
       }
       found.set(id, {
         id,
         title: via.title ?? "",
-        why: ex ? `exception expirée le ${ex.until}` : `${via.severity}`,
+        why: !ex
+          ? `${via.severity}`
+          : fixed
+            ? "correctif disponible : lancer npm audit fix, puis retirer l'exception"
+            : `exception expirée le ${ex.until}`,
       });
     }
   }
