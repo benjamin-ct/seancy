@@ -4,6 +4,15 @@ import styles from "./TicketsPage.module.css";
 
 const ext = { target: "_blank", rel: "noopener noreferrer" } as const;
 
+/** Champ de texte libre : sans ces attributs, Safari sur iPhone y propose
+ * « Préremplir le contact » (adresses) à la place des mots suggérés. */
+export const TYPING = {
+  autoComplete: "off",
+  autoCorrect: "on",
+  autoCapitalize: "sentences",
+  spellCheck: true,
+} as const;
+
 function inline(nodes: Inline[]): ReactNode[] {
   return nodes.map((n, i) => {
     if (typeof n === "string") {
@@ -216,6 +225,7 @@ export function MarkdownInput({
         </div>
       ) : (
         <textarea
+          {...TYPING}
           ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}

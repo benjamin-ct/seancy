@@ -57,6 +57,8 @@ export interface TicketData {
   urgent: boolean;
   /** Date d'envoi à Claude (ms) ; 0 : pas chez Claude. */
   sent: number;
+  /** Envoi annulé (ms) : un lancement de Claude déjà parti ne peut plus répondre ; 0 : rien d'annulé. */
+  cancelled: number;
   answer: string;
   pr: string;
   feedback: string;
@@ -112,6 +114,7 @@ export const EMPTY_DATA: TicketData = {
   effort: "high",
   urgent: false,
   sent: 0,
+  cancelled: 0,
   answer: "",
   pr: "",
   feedback: "",
@@ -189,7 +192,7 @@ export function cleanData(
   if (has("urgent")) {
     out.urgent = input.urgent === true || input.urgent === 1 || input.urgent === "1";
   }
-  for (const k of ["sent", "progressAt", "queued", "doneAt"] as const) {
+  for (const k of ["sent", "cancelled", "progressAt", "queued", "doneAt"] as const) {
     if (has(k)) {
       out[k] = int(input[k], 0, 8.64e15);
     }
@@ -322,6 +325,13 @@ export function applyAction(
       throw new TicketError(msg, 409);
     }
   };
+  // Lancement de Claude parti avant « Annuler l'envoi » : ni étape ni compte rendu
+  if (a.type === "answer" || a.type === "progress") {
+    need(
+      from === "work" || !d.cancelled,
+      "Envoi annulé : ce ticket n'est plus chez Claude (renvoie-le pour qu'il le traite)"
+    );
+  }
   switch (a.type) {
     case "edit": {
       patch = Object.fromEntries(Object.entries(a.fields).filter(([k]) => EDITABLE.includes(k)));
@@ -348,7 +358,7 @@ export function applyAction(
     case "unsend":
       need(from === "work", "Ce ticket n'est pas chez Claude");
       status = "todo";
-      patch = { sent: 0, stage: "", progress: "", queued: 0 };
+      patch = { sent: 0, cancelled: now, stage: "", progress: "", queued: 0 };
       ev.push({ at: now, who: "moi", kind: "annule" });
       break;
     case "answer":
@@ -491,6 +501,10 @@ export function applyAction(
     if (e.who === "moi" && by) {
       e.by = by;
     }
+  }
+  // De nouveau chez Claude (envoi, retouche, relance…) : l'annulation précédente ne compte plus
+  if (status === "work") {
+    patch.cancelled = 0;
   }
   const data = cleanData(patch, d);
   if (a.type === "answer" && data.answer) {
