@@ -245,7 +245,13 @@ ne renvoie jamais de lien ni de code de connexion dans la réponse.
    séparées par des virgules), `ACCESS_TEAM_DOMAIN` (`<équipe>.cloudflareaccess.com`) et `ACCESS_AUD` (le tag de
    l'étape 3). Sans ces deux derniers, le tableau de bord signale Access « non réglé » et seule la connexion admin de
    Seancy protège l'espace.
-5. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
+5. **Quotas Cloudflare** (facultatif) : Cloudflare → My Profile → API Tokens → _Create Custom Token_ avec la seule
+   permission **Account · Account Analytics · Read** sur le compte de Seancy, puis secret `CF_ANALYTICS_TOKEN` du
+   Worker `seancy`. Le tableau de bord montre alors les quotas gratuits du jour (requêtes des Workers, neurones Workers
+   AI, lignes lues et écrites dans D1, stockage), le détail par Worker et par modèle, les erreurs et dépassements de
+   calcul du Worker, et les 7 derniers jours (`worker/cloudflare-usage.ts`, API d'analyse GraphQL, relue au plus toutes
+   les 2 minutes).
+6. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
    manque encore.
 
 ## Tickets (Claude)

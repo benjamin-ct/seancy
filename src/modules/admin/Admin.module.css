@@ -344,6 +344,126 @@
   outline-offset: 2px;
 }
 
+/* Quotas Cloudflare (Quotas.tsx) : jauges du forfait gratuit, détails, 7 jours */
+.meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.meter {
+  --level: var(--ok-ink);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.meterWarn {
+  --level: var(--gold);
+}
+.meterBad {
+  --level: var(--accent-ink);
+  border-color: var(--accent-ink);
+}
+.meterHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.meterHead b {
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.meterBad .meterHead b {
+  color: var(--accent-ink);
+}
+.meterBar {
+  height: 8px;
+  margin: 8px 0 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.meterBar i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--level);
+}
+.meter small {
+  color: var(--subtle);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.facts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.facts li span {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.facts li b {
+  font-variant-numeric: tabular-nums;
+}
+.card h3 small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+.tableWrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.table th:first-child {
+  text-align: left;
+}
+.table thead th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.section > .card + .card,
+.configGrid + .card {
+  margin-top: 12px;
+}
+
 @media (max-width: 860px) {
   .top {
     padding: 10px 16px;

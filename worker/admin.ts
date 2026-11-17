@@ -11,6 +11,7 @@
 // /admin, pour l'essayer).
 import { getUserFromRequest, type AuthUser } from "./auth.ts";
 import { verifyAccessJwt } from "./access.ts";
+import { cloudflareUsage } from "./cloudflare-usage.ts";
 import { logError } from "./logger.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import { runDailyCheck } from "./scheduled.ts";
@@ -148,6 +149,11 @@ async function overview(env: Env, request: Request) {
             ok: adminEmails(env).length > 0,
             help: `secret ADMIN_EMAILS (${adminEmails(env).length})`,
           },
+          {
+            name: "Quotas Cloudflare",
+            ok: has(env.CF_ANALYTICS_TOKEN),
+            help: "secret CF_ANALYTICS_TOKEN (jeton « Account Analytics : Read »)",
+          },
         ],
       },
       {
@@ -264,6 +270,11 @@ export async function handleAdmin(
   }
   if (sub === "overview" && request.method === "GET") {
     return json(await overview(env, request));
+  }
+  // Quotas Cloudflare du compte (à part : le tableau de bord s'affiche même si Cloudflare tarde)
+  if (sub === "usage" && request.method === "GET") {
+    const r = await cloudflareUsage(env);
+    return json(r, "usage" in r || r.missing ? 200 : 502);
   }
   if (request.method === "POST" && sub.startsWith("tools/")) {
     // Échec d'un outil (secret manquant, TMDB injoignable…) : sa raison affichée sur la page

@@ -37,6 +37,7 @@
     "verify:changelog-parser": "node scripts/verify-changelog-parser.ts",
     "verify:tickets": "node scripts/verify-tickets.ts",
     "verify:access": "node scripts/verify-access.ts",
+    "verify:cloudflare-usage": "node scripts/verify-cloudflare-usage.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
     "check:version-untouched": "node scripts/check-version-untouched.ts",
