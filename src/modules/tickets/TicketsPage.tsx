@@ -705,6 +705,29 @@ export default function TicketsPage() {
     };
   }, [setSmall, boardReady]);
   const dragEnd = useRef(0);
+  // Téléphone : hauteur des colonnes jusqu'au-dessus de la barre d'onglets, d'après la place
+  // réelle du tableau (en-tête, recherche ouverte, bandeau…) : --board-top, lu par le CSS
+  useEffect(() => {
+    const b = boardRef.current;
+    if (!b) {
+      return;
+    }
+    const fit = () =>
+      b.style.setProperty(
+        "--board-top",
+        `${Math.round(b.getBoundingClientRect().top + scrollY)}px`
+      );
+    fit();
+    const ro = new ResizeObserver(fit);
+    if (b.parentElement) {
+      ro.observe(b.parentElement);
+    }
+    addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      removeEventListener("resize", fit);
+    };
+  }, [boardReady, searching, small]);
 
   const load = useCallback(async () => {
     try {
@@ -1013,6 +1036,21 @@ export default function TicketsPage() {
     );
   }
 
+  const zoomButton = (className: string) => (
+    <button
+      type="button"
+      className={className}
+      aria-pressed={small}
+      aria-label={small ? "Agrandir le tableau" : "Réduire le tableau"}
+      title={small ? "Agrandir le tableau" : "Réduire le tableau"}
+      onClick={() => setSmall(!small)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d={small ? ZOOM_OUT : ZOOM_IN} />
+      </svg>
+    </button>
+  );
+
   return (
     <LabelsContext.Provider value={labelsInfo}>
       <div className={styles.page}>
@@ -1084,6 +1122,8 @@ export default function TicketsPage() {
                 Les miens
               </button>
             </div>
+            {/* Téléphone : zoom au bout de « Tous / Les miens », plus en bas de l'écran */}
+            {tickets && zoomButton(`${styles.zoom} ${styles.zoomInline}`)}
             <button
               type="button"
               className={`${styles.btn} ${styles.deskOnly}`}
@@ -1177,20 +1217,7 @@ export default function TicketsPage() {
             })}
           </div>
         )}
-        {tickets && (
-          <button
-            type="button"
-            className={styles.zoom}
-            aria-pressed={small}
-            aria-label={small ? "Agrandir le tableau" : "Réduire le tableau"}
-            title={small ? "Agrandir le tableau" : "Réduire le tableau"}
-            onClick={() => setSmall(!small)}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d={small ? ZOOM_OUT : ZOOM_IN} />
-            </svg>
-          </button>
-        )}
+        {tickets && zoomButton(styles.zoom)}
         {drag && dragged && (
           <div
             className={styles.ghost}
