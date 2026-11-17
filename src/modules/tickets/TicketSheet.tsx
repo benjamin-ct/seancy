@@ -26,7 +26,8 @@ import {
   when,
 } from "./board.ts";
 import { Label, LabelPicker } from "./Labels.tsx";
-import Markdown, { MarkdownInput, TYPING } from "./Markdown.tsx";
+import Markdown, { MarkdownInput } from "./Markdown.tsx";
+import { TYPING } from "./typing.ts";
 import styles from "./TicketsPage.module.css";
 import Viewer from "./Viewer.tsx";
 
@@ -477,10 +478,11 @@ export default function TicketSheet({
               autoFocus
             />
           </label>
-          <label>
+          {/* Pas de <label> : il viserait le premier bouton de la barre d'outils (« Gras ») */}
+          <div className={styles.field}>
             Description
-            <MarkdownInput value={detail} rows={10} onChange={setDetail} />
-          </label>
+            <MarkdownInput value={detail} rows={10} aria-label="Description" onChange={setDetail} />
+          </div>
           <div className={styles.row}>
             <button
               type="button"
