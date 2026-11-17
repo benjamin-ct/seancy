@@ -1,5 +1,6 @@
 import { useEffect, useState, type ClipboardEvent, type ReactNode } from "react";
 import { adminPrefix } from "../../core/lib/adminHost.ts";
+import Icon from "../../shared/components/Icon/Icon.tsx";
 import {
   deleteFile,
   deleteTicket,
@@ -193,6 +194,8 @@ export default function TicketSheet({
   const [picking, setPicking] = useState(false);
   const [labels, setLabels] = useState(t.labels);
   const [viewing, setViewing] = useState(-1);
+  // « Partager » : le bouton dit lui-même que le lien est copié (le message de la page reste derrière la fiche)
+  const [shared, setShared] = useState("");
   const media = t.files.filter(viewable);
 
   useEffect(() => {
@@ -293,7 +296,11 @@ export default function TicketSheet({
           throw new Error(`copie impossible, voici le lien : ${url}`);
         }
       },
-      (r) => (r === "shared" ? "Lien partagé" : "Lien copié")
+      (r) => {
+        setShared(r === "shared" ? "Lien partagé" : "Lien copié");
+        window.setTimeout(() => setShared(""), 2500);
+        return r === "shared" ? "Lien partagé" : "Lien copié";
+      }
     );
 
   const prNo = prNumber(t.pr);
@@ -367,38 +374,51 @@ export default function TicketSheet({
       )}
       {t.status === "review" && !t.queued && (
         <>
+          {/* « Valider et commenter » et « Retouche » : choix de la zone de réponse, plus bas */}
           <button type="button" className={styles.primary} disabled={busy} onClick={validate}>
             Valider et fusionner
-          </button>
-          <button type="button" className={styles.btn} onClick={() => setMode("follow")}>
-            Valider et commenter
-          </button>
-          <button type="button" className={styles.btn} onClick={() => setMode("retouch")}>
-            Retouche
           </button>
         </>
       )}
       {t.status === "review" && /^https:\/\//.test(t.preview) && (
-        <a className={styles.btn} href={t.preview} target="_blank" rel="noopener noreferrer">
+        <a
+          className={styles.btn}
+          href={t.preview}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Preview (nouvel onglet)"
+        >
           Preview
+          <Icon name="external" size={16} className={styles.btnIconEnd} />
         </a>
       )}
       {t.pr && (
-        <a className={styles.btn} href={t.pr} target="_blank" rel="noopener noreferrer">
+        <a
+          className={styles.btn}
+          href={t.pr}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`PR${prNo ? ` #${prNo}` : ""} sur GitHub (nouvel onglet)`}
+        >
           PR{prNo ? ` #${prNo}` : ""}
+          <Icon name="external" size={16} className={styles.btnIconEnd} />
         </a>
       )}
       <button
         type="button"
-        className={styles.btn}
+        className={`${styles.btn} ${shared ? styles.btnDone : ""}`}
         onClick={share}
-        aria-label="Partager : copier le lien du ticket"
+        aria-label={shared || "Partager : copier le lien du ticket"}
         title="Copier le lien du ticket"
       >
-        <svg className={styles.btnIcon} viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
-        </svg>
-        Partager
+        {shared ? (
+          <Icon name="check" size={18} strokeWidth={2.6} className={styles.btnIcon} />
+        ) : (
+          <svg className={styles.btnIcon} viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+          </svg>
+        )}
+        <span aria-live="polite">{shared || "Partager"}</span>
       </button>
     </div>
   );

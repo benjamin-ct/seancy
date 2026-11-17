@@ -225,8 +225,11 @@ Tant que les branches `feature/*` ciblent encore `main` (le pipeline Trello → 
 Tout ce qui est réservé aux administrateurs est regroupé sur **`admin.seancy.com`** : même Worker et même base que
 le site, mais sa propre mise en page (`src/modules/admin/`) et son propre domaine, jamais indexé.
 
-- **Tableau de bord** : quelques chiffres (comptes, nouveaux comptes, connexions, abonnés aux notifications,
-  bibliothèques, listes), les tickets par colonne et l'état des réglages (secrets présents ou non, jamais leur valeur).
+- **Tableau de bord** : la **mise en ligne** (ce qui attend sur `develop`, bouton « Lancer la release » : branche
+  `release/<date>` depuis `develop` avec `main` refusionné, PR vers `main` fusionnée par le serveur dès que la CI est
+  passée, notification ; plus besoin d'un ticket pour demander une release : `worker/release.ts`), quelques chiffres
+  (comptes, nouveaux comptes, connexions, abonnés aux notifications, bibliothèques, listes), les tickets par colonne et
+  l'état des réglages (secrets présents ou non, jamais leur valeur).
 - **Tickets** : le tableau des demandes envoyées à Claude (voir [Tickets (Claude)](#tickets-claude)). Chaque ticket
   garde son auteur et chaque action qui l'a faite ; filtre « Les miens ».
 - **Outils** : notification de test (vers ses propres appareils seulement), vérification des nouveautés tout de suite

@@ -94,6 +94,14 @@ const post = <T>(path: string, data: unknown, method = "POST") =>
     body: JSON.stringify(data),
   });
 
+/** Release develop → main (tableau de bord) : voir worker/tickets.ts (ReleaseState). */
+export interface ReleaseState {
+  version: string;
+  pending: string[];
+  pr: { number: number; url: string; state: "wait" | "fail" | "merged"; why: string } | null;
+}
+export const releaseState = () => request<{ release: ReleaseState }>("/release");
+export const startRelease = () => post<{ release: ReleaseState }>("/release", { action: "start" });
 export const listTickets = () =>
   request<{ tickets: Ticket[]; labels?: LabelDef[]; config: TicketsConfig }>("");
 /** Étiquette ajoutée ou changée (`from` : ancien nom si renommée), ou retirée (`remove`) de tous les tickets. */

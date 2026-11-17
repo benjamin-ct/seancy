@@ -618,12 +618,41 @@ function IdeaCompose({ run }: { run: Run }) {
   );
 }
 
+// Dernière liste reçue et position du tableau : revenir sur l'onglet Tickets l'affiche tout de suite,
+// à la même place, puis la liste se met à jour en arrière-plan (sans tout redessiner si rien n'a changé)
+let lastList: { json: string; data: Awaited<ReturnType<typeof listTickets>> } | null = null;
+let lastScrollX = 0;
+
+/** Message du bas de l'écran, en popover : il passe au-dessus d'une fiche ouverte (fenêtre modale). */
+function Toast({ text, bad }: { text: string; bad: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    try {
+      el?.hidePopover();
+      el?.showPopover();
+    } catch {
+      // Navigateur sans popover : le message reste en position fixe, sous une fiche ouverte
+    }
+  }, [text]);
+  return (
+    <div
+      ref={ref}
+      popover="manual"
+      className={`${styles.toast} ${bad ? styles.toastBad : ""}`}
+      role={bad ? "alert" : "status"}
+    >
+      {text}
+    </div>
+  );
+}
+
 export default function TicketsPage() {
   useDocumentTitle("Tickets");
   const { status: authStatus, email } = useAuth();
-  const [tickets, setTickets] = useState<Ticket[] | null>(null);
-  const [config, setConfig] = useState<TicketsConfig | null>(null);
-  const [labelDefs, setLabelDefs] = useState<LabelDef[]>([]);
+  const [tickets, setTickets] = useState<Ticket[] | null>(lastList?.data.tickets ?? null);
+  const [config, setConfig] = useState<TicketsConfig | null>(lastList?.data.config ?? null);
+  const [labelDefs, setLabelDefs] = useState<LabelDef[]>(lastList?.data.labels ?? []);
   const [denied, setDenied] = useState<{ status: number; message: string } | null>(null);
   const [query, setQuery] = useState("");
   // Téléphone : champ de recherche montré par la loupe de l'en-tête
@@ -728,14 +757,32 @@ export default function TicketsPage() {
       removeEventListener("resize", fit);
     };
   }, [boardReady, searching, small]);
+  useEffect(() => {
+    const b = boardRef.current;
+    if (!b) {
+      return;
+    }
+    b.scrollLeft = lastScrollX;
+    const save = () => {
+      lastScrollX = b.scrollLeft;
+    };
+    b.addEventListener("scroll", save, { passive: true });
+    return () => b.removeEventListener("scroll", save);
+  }, [boardReady]);
 
   const load = useCallback(async () => {
     try {
       const r = await listTickets();
+      const json = JSON.stringify(r);
+      setDenied(null);
+      // Rien de changé depuis la dernière lecture : on ne redessine rien
+      if (json === lastList?.json) {
+        return;
+      }
+      lastList = { json, data: r };
       setTickets(r.tickets);
       setConfig(r.config);
       setLabelDefs(r.labels ?? []);
-      setDenied(null);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setDenied({ status: err.status, message: err.message });
@@ -1270,14 +1317,7 @@ export default function TicketsPage() {
             </div>
           )}
         </Dialog>
-        {toast && (
-          <div
-            className={`${styles.toast} ${toast.bad ? styles.toastBad : ""}`}
-            role={toast.bad ? "alert" : "status"}
-          >
-            {toast.text}
-          </div>
-        )}
+        {toast && <Toast text={toast.text} bad={toast.bad} />}
       </div>
     </LabelsContext.Provider>
   );
