@@ -23,8 +23,10 @@ import {
   applyAction,
   baseOf,
   cleanData,
+  cleanLabelDefs,
   issueBody,
   issueTitle,
+  mergeLabels,
   noticeFor,
   parseData,
   positionBefore,
@@ -32,9 +34,11 @@ import {
   prNumber,
   previewFromComments,
   testedOnBase,
+  upsertLabel,
   type Action,
   type Check,
   type Gh,
+  type LabelDef,
   type PullRequest,
   type Stage,
   type Ticket,
@@ -111,6 +115,24 @@ const setMeta = (env: Env, k: string, v: string) =>
   )
     .bind(k, v)
     .run();
+
+const labelDefs = async (env: Env): Promise<LabelDef[]> => {
+  try {
+    return cleanLabelDefs(JSON.parse((await getMeta(env, "labels")) ?? "[]"));
+  } catch {
+    return [];
+  }
+};
+
+// Étiquette renommée (`to`) ou retirée (`to` vide) dans tous les tickets, en une requête (casse ignorée, sans doublon)
+const RENAME_LABEL = `UPDATE tickets SET data = json_set(data, '$.labels', json((
+    SELECT json_group_array(v) FROM (
+      SELECT CASE WHEN lower(value) = lower(?1) THEN ?2 ELSE value END AS v, min(key) AS k
+      FROM json_each(tickets.data, '$.labels')
+      WHERE ?2 <> '' OR lower(value) <> lower(?1)
+      GROUP BY lower(v) ORDER BY k)))),
+    version = version + 1, updated_at = ?3
+  WHERE EXISTS (SELECT 1 FROM json_each(tickets.data, '$.labels') WHERE lower(value) = lower(?1))`;
 
 // ---------- Base ----------
 
@@ -736,6 +758,7 @@ export async function handleTickets(
       await maybeTick(env, ctx, now);
       return json({
         tickets: await loadAll(env),
+        labels: await labelDefs(env),
         config: {
           github: !!env.GITHUB_TICKETS_TOKEN,
           discord: !!env.DISCORD_TICKETS_WEBHOOK_URL,
@@ -797,6 +820,26 @@ export async function handleTickets(
       await setMeta(env, "tick", String(now));
       await runTicketsCron(env, now);
       return json({ ok: true });
+    }
+    // Étiquettes : PUT = celles d'ailleurs fusionnées (import Trello, avec la clé) ; POST = une étiquette
+    // ajoutée, changée, renommée ou retirée depuis la page (appliqué à tous les tickets)
+    if (parts[0] === "labels" && (m === "PUT" || m === "POST")) {
+      const b = await body(request);
+      const defs = await labelDefs(env);
+      let next: LabelDef[];
+      if (m === "PUT") {
+        next = mergeLabels(defs, b.labels);
+      } else {
+        adminOnly();
+        next = upsertLabel(defs, b);
+        const from = String(b.from ?? "").trim();
+        const to = b.remove ? "" : String(b.name ?? "").trim();
+        if (from && from !== to) {
+          await env.DB.prepare(RENAME_LABEL).bind(from, to, now).run();
+        }
+      }
+      await setMeta(env, "labels", JSON.stringify(next));
+      return json({ ok: true, labels: next });
     }
     if (parts[0] === "import" && m === "POST") {
       const b = await body(request);

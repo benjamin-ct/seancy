@@ -1,4 +1,4 @@
-import { useEffect, useState, type ClipboardEvent } from "react";
+import { useEffect, useState, type ClipboardEvent, type ReactNode } from "react";
 import {
   deleteFile,
   deleteTicket,
@@ -21,9 +21,13 @@ import {
   modelName,
   prNumber,
   stepOf,
+  viewable,
   when,
 } from "./board.ts";
+import { Label, LabelPicker } from "./Labels.tsx";
+import Markdown, { MarkdownInput } from "./Markdown.tsx";
 import styles from "./TicketsPage.module.css";
+import Viewer from "./Viewer.tsx";
 
 export type ReplyMode = "retouch" | "follow" | "reopen";
 export type Run = (
@@ -82,31 +86,6 @@ function Linkified({ text }: { text: string }) {
     </>
   );
 }
-function Text({ text }: { text: string }) {
-  return (
-    <div className={styles.text}>
-      {lines(text).map((l, i) =>
-        l.trim() ? (
-          <p
-            key={i}
-            className={
-              /^\s*[-•*]\s/.test(l)
-                ? styles.bullet
-                : /^[^:]{2,40} :$/.test(l.trim())
-                  ? styles.subhead
-                  : ""
-            }
-          >
-            <Linkified text={l.replace(/^\s*[-•*]\s+/, "")} />
-          </p>
-        ) : (
-          <br key={i} />
-        )
-      )}
-    </div>
-  );
-}
-
 function Progress({ t, run, ask }: { t: Ticket; run: Run; ask: Ask }) {
   const live = fresh(t);
   const relaunch = () =>
@@ -209,6 +188,10 @@ export default function TicketSheet({
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [labels, setLabels] = useState(t.labels);
+  const [viewing, setViewing] = useState(-1);
+  const media = t.files.filter(viewable);
 
   useEffect(() => {
     if (!editing) {
@@ -216,6 +199,10 @@ export default function TicketSheet({
       setDetail(t.detail);
     }
   }, [t.title, t.detail, editing]);
+  const labelsKey = t.labels.join("\n");
+  useEffect(() => {
+    setLabels(labelsKey ? labelsKey.split("\n") : []);
+  }, [labelsKey]);
 
   const go = async (job: () => Promise<unknown>, ok: string | ((r: unknown) => string)) => {
     setBusy(true);
@@ -459,7 +446,7 @@ export default function TicketSheet({
           </label>
           <label>
             Description
-            <textarea value={detail} rows={8} onChange={(e) => setDetail(e.target.value)} />
+            <MarkdownInput value={detail} rows={10} onChange={setDetail} />
           </label>
           <div className={styles.row}>
             <button
@@ -484,7 +471,7 @@ export default function TicketSheet({
       ) : desc.length ? (
         <>
           <div className={long && !showAll ? styles.clip : ""}>
-            <Text text={t.detail} />
+            <Markdown text={t.detail} />
           </div>
           {long && (
             <button
@@ -513,16 +500,28 @@ export default function TicketSheet({
         <div className={styles.files}>
           {t.files.map((f) => (
             <span key={f.id} className={styles.file}>
-              <a href={fileUrl(f)} target="_blank" rel="noopener noreferrer">
-                {/^image\//.test(f.type) ? (
-                  <img src={fileUrl(f)} alt={f.name} loading="lazy" />
-                ) : (
+              {viewable(f) ? (
+                <button
+                  type="button"
+                  className={styles.thumb}
+                  aria-label={`Voir ${f.name}`}
+                  onClick={() => setViewing(media.indexOf(f))}
+                >
+                  {/^image\//.test(f.type) ? (
+                    <img src={fileUrl(f)} alt="" loading="lazy" />
+                  ) : (
+                    <span>▶ {f.name}</span>
+                  )}
+                </button>
+              ) : (
+                <a href={fileUrl(f)} target="_blank" rel="noopener noreferrer">
                   <span>{f.name}</span>
-                )}
-              </a>
+                </a>
+              )}
               {editable && (
                 <button
                   type="button"
+                  className={styles.fileDel}
                   aria-label={`Retirer ${f.name}`}
                   onClick={() =>
                     ask(`Retirer ${f.name} ?`, "Retirer", () =>
@@ -621,6 +620,8 @@ export default function TicketSheet({
       <h3>Carte Trello d'origine</h3>
       <p className={styles.muted}>
         Liste « {t.trello.list} »
+        {t.trello.comments.length > 0 &&
+          ` · ${t.trello.comments.length} commentaire${t.trello.comments.length > 1 ? "s" : ""} dans l'activité`}
         {t.trello.url && (
           <>
             {" · "}
@@ -630,91 +631,93 @@ export default function TicketSheet({
           </>
         )}
       </p>
-      {t.trello.comments.length > 0 && (
-        <details className={styles.more}>
-          <summary>
-            {t.trello.comments.length} commentaire{t.trello.comments.length > 1 ? "s" : ""}
-          </summary>
-          <ol className={styles.hist}>
-            {t.trello.comments.map((c, i) => (
-              <li
-                key={i}
-                className={`${styles.bubble} ${/^🤖/.test(c.text) ? styles.claude : styles.me}`}
-              >
-                <b>
-                  {c.author || "Trello"} <small>{when(c.at)}</small>
-                </b>
-                <Text text={c.text} />
-              </li>
-            ))}
-          </ol>
-        </details>
-      )}
     </section>
   );
 
-  const history = (t.history.length > 0 || t.status !== "idea") && (
-    <section className={styles.sec}>
-      <h3>Historique</h3>
-      <ol className={styles.hist}>
-        {t.history.map((e, i) => {
-          const n = prNumber(e.pr ?? "");
-          const pr = n && e.pr && (
-            <a href={e.pr} target="_blank" rel="noopener noreferrer">
-              {" "}
-              PR #{n}
-            </a>
-          );
-          if (e.kind === "reponse") {
-            const last = t.history.map((x) => x.kind).lastIndexOf("reponse") === i;
-            return (
-              <li key={i} className={`${styles.bubble} ${styles.claude}`}>
-                <b>
-                  Claude <small>{when(e.at)}</small>
-                </b>
-                <Text text={e.text ?? ""} />
-                {pr && <p>{pr}</p>}
-                {last && t.notes && (
-                  <details className={styles.more}>
-                    <summary>Notes de travail de Claude</summary>
-                    <Text text={t.notes} />
-                  </details>
-                )}
-              </li>
-            );
-          }
-          if (e.kind === "message") {
-            return (
-              <li
-                key={i}
-                className={`${styles.bubble} ${e.who === "auto" ? styles.auto : styles.me}`}
-              >
-                <b>
-                  {e.who === "auto" ? "Validation automatique" : e.by || "Vous"}{" "}
-                  <small>{when(e.at)}</small>
-                </b>
-                <Text text={e.text ?? ""} />
-              </li>
-            );
-          }
-          if (e.kind === "arret") {
-            return (
-              <li key={i} className={`${styles.event} ${styles.bad}`}>
-                Arrêté{e.text ? ` : ${e.text}` : ""} · {when(e.at)}
-              </li>
-            );
-          }
-          return (
-            <li key={i} className={`${styles.event} ${e.kind === "valide" ? styles.good : ""}`}>
-              {EVENTS[e.kind] ?? e.kind}
-              {e.by ? ` par ${e.by}` : ""} · {when(e.at)}
-              {pr}
-            </li>
-          );
-        })}
-        {!t.history.length && <li className={styles.event}>Pas encore envoyé à Claude</li>}
-      </ol>
-    </section>
+  // Activité, la plus récente en haut (comme Trello) : historique du ticket et commentaires de la carte Trello
+  const lastAnswer = t.history.map((x) => x.kind).lastIndexOf("reponse");
+  const activity: { at: number; node: ReactNode }[] = t.history.map((e, i) => {
+    const n = prNumber(e.pr ?? "");
+    const pr = n && e.pr && (
+      <a href={e.pr} target="_blank" rel="noopener noreferrer">
+        {" "}
+        PR #{n}
+      </a>
+    );
+    let node: ReactNode;
+    if (e.kind === "reponse") {
+      node = (
+        <li key={`h${i}`} className={`${styles.bubble} ${styles.claude}`}>
+          <b>
+            Claude <small>{when(e.at)}</small>
+          </b>
+          <Markdown text={e.text ?? ""} />
+          {pr && <p>{pr}</p>}
+          {i === lastAnswer && t.notes && (
+            <details className={styles.more}>
+              <summary>Notes de travail de Claude</summary>
+              <Markdown text={t.notes} />
+            </details>
+          )}
+        </li>
+      );
+    } else if (e.kind === "message") {
+      node = (
+        <li
+          key={`h${i}`}
+          className={`${styles.bubble} ${e.who === "auto" ? styles.auto : styles.me}`}
+        >
+          <b>
+            {e.who === "auto" ? "Validation automatique" : e.by || "Vous"}{" "}
+            <small>{when(e.at)}</small>
+          </b>
+          <Markdown text={e.text ?? ""} />
+        </li>
+      );
+    } else if (e.kind === "arret") {
+      node = (
+        <li key={`h${i}`} className={`${styles.event} ${styles.bad}`}>
+          Arrêté{e.text ? ` : ${e.text}` : ""} · {when(e.at)}
+        </li>
+      );
+    } else {
+      node = (
+        <li key={`h${i}`} className={`${styles.event} ${e.kind === "valide" ? styles.good : ""}`}>
+          {EVENTS[e.kind] ?? e.kind}
+          {e.by ? ` par ${e.by}` : ""} · {when(e.at)}
+          {pr}
+        </li>
+      );
+    }
+    return { at: e.at, node };
+  });
+  for (const [i, c] of (t.trello?.comments ?? []).entries()) {
+    activity.push({
+      at: c.at,
+      node: (
+        <li
+          key={`t${i}`}
+          className={`${styles.bubble} ${/^🤖/.test(c.text) ? styles.claude : styles.me}`}
+        >
+          <b>
+            {c.author || "Trello"} <small>{when(c.at)} · sur Trello</small>
+          </b>
+          <Markdown text={c.text} />
+        </li>
+      ),
+    });
+  }
+  activity.sort((x, y) => y.at - x.at);
+  const history = (
+    <ol className={styles.hist}>
+      {activity.map((x) => x.node)}
+      {!t.history.length && t.status !== "idea" && (
+        <li className={styles.event}>Pas encore envoyé à Claude</li>
+      )}
+      {!activity.length && t.status === "idea" && (
+        <li className={styles.event}>Pas encore d'activité</li>
+      )}
+    </ol>
   );
 
   const replyBox =
@@ -735,12 +738,12 @@ export default function TicketSheet({
             ))}
           </div>
         )}
-        <textarea
+        <MarkdownInput
           rows={3}
           value={reply}
           placeholder={BOX[mode].placeholder}
           aria-label={BOX[mode].label}
-          onChange={(e) => setReply(e.target.value)}
+          onChange={setReply}
         />
         <div className={styles.row}>
           <button
@@ -755,12 +758,12 @@ export default function TicketSheet({
       </div>
     ) : editable ? (
       <div className={styles.reply}>
-        <textarea
+        <MarkdownInput
           rows={2}
           value={note}
           placeholder="Ajouter une note à la description…"
           aria-label="Note"
-          onChange={(e) => setNote(e.target.value)}
+          onChange={setNote}
         />
         <div className={styles.row}>
           <button
@@ -792,104 +795,130 @@ export default function TicketSheet({
       <p className={styles.hint}>Claude travaille : tu pourras lui répondre quand il aura fini.</p>
     ) : null;
 
-  return (
-    <article className={`${styles.sheet} ${styles[`col_${t.status}`]}`} onPaste={onPaste}>
-      <header className={styles.sheetHead}>
-        <h2>{t.title}</h2>
-        <p className={styles.labels}>
-          {t.urgent && <span className={`${styles.lab} ${styles.labHot}`}>Hotfix</span>}
-          {t.labels.map((l) => (
-            <span key={l} className={styles.lab}>
-              {l}
-            </span>
-          ))}
-          <small>{head.join(" · ")}</small>
-        </p>
-      </header>
-      {actions}
-      {t.status === "work" && (
+  const saveLabels = (next: string[]) => {
+    setLabels(next);
+    void go(() => editTicket(t.id, { labels: next }), "Étiquettes enregistrées");
+  };
+
+  const remove = (editable || t.status === "done") && (
+    <div className={styles.row}>
+      {deleting ? (
         <>
-          {t.queued > 0 && (
-            <p className={styles.hint}>
-              <b>Validé :</b> Claude règle un conflit ou la CI avec les derniers changements de la
-              base, puis la PR est fusionnée toute seule.
-            </p>
-          )}
-          <Progress t={t} run={go} ask={ask} />
-        </>
-      )}
-      {t.status === "review" && t.queued > 0 && (
-        <div className={styles.prog} role="status">
-          <b>Validé : en file pour la fusion</b>
-          <p className={styles.progText}>
-            Fusion automatique dès que la PR est à jour et que sa CI est passée (quelques minutes)
-            {t.followUp ? ", puis ton commentaire part chez Claude" : ""}.
-          </p>
+          <span>Supprimer {t.status === "idea" ? "l'idée" : "le ticket"} et ses fichiers ?</span>
           <button
             type="button"
-            className={styles.link}
-            onClick={() => go(() => ticketAction(t.id, "unqueue"), "Validation annulée")}
+            className={styles.danger}
+            onClick={async () => {
+              if (
+                await go(
+                  () => deleteTicket(t.id),
+                  t.status === "idea" ? "Idée supprimée" : "Ticket supprimé"
+                )
+              ) {
+                onClose();
+              }
+            }}
           >
-            Annuler la validation
+            Supprimer
           </button>
-        </div>
-      )}
-      {editable ? (
-        <>
-          {settings}
-          {description}
-          {attachments}
-          {trello}
-          {history}
+          <button type="button" className={styles.link} onClick={() => setDeleting(false)}>
+            Garder
+          </button>
         </>
       ) : (
-        <>
-          {history}
-          {description}
-          {attachments}
-          {trello}
-          {settings}
-        </>
+        <button
+          type="button"
+          className={`${styles.link} ${styles.del}`}
+          onClick={() => setDeleting(true)}
+        >
+          Supprimer {t.status === "idea" ? "l'idée" : "le ticket"}
+        </button>
       )}
-      {replyBox}
-      {(editable || t.status === "done") && (
-        <div className={styles.row}>
-          {deleting ? (
-            <>
-              <span>
-                Supprimer {t.status === "idea" ? "l'idée" : "le ticket"} et ses fichiers ?
-              </span>
-              <button
-                type="button"
-                className={styles.danger}
-                onClick={async () => {
-                  if (
-                    await go(
-                      () => deleteTicket(t.id),
-                      t.status === "idea" ? "Idée supprimée" : "Ticket supprimé"
-                    )
-                  ) {
-                    onClose();
-                  }
-                }}
-              >
-                Supprimer
-              </button>
-              <button type="button" className={styles.link} onClick={() => setDeleting(false)}>
-                Garder
-              </button>
-            </>
-          ) : (
+    </div>
+  );
+
+  // Ordinateur : deux colonnes façon Trello (le ticket à gauche, « Commentaires et activité » à droite).
+  // Téléphone : une colonne ; l'activité passe en tête quand Claude a déjà travaillé dessus.
+  return (
+    <article
+      className={`${styles.sheet} ${styles[`col_${t.status}`]} ${editable ? "" : styles.sheetTalk}`}
+      onPaste={onPaste}
+    >
+      <div className={styles.sheetMain}>
+        <header className={styles.sheetHead}>
+          <h2>{t.title}</h2>
+          <p className={styles.meta2}>{head.join(" · ")}</p>
+        </header>
+        <div className={styles.sheetLabels}>
+          <h3>Étiquettes</h3>
+          <div className={styles.labels}>
+            {t.urgent && (
+              <span className={`${styles.lab} ${styles.labBig} ${styles.labHot}`}>Hotfix</span>
+            )}
+            {labels.map((l) => (
+              <Label key={l} name={l} big />
+            ))}
             <button
               type="button"
-              className={`${styles.link} ${styles.del}`}
-              onClick={() => setDeleting(true)}
+              className={styles.labAdd}
+              aria-expanded={picking}
+              aria-label="Choisir les étiquettes"
+              title="Choisir les étiquettes"
+              onClick={() => setPicking(!picking)}
             >
-              Supprimer {t.status === "idea" ? "l'idée" : "le ticket"}
+              +
             </button>
+          </div>
+          {picking && (
+            <LabelPicker
+              value={labels}
+              onChange={saveLabels}
+              run={go}
+              onClose={() => setPicking(false)}
+            />
           )}
         </div>
-      )}
+        {actions}
+        {t.status === "work" && (
+          <>
+            {t.queued > 0 && (
+              <p className={styles.hint}>
+                <b>Validé :</b> Claude règle un conflit ou la CI avec les derniers changements de la
+                base, puis la PR est fusionnée toute seule.
+              </p>
+            )}
+            <Progress t={t} run={go} ask={ask} />
+          </>
+        )}
+        {t.status === "review" && t.queued > 0 && (
+          <div className={styles.prog} role="status">
+            <b>Validé : en file pour la fusion</b>
+            <p className={styles.progText}>
+              Fusion automatique dès que la PR est à jour et que sa CI est passée (quelques minutes)
+              {t.followUp ? ", puis ton commentaire part chez Claude" : ""}.
+            </p>
+            <button
+              type="button"
+              className={styles.link}
+              onClick={() => go(() => ticketAction(t.id, "unqueue"), "Validation annulée")}
+            >
+              Annuler la validation
+            </button>
+          </div>
+        )}
+        {description}
+        {attachments}
+        {editable ? settings : null}
+        {trello}
+        {editable ? null : settings}
+        {remove}
+      </div>
+      <aside className={styles.sheetSide} aria-label="Commentaires et activité">
+        <h3>Commentaires et activité</h3>
+        {replyBox}
+        {history}
+      </aside>
+      {viewing >= 0 && <Viewer files={media} start={viewing} onClose={() => setViewing(-1)} />}
     </article>
   );
 }

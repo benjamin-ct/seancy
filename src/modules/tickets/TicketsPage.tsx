@@ -26,6 +26,7 @@ import {
   ticketAction,
   uploadFile,
   type Effort,
+  type LabelDef,
   type Ticket,
   type TicketStatus,
   type TicketsConfig,
@@ -39,6 +40,7 @@ import {
   canMove,
   columns,
   day,
+  LabelsContext,
   fresh,
   modelName,
   prNumber,
@@ -46,6 +48,8 @@ import {
   stepOf,
 } from "./board.ts";
 import Dialog from "./Dialog.tsx";
+import { Label } from "./Labels.tsx";
+import { MarkdownInput } from "./Markdown.tsx";
 import TicketSheet, { type Ask, type ReplyMode, type Run } from "./TicketSheet.tsx";
 import styles from "./TicketsPage.module.css";
 
@@ -97,9 +101,6 @@ function Mini({
   if (t.status !== "done" && t.status !== "idea") {
     labs.push({ text: `${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}` });
   }
-  for (const l of t.labels.slice(0, 3)) {
-    labs.push({ text: l });
-  }
   const cur = stepOf(t);
   const bar = t.status === "work" && !(live && (t.stage === "fail" || t.stage === "quota"));
   const prNo = prNumber(t.pr);
@@ -131,8 +132,11 @@ function Mini({
           draggable={false}
         />
       )}
-      {labs.length > 0 && (
+      {labs.length + t.labels.length > 0 && (
         <span className={styles.labels}>
+          {t.labels.map((l) => (
+            <Label key={l} name={l} />
+          ))}
           {labs.map((l) => (
             <span key={l.text} className={`${styles.lab} ${l.tone ?? ""}`}>
               {l.text}
@@ -242,12 +246,12 @@ function NewTicket({
         aria-label="Titre"
         onChange={(e) => setTitle(e.target.value)}
       />
-      <textarea
+      <MarkdownInput
         value={detail}
         rows={6}
         placeholder="Ce qui se passe, où, ce que tu voudrais à la place…"
         aria-label="Description"
-        onChange={(e) => setDetail(e.target.value)}
+        onChange={setDetail}
         autoFocus
       />
       <fieldset className={styles.models}>
@@ -428,6 +432,7 @@ export default function TicketsPage() {
   const { status: authStatus, email } = useAuth();
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [config, setConfig] = useState<TicketsConfig | null>(null);
+  const [labelDefs, setLabelDefs] = useState<LabelDef[]>([]);
   const [denied, setDenied] = useState<{ status: number; message: string } | null>(null);
   const [query, setQuery] = useState("");
   // « Les miens » : tickets créés par le compte connecté (les deux administrateurs partagent le tableau)
@@ -501,6 +506,7 @@ export default function TicketsPage() {
       const r = await listTickets();
       setTickets(r.tickets);
       setConfig(r.config);
+      setLabelDefs(r.labels ?? []);
       setDenied(null);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -566,6 +572,20 @@ export default function TicketsPage() {
       ),
     [tickets, query, mine, email]
   );
+  // Étiquettes définies (dans leur ordre), puis celles des tickets qui n'ont pas encore de couleur
+  const labelsInfo = useMemo(() => {
+    const names = labelDefs.map((d) => d.name);
+    const seen = new Set(names.map((n) => n.toLowerCase()));
+    for (const t of tickets ?? []) {
+      for (const l of t.labels) {
+        if (!seen.has(l.toLowerCase())) {
+          seen.add(l.toLowerCase());
+          names.push(l);
+        }
+      }
+    }
+    return { defs: labelDefs, names };
+  }, [labelDefs, tickets]);
   const byId = useMemo(() => new Map((tickets ?? []).map((t) => [t.id, t])), [tickets]);
   const open = sheet ? byId.get(sheet.id) : undefined;
 
@@ -768,227 +788,232 @@ export default function TicketsPage() {
   }
 
   return (
-    <div className={styles.page}>
-      <header className={styles.top}>
-        <div>
-          <p className={styles.eyebrow}>Développement · Claude</p>
-          <h1 className={styles.title}>Tickets</h1>
-        </div>
-        <div className={styles.tools}>
-          <input
-            type="search"
-            className={styles.search}
-            value={query}
-            placeholder="Chercher…"
-            aria-label="Chercher un ticket"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <div className={styles.segs} role="group" aria-label="Tickets montrés">
-            <button
-              type="button"
-              className={styles.seg}
-              aria-pressed={!mine}
-              onClick={() => setMine(false)}
-            >
-              Tous
-            </button>
-            <button
-              type="button"
-              className={styles.seg}
-              aria-pressed={mine}
-              onClick={() => setMine(true)}
-            >
-              Les miens
-            </button>
+    <LabelsContext.Provider value={labelsInfo}>
+      <div className={styles.page}>
+        <header className={styles.top}>
+          <div>
+            <p className={styles.eyebrow}>Développement · Claude</p>
+            <h1 className={styles.title}>Tickets</h1>
           </div>
-          <button type="button" className={styles.btn} onClick={() => setSettings(true)}>
-            Réglages
-          </button>
-          <button type="button" className={styles.primary} onClick={() => setCreating(true)}>
-            Nouveau ticket
-          </button>
-        </div>
-      </header>
-      {config && !config.github && (
-        <p className={styles.banner}>
-          Envoi à Claude pas encore réglé : il manque le secret <code>GITHUB_TICKETS_TOKEN</code> du
-          Worker. Les tickets se notent et se rangent quand même.
-        </p>
-      )}
-      {!tickets ? (
-        <p className={styles.muted}>Chargement…</p>
-      ) : (
-        <div className={`${styles.board} ${small ? styles.boardSmall : ""}`} ref={boardRef}>
-          {COLUMNS.map((c) => {
-            const list = cols[c.key];
-            const off = dragged && !canMove(dragged, c.key);
-            const over = target?.col === c.key && !off;
-            const total =
-              c.key === "done"
-                ? (tickets ?? []).filter((t) => t.status === "done").length
-                : list.length;
-            return (
-              <section
-                key={c.key}
-                data-col={c.key}
-                className={`${styles.col} ${styles[`col_${c.key}`]} ${off ? styles.colOff : ""} ${over ? styles.colOver : ""}`}
-                aria-labelledby={`col-${c.key}`}
-              >
-                <header className={styles.colHead}>
-                  <h2 id={`col-${c.key}`}>{c.name}</h2>
-                  <span className={styles.count}>{total}</span>
-                </header>
-                <div className={styles.cards}>
-                  {list.map((t) => (
-                    <div
-                      key={t.id}
-                      className={
-                        over && SORTABLE.has(c.key) && target?.before === t.id && drag?.id !== t.id
-                          ? styles.dropBefore
-                          : ""
-                      }
-                    >
-                      <Mini
-                        t={t}
-                        dragging={drag?.id === t.id}
-                        onDown={onDown(t)}
-                        onOpen={() => {
-                          if (Date.now() - dragEnd.current > 300) {
-                            setSheet({ id: t.id, mode: "" });
-                          }
-                        }}
-                      />
-                    </div>
-                  ))}
-                  {over && SORTABLE.has(c.key) && target?.before === "" && (
-                    <div className={styles.dropEnd} />
-                  )}
-                  {!list.length && (
-                    <p className={styles.empty}>{query ? "Aucun ticket trouvé." : c.empty}</p>
-                  )}
-                  {c.key === "done" && !query && total > list.length && (
-                    <p className={styles.empty}>
-                      Les {list.length} derniers : cherche pour retrouver les autres.
-                    </p>
-                  )}
-                </div>
-                {c.key === "idea" && (
-                  <form
-                    className={styles.compose}
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const [title, ...rest] = idea.split("\n");
-                      if (!title.trim()) {
-                        return;
-                      }
-                      void run(async () => {
-                        await createTicket({
-                          status: "idea",
-                          title: title.trim(),
-                          detail: rest.join("\n").trim(),
-                        });
-                        setIdea("");
-                      }, "Idée notée");
-                    }}
-                  >
-                    <textarea
-                      rows={2}
-                      value={idea}
-                      placeholder="Une idée (1re ligne : le titre)"
-                      aria-label="Nouvelle idée : la première ligne sert de titre"
-                      onChange={(e) => setIdea(e.target.value)}
-                    />
-                    {idea.trim() && (
-                      <button type="submit" className={styles.btn}>
-                        Noter l'idée
-                      </button>
-                    )}
-                  </form>
-                )}
-                {c.key === "todo" && (
-                  <button type="button" className={styles.add} onClick={() => setCreating(true)}>
-                    + Nouveau ticket
-                  </button>
-                )}
-              </section>
-            );
-          })}
-        </div>
-      )}
-      {tickets && (
-        <button
-          type="button"
-          className={styles.zoom}
-          aria-pressed={small}
-          aria-label={small ? "Agrandir le tableau" : "Réduire le tableau"}
-          title={small ? "Agrandir le tableau" : "Réduire le tableau"}
-          onClick={() => setSmall(!small)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d={small ? ZOOM_OUT : ZOOM_IN} />
-          </svg>
-        </button>
-      )}
-      {drag && dragged && (
-        <div
-          className={styles.ghost}
-          style={{ left: drag.x - drag.offX, top: drag.y - drag.offY, width: drag.w }}
-          aria-hidden="true"
-        >
-          <span className={styles.miniTitle}>{dragged.title}</span>
-        </div>
-      )}
-
-      <Dialog open={!!open} onClose={() => setSheet(null)} label={open?.title ?? "Ticket"} wide>
-        {open && (
-          <TicketSheet
-            key={`${open.id}-${sheet?.mode}`}
-            ticket={open}
-            mode={sheet?.mode ?? ""}
-            run={run}
-            ask={ask}
-            onClose={() => setSheet(null)}
-          />
-        )}
-      </Dialog>
-      <Dialog open={creating} onClose={() => setCreating(false)} label="Nouveau ticket">
-        <NewTicket onClose={() => setCreating(false)} run={run} config={config} />
-      </Dialog>
-      <Dialog open={settings} onClose={() => setSettings(false)} label="Réglages des tickets">
-        <Settings config={config} run={run} />
-      </Dialog>
-      <Dialog open={!!confirm} onClose={() => setConfirm(null)} label="Confirmation">
-        {confirm && (
-          <div className={styles.form}>
-            <p className={styles.confirmText}>{confirm.text}</p>
-            <div className={styles.row}>
+          <div className={styles.tools}>
+            <input
+              type="search"
+              className={styles.search}
+              value={query}
+              placeholder="Chercher…"
+              aria-label="Chercher un ticket"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <div className={styles.segs} role="group" aria-label="Tickets montrés">
               <button
                 type="button"
-                className={styles.primary}
-                autoFocus
-                onClick={() => {
-                  const job = confirm.job;
-                  setConfirm(null);
-                  job();
-                }}
+                className={styles.seg}
+                aria-pressed={!mine}
+                onClick={() => setMine(false)}
               >
-                {confirm.ok}
+                Tous
               </button>
-              <button type="button" className={styles.btn} onClick={() => setConfirm(null)}>
-                Annuler
+              <button
+                type="button"
+                className={styles.seg}
+                aria-pressed={mine}
+                onClick={() => setMine(true)}
+              >
+                Les miens
               </button>
             </div>
+            <button type="button" className={styles.btn} onClick={() => setSettings(true)}>
+              Réglages
+            </button>
+            <button type="button" className={styles.primary} onClick={() => setCreating(true)}>
+              Nouveau ticket
+            </button>
+          </div>
+        </header>
+        {config && !config.github && (
+          <p className={styles.banner}>
+            Envoi à Claude pas encore réglé : il manque le secret <code>GITHUB_TICKETS_TOKEN</code>{" "}
+            du Worker. Les tickets se notent et se rangent quand même.
+          </p>
+        )}
+        {!tickets ? (
+          <p className={styles.muted}>Chargement…</p>
+        ) : (
+          <div className={`${styles.board} ${small ? styles.boardSmall : ""}`} ref={boardRef}>
+            {COLUMNS.map((c) => {
+              const list = cols[c.key];
+              const off = dragged && !canMove(dragged, c.key);
+              const over = target?.col === c.key && !off;
+              const total =
+                c.key === "done"
+                  ? (tickets ?? []).filter((t) => t.status === "done").length
+                  : list.length;
+              return (
+                <section
+                  key={c.key}
+                  data-col={c.key}
+                  className={`${styles.col} ${styles[`col_${c.key}`]} ${off ? styles.colOff : ""} ${over ? styles.colOver : ""}`}
+                  aria-labelledby={`col-${c.key}`}
+                >
+                  <header className={styles.colHead}>
+                    <h2 id={`col-${c.key}`}>{c.name}</h2>
+                    <span className={styles.count}>{total}</span>
+                  </header>
+                  <div className={styles.cards}>
+                    {list.map((t) => (
+                      <div
+                        key={t.id}
+                        className={
+                          over &&
+                          SORTABLE.has(c.key) &&
+                          target?.before === t.id &&
+                          drag?.id !== t.id
+                            ? styles.dropBefore
+                            : ""
+                        }
+                      >
+                        <Mini
+                          t={t}
+                          dragging={drag?.id === t.id}
+                          onDown={onDown(t)}
+                          onOpen={() => {
+                            if (Date.now() - dragEnd.current > 300) {
+                              setSheet({ id: t.id, mode: "" });
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {over && SORTABLE.has(c.key) && target?.before === "" && (
+                      <div className={styles.dropEnd} />
+                    )}
+                    {!list.length && (
+                      <p className={styles.empty}>{query ? "Aucun ticket trouvé." : c.empty}</p>
+                    )}
+                    {c.key === "done" && !query && total > list.length && (
+                      <p className={styles.empty}>
+                        Les {list.length} derniers : cherche pour retrouver les autres.
+                      </p>
+                    )}
+                  </div>
+                  {c.key === "idea" && (
+                    <form
+                      className={styles.compose}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const [title, ...rest] = idea.split("\n");
+                        if (!title.trim()) {
+                          return;
+                        }
+                        void run(async () => {
+                          await createTicket({
+                            status: "idea",
+                            title: title.trim(),
+                            detail: rest.join("\n").trim(),
+                          });
+                          setIdea("");
+                        }, "Idée notée");
+                      }}
+                    >
+                      <textarea
+                        rows={2}
+                        value={idea}
+                        placeholder="Une idée (1re ligne : le titre)"
+                        aria-label="Nouvelle idée : la première ligne sert de titre"
+                        onChange={(e) => setIdea(e.target.value)}
+                      />
+                      {idea.trim() && (
+                        <button type="submit" className={styles.btn}>
+                          Noter l'idée
+                        </button>
+                      )}
+                    </form>
+                  )}
+                  {c.key === "todo" && (
+                    <button type="button" className={styles.add} onClick={() => setCreating(true)}>
+                      + Nouveau ticket
+                    </button>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
-      </Dialog>
-      {toast && (
-        <div
-          className={`${styles.toast} ${toast.bad ? styles.toastBad : ""}`}
-          role={toast.bad ? "alert" : "status"}
-        >
-          {toast.text}
-        </div>
-      )}
-    </div>
+        {tickets && (
+          <button
+            type="button"
+            className={styles.zoom}
+            aria-pressed={small}
+            aria-label={small ? "Agrandir le tableau" : "Réduire le tableau"}
+            title={small ? "Agrandir le tableau" : "Réduire le tableau"}
+            onClick={() => setSmall(!small)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d={small ? ZOOM_OUT : ZOOM_IN} />
+            </svg>
+          </button>
+        )}
+        {drag && dragged && (
+          <div
+            className={styles.ghost}
+            style={{ left: drag.x - drag.offX, top: drag.y - drag.offY, width: drag.w }}
+            aria-hidden="true"
+          >
+            <span className={styles.miniTitle}>{dragged.title}</span>
+          </div>
+        )}
+
+        <Dialog open={!!open} onClose={() => setSheet(null)} label={open?.title ?? "Ticket"} wide>
+          {open && (
+            <TicketSheet
+              key={`${open.id}-${sheet?.mode}`}
+              ticket={open}
+              mode={sheet?.mode ?? ""}
+              run={run}
+              ask={ask}
+              onClose={() => setSheet(null)}
+            />
+          )}
+        </Dialog>
+        <Dialog open={creating} onClose={() => setCreating(false)} label="Nouveau ticket">
+          <NewTicket onClose={() => setCreating(false)} run={run} config={config} />
+        </Dialog>
+        <Dialog open={settings} onClose={() => setSettings(false)} label="Réglages des tickets">
+          <Settings config={config} run={run} />
+        </Dialog>
+        <Dialog open={!!confirm} onClose={() => setConfirm(null)} label="Confirmation">
+          {confirm && (
+            <div className={styles.form}>
+              <p className={styles.confirmText}>{confirm.text}</p>
+              <div className={styles.row}>
+                <button
+                  type="button"
+                  className={styles.primary}
+                  autoFocus
+                  onClick={() => {
+                    const job = confirm.job;
+                    setConfirm(null);
+                    job();
+                  }}
+                >
+                  {confirm.ok}
+                </button>
+                <button type="button" className={styles.btn} onClick={() => setConfirm(null)}>
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+        </Dialog>
+        {toast && (
+          <div
+            className={`${styles.toast} ${toast.bad ? styles.toastBad : ""}`}
+            role={toast.bad ? "alert" : "status"}
+          >
+            {toast.text}
+          </div>
+        )}
+      </div>
+    </LabelsContext.Provider>
   );
 }

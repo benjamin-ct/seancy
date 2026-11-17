@@ -34,6 +34,7 @@
     "src/core/botDetection.ts",
     "worker/ai-suggestions-format.ts",
     "src/modules/changelog/changelogParser.ts",
+    "src/modules/tickets/markdown.ts",
     "worker/bots.ts",
     "worker/rate-limit-memory.ts",
     "worker/tmdb-proxy-policy.ts",

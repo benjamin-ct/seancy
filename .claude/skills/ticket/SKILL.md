@@ -78,7 +78,8 @@ idea`) et réponds sans PR.
 - `--text` : court, aéré, en français simple, une idée par ligne (vrais retours à la ligne) : une phrase de résumé ;
   « Ce qui a changé : » puis une ligne « - … » par changement ; « Pour vérifier : » puis une ligne « - … » par étape
   (où cliquer, ce qui apparaît) ; « Revue : » le résumé de `reviewer` / `ui-reviewer` ; « Limites : » seulement si
-  une chose reste impossible à faire ou à vérifier.
+  une chose reste impossible à faire ou à vérifier. La page rend le Markdown (`**gras**`, listes `- `, `- [ ]`,
+  `code`, liens `[texte](https://…)`, tableaux) : titres des parties en gras (`**Pour vérifier :**`), pas de HTML.
 - `--notes` : notes de travail pour une retouche (fichiers touchés, choix faits, pistes écartées, ce qui reste).
 - **Blocage** (besoin ambigu, décision à prendre, dépendance manquante) : ne pas s'arrêter en silence. Pousser ce qui
   est fait (commits `wip:` si besoin), puis `answer` avec une première ligne `BLOCAGE : …` et la question précise.
