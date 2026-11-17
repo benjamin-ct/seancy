@@ -9,6 +9,17 @@ import styles from "./Admin.module.css";
 // Dernier état : affiché tout de suite au retour sur l'onglet
 let last: ReleaseState | null = null;
 
+// Sections du journal, comme scripts/changelogRelease.ts (le plus marquant d'abord)
+const SECTIONS = [
+  ["major", "Changements majeurs"],
+  ["minor", "Nouveautés"],
+  ["patch", "Correctifs"],
+] as const;
+const sinceText = (t: number) => {
+  const days = Math.floor((Date.now() - t) / 86_400_000);
+  return days < 1 ? "aujourd'hui" : days === 1 ? "depuis hier" : `depuis ${days} jours`;
+};
+
 export default function Release() {
   const [state, setState] = useState<ReleaseState | null>(last);
   const [error, setError] = useState("");
@@ -96,15 +107,48 @@ export default function Release() {
             <div className={styles.release}>
               <p>
                 {n
-                  ? `${n} changement${n > 1 ? "s" : ""} sur develop pas encore en ligne`
+                  ? `${n} changement${n > 1 ? "s" : ""} sur develop pas encore en ligne${state.since ? ` (${sinceText(state.since)})` : ""}`
                   : "Rien de nouveau sur develop : tout est en ligne"}
               </p>
+              {n > 0 && state.next && (
+                <p className={styles.releaseNext}>
+                  Prochaine version : <b>v{state.next}</b>
+                </p>
+              )}
+              {/* Ce qui partira dans le journal des versions (fragments .changeset) */}
+              {n > 0 &&
+                (state.notes.length ? (
+                  <div className={styles.releaseNotes}>
+                    {SECTIONS.map(([bump, title]) => {
+                      const list = state.notes.filter((x) => x.bump === bump);
+                      return (
+                        list.length > 0 && (
+                          <div key={bump}>
+                            <h3>{title}</h3>
+                            <ul>
+                              {list.map((x, i) => (
+                                <li key={i}>{x.summary}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className={styles.warnText}>
+                    Aucune entrée de journal sur develop : la CI de la release la refusera
+                  </p>
+                ))}
               {n > 0 && (
-                <ul className={styles.releaseList}>
-                  {state.pending.map((t, i) => (
-                    <li key={i}>{t}</li>
-                  ))}
-                </ul>
+                <details className={styles.releaseCommits}>
+                  <summary>Commits ({n})</summary>
+                  <ul className={styles.releaseList}>
+                    {state.pending.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                </details>
               )}
               {n > 0 &&
                 (confirming ? (

@@ -101,6 +101,11 @@
   color: var(--subtle);
   pointer-events: none;
 }
+/* Titre : une seule ligne, retours à la ligne repliés à l'affichage si le texte est long */
+.textBoxSingle {
+  max-height: none;
+  overflow-y: visible;
+}
 /* Pas de zoom de Safari sur un champ de moins de 16 px (comme input et textarea, styles/global.css) */
 @media (max-width: 860px) {
   .textBox {
