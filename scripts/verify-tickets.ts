@@ -124,6 +124,28 @@ refused("Compte rendu vide refusé", () =>
   applyAction(ticket("work"), { type: "answer", text: " " }, T0)
 );
 
+// Envoi annulé : le lancement de Claude déjà parti ne peut plus répondre ni noter d'étape
+const unsent = applyAction(sent, { type: "unsend" }, T0 + 1);
+check("Annulation : → À faire, notée", [unsent.status, unsent.data.cancelled], ["todo", T0 + 1]);
+refused("Annulation : compte rendu de Claude refusé", () =>
+  applyAction(unsent, { type: "answer", text: "Fait", pr: "" }, T0 + 2)
+);
+refused("Annulation : étape de Claude refusée", () =>
+  applyAction(unsent, { type: "progress", stage: "start", text: "Claude démarre" }, T0 + 2)
+);
+const resent = applyAction(unsent, { type: "send" }, T0 + 3);
+check("Renvoi après annulation : annulation oubliée", resent.data.cancelled, 0);
+check(
+  "Renvoi après annulation : compte rendu accepté",
+  applyAction(resent, { type: "answer", text: "Fait" }, T0 + 4).status,
+  "review"
+);
+check(
+  "Ticket jamais envoyé (session) : compte rendu accepté",
+  applyAction(ticket("todo"), { type: "answer", text: "Fait" }, T0).status,
+  "review"
+);
+
 const retouched = applyAction(answered, { type: "retouch", text: "Le bouton déborde" }, T0 + 2);
 check(
   "Retouche : → En cours avec la demande",

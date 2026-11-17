@@ -26,7 +26,7 @@ import {
   when,
 } from "./board.ts";
 import { Label, LabelPicker } from "./Labels.tsx";
-import Markdown, { MarkdownInput } from "./Markdown.tsx";
+import Markdown, { MarkdownInput, TYPING } from "./Markdown.tsx";
 import styles from "./TicketsPage.module.css";
 import Viewer from "./Viewer.tsx";
 
@@ -351,7 +351,7 @@ export default function TicketSheet({
           disabled={busy}
           onClick={() =>
             ask(
-              "Annuler l'envoi ? Le ticket revient dans « À faire ». Si Claude a déjà commencé sur GitHub, il peut finir et répondre quand même.",
+              "Annuler l'envoi ? Le ticket revient dans « À faire ». Si Claude a déjà commencé, il est arrêté et sa réponse n'est pas prise.",
               "Annuler l'envoi",
               () =>
                 go(
@@ -470,6 +470,7 @@ export default function TicketSheet({
           <label>
             Titre
             <input
+              {...TYPING}
               value={title}
               maxLength={200}
               onChange={(e) => setTitle(e.target.value)}
@@ -582,6 +583,8 @@ export default function TicketSheet({
       {link ? (
         <div className={styles.row}>
           <input
+            type="url"
+            autoComplete="off"
             placeholder="https://…"
             value={link.url}
             aria-label="Adresse du lien"
@@ -589,6 +592,7 @@ export default function TicketSheet({
             autoFocus
           />
           <input
+            {...TYPING}
             placeholder="Titre (facultatif)"
             value={link.title}
             aria-label="Titre du lien"

@@ -361,17 +361,37 @@ async function notify(env: Env, text: string, id: string): Promise<void> {
 }
 
 /** Issues encore ouvertes du ticket (une par envoi) fermées : avant d'en ouvrir une autre, et à la fusion. */
-async function closeTicketIssues(env: Env, id: string): Promise<void> {
+async function closeTicketIssues(env: Env, id: string): Promise<number[]> {
   const call = gh(env);
   const repo = repoOf(env);
   const open = await call<{ number: number; title: string; pull_request?: unknown }[]>(
     `/repos/${repo}/issues?state=open&per_page=100`
   ).catch(() => []);
-  for (const i of open.filter((x) => !x.pull_request && x.title === issueTitle(id))) {
+  const mine = open.filter((x) => !x.pull_request && x.title === issueTitle(id));
+  for (const i of mine) {
     await call(`/repos/${repo}/issues/${i.number}`, {
       method: "PATCH",
       body: { state: "closed", state_reason: "completed" },
     }).catch(() => {});
+  }
+  return mine.map((i) => i.number);
+}
+
+/**
+ * Envoi annulé : lancements de Claude encore en attente ou en cours sur ces issues ou PR arrêtés (nom
+ * « Claude · #<numéro> », run-name de .github/workflows/claude-tickets.yml). Demande Actions en écriture
+ * au jeton ; sans elle, rien n'est arrêté, mais le ticket refuse quand même la réponse de Claude.
+ */
+async function cancelRuns(env: Env, numbers: string[]): Promise<void> {
+  const call = gh(env);
+  const repo = repoOf(env);
+  const { workflow_runs: runs = [] } = await call<{
+    workflow_runs?: { id: number; status: string; display_title: string }[];
+  }>(`/repos/${repo}/actions/workflows/claude-tickets.yml/runs?per_page=30`);
+  for (const r of runs.filter(
+    (x) => x.status !== "completed" && numbers.some((n) => x.display_title === `Claude · #${n}`)
+  )) {
+    await call(`/repos/${repo}/actions/runs/${r.id}/cancel`, { method: "POST" }).catch(() => {});
   }
 }
 
@@ -1021,8 +1041,12 @@ export async function handleTickets(
       const action = String(b.action);
       if (action === "unsend") {
         const next = await act(env, id, { type: "unsend" }, now, access.name);
-        if (env.GITHUB_TICKETS_TOKEN && !prNumber(t.pr)) {
-          await closeTicketIssues(env, id).catch(() => {});
+        if (env.GITHUB_TICKETS_TOKEN) {
+          const issues = prNumber(t.pr) ? [] : await closeTicketIssues(env, id).catch(() => []);
+          await cancelRuns(
+            env,
+            [prNumber(t.pr), t.issue, ...issues.map(String)].filter(Boolean)
+          ).catch(() => {});
         }
         return json({ ok: true, ticket: next });
       }
