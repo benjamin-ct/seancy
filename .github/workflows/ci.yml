@@ -110,6 +110,7 @@ jobs:
           npm run verify:tickets
           npm run verify:access
           npm run verify:cloudflare-usage
+          npm run verify:vapid
 
       - name: Build
         run: npm run build
