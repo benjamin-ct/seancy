@@ -303,7 +303,8 @@ function gh(env: Env): Gh {
   };
 }
 
-async function notify(env: Env, text: string): Promise<void> {
+/** Notification Discord, avec le lien direct vers la fiche du ticket (adresse partageable /tickets/<id>). */
+async function notify(env: Env, text: string, id: string): Promise<void> {
   if (!env.DISCORD_TICKETS_WEBHOOK_URL) {
     return;
   }
@@ -311,7 +312,7 @@ async function notify(env: Env, text: string): Promise<void> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      content: `${text}\n${siteOf(env)}/tickets`.slice(0, 1900),
+      content: `${text}\n${siteOf(env)}/tickets/${id}`.slice(0, 1900),
       allowed_mentions: { parse: [] },
     }),
   }).catch(() => {});
@@ -441,7 +442,8 @@ async function mergeTicket(
   }
   await notify(
     env,
-    `🎉 Ticket validé : **${t.title}** — PR #${pr.number} fusionnée dans ${pr.base.ref}${backport}${t.followUp ? " · suite envoyée à Claude" : ""}`
+    `🎉 Ticket validé : **${t.title}** — PR #${pr.number} fusionnée dans ${pr.base.ref}${backport}${t.followUp ? " · suite envoyée à Claude" : ""}`,
+    t.id
   );
   return next;
 }
@@ -516,7 +518,11 @@ export async function validateQueue(env: Env, now = Date.now()): Promise<string 
   }
   if (check?.fail || !pr) {
     await act(env, t.id, { type: "unqueue" }, now);
-    await notify(env, `🚨 Validation impossible : **${t.title}** — ${check?.fail ?? "pas de PR"}`);
+    await notify(
+      env,
+      `🚨 Validation impossible : **${t.title}** — ${check?.fail ?? "pas de PR"}`,
+      t.id
+    );
     return "fail";
   }
   await mergeTicket(env, t, pr, now);
@@ -547,7 +553,8 @@ export async function retryTickets(env: Env, now = Date.now()): Promise<number> 
       );
       await notify(
         env,
-        `🚨 Ticket arrêté : **${t.title}** — pas de quota Claude après ${RETRY_MAX} relances`
+        `🚨 Ticket arrêté : **${t.title}** — pas de quota Claude après ${RETRY_MAX} relances`,
+        t.id
       );
       continue;
     }
@@ -916,7 +923,7 @@ export async function handleTickets(
       );
       const msg = noticeFor({ type: "answer", text: "" }, t.title);
       if (msg) {
-        await notify(env, msg);
+        await notify(env, msg, id);
       }
       return json({ ok: true, ticket: t });
     }
@@ -935,7 +942,7 @@ export async function handleTickets(
       const t = await act(env, id, a, now, access.name);
       const msg = before?.stage !== a.stage ? noticeFor(a, t.title) : null;
       if (msg) {
-        await notify(env, msg);
+        await notify(env, msg, id);
       }
       return json({ ok: true, ticket: t });
     }
