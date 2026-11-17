@@ -3,7 +3,7 @@
 // affichée que dans ton terminal (jamais écrite dans un fichier ni dans le dépôt).
 // Procédure complète : README, section « Régénérer la paire VAPID ».
 
-import webpush from "web-push";
+import * as webpush from "web-push";
 import { vapidProblem } from "../worker/vapid.ts";
 
 const { publicKey, privateKey } = webpush.generateVAPIDKeys();

@@ -7,7 +7,7 @@
 // fonctionner dans le runtime Workers. On récupère à la place les détails de
 // requête déjà prêts (`generateRequestDetails`) et on les envoie nous-mêmes
 // avec `fetch`, natif à Workers.
-import webpush from "web-push";
+import * as webpush from "web-push";
 import type { Env, SubscriptionRow } from "./types.ts";
 import { cleanVapidKey, vapidProblem } from "./vapid.ts";
 

@@ -2,7 +2,7 @@
 // générée par web-push, abîmée comme un secret mal collé, doit être acceptée
 // par web-push une fois nettoyée ; une clé fausse est signalée sans être montrée.
 
-import webpush from "web-push";
+import * as webpush from "web-push";
 import { cleanVapidKey, vapidProblem } from "../worker/vapid.ts";
 
 let passed = 0;
