@@ -1,17 +1,9 @@
-import { Fragment, useRef, useState, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import { parseBlocks, parseInline, type Inline, type ListItem } from "./markdown.ts";
+import { TextBox, type TextBoxHandle } from "./TextBox.tsx";
 import styles from "./TicketsPage.module.css";
 
 const ext = { target: "_blank", rel: "noopener noreferrer" } as const;
-
-/** Champ de texte libre : sans ces attributs, Safari sur iPhone y propose
- * « Préremplir le contact » (adresses) à la place des mots suggérés. */
-export const TYPING = {
-  autoComplete: "off",
-  autoCorrect: "on",
-  autoCapitalize: "sentences",
-  spellCheck: true,
-} as const;
 
 function inline(nodes: Inline[]): ReactNode[] {
   return nodes.map((n, i) => {
@@ -152,43 +144,43 @@ export function MarkdownInput({
   value,
   onChange,
   ...rest
-}: { value: string; onChange: (v: string) => void } & Omit<
-  TextareaHTMLAttributes<HTMLTextAreaElement>,
-  "value" | "onChange"
->) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  placeholder?: string;
+  "aria-label"?: string;
+  autoFocus?: boolean;
+}) {
+  const ref = useRef<TextBoxHandle>(null);
   const [preview, setPreview] = useState(false);
   const apply = (tool: (typeof TOOLS)[number]) => {
     const el = ref.current;
     if (!el) {
       return;
     }
-    const { selectionStart: a, selectionEnd: b } = el;
-    let next: string;
+    const [a, b] = el.selection();
+    let text: string;
+    let start = a;
     let from: number;
     let to: number;
     if (tool.wrap) {
       const [l, r] = tool.wrap;
       const sel = value.slice(a, b) || (tool.label === "Lien" ? "texte" : tool.label.toLowerCase());
-      next = value.slice(0, a) + l + sel + r + value.slice(b);
+      text = l + sel + r;
       from = a + l.length;
       to = from + sel.length;
     } else {
       // Préfixe au début de chaque ligne choisie
-      const start = value.lastIndexOf("\n", a - 1) + 1;
-      const block = value.slice(start, b);
-      const out = block
+      start = value.lastIndexOf("\n", a - 1) + 1;
+      text = value
+        .slice(start, b)
         .split("\n")
         .map((ln, i) => (tool.line === "1. " ? `${i + 1}. ` : tool.line) + ln)
         .join("\n");
-      next = value.slice(0, start) + out + value.slice(b);
-      from = to = start + out.length;
+      from = to = start + text.length;
     }
-    onChange(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(from, to);
-    });
+    el.replace(start, b, text, from, to);
   };
   return (
     <div className={styles.mdInput}>
@@ -224,11 +216,10 @@ export function MarkdownInput({
           )}
         </div>
       ) : (
-        <textarea
-          {...TYPING}
+        <TextBox
           ref={ref}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           onKeyDown={(e) => {
             const k = e.key.toLowerCase();
             if ((e.ctrlKey || e.metaKey) && (k === "b" || k === "i")) {

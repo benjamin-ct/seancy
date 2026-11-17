@@ -74,6 +74,39 @@
   width: 100%;
   resize: vertical;
 }
+/* Zone de texte éditable (TextBox.tsx) : même allure qu'un <textarea>, grandit avec le texte */
+.textBox {
+  width: 100%;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 9px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: text;
+}
+.textBox:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.textBox[data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--subtle);
+  pointer-events: none;
+}
+/* Pas de zoom de Safari sur un champ de moins de 16 px (comme input et textarea, styles/global.css) */
+@media (max-width: 860px) {
+  .textBox {
+    font-size: 16px !important;
+  }
+}
 .page input:focus-visible,
 .page textarea:focus-visible,
 .page select:focus-visible,
@@ -436,7 +469,8 @@
   gap: 6px;
   padding: 8px 10px 12px;
 }
-.compose textarea {
+.compose textarea,
+.compose .textBox {
   font-size: 14px;
 }
 .composeFiles {
@@ -550,7 +584,8 @@
 .form p {
   margin: 0;
 }
-.form label:not(.check, .btn) {
+.form label:not(.check, .btn),
+.form .field {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1258,7 +1293,9 @@
   outline-offset: 2px;
 }
 .mdInput textarea,
-.mdInput textarea:focus-visible {
+.mdInput textarea:focus-visible,
+.mdInput .textBox,
+.mdInput .textBox:focus-visible {
   border: 0;
   border-radius: 0;
   outline: none;

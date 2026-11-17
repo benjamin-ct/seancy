@@ -51,7 +51,9 @@ import {
 } from "./board.ts";
 import Dialog from "./Dialog.tsx";
 import { Label } from "./Labels.tsx";
-import { MarkdownInput, TYPING } from "./Markdown.tsx";
+import { MarkdownInput } from "./Markdown.tsx";
+import { TextBox } from "./TextBox.tsx";
+import { TYPING } from "./typing.ts";
 import TicketSheet, { type Ask, type ReplyMode, type Run } from "./TicketSheet.tsx";
 import styles from "./TicketsPage.module.css";
 
@@ -558,13 +560,12 @@ function IdeaCompose({ run }: { run: Run }) {
         );
       }}
     >
-      <textarea
-        {...TYPING}
+      <TextBox
         rows={2}
         value={idea}
         placeholder="Une idée (1re ligne : le titre), ou colle une image"
         aria-label="Nouvelle idée : la première ligne sert de titre ; une image collée y est jointe"
-        onChange={(e) => setIdea(e.target.value)}
+        onChange={setIdea}
         onPaste={(e) => {
           if (add([...e.clipboardData.files])) {
             e.preventDefault();
