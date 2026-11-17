@@ -1,4 +1,6 @@
 name: Tickets (Claude)
+# Numéro de l'issue ou de la PR : le Worker retrouve et arrête les lancements d'un envoi annulé
+run-name: "Claude · #${{ github.event.issue.number }}"
 
 # Tickets envoyés à Claude depuis la page Tickets (seancy.com/tickets) : le
 # Worker ouvre une issue « Ticket <id> » avec @claude (worker/tickets.ts) et
@@ -96,7 +98,20 @@ jobs:
           npm install -g playwright@1.63.0 > /dev/null
           npx -y playwright@1.63.0 install --with-deps chromium > /dev/null
           echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+      # Envoi annulé sur la page Tickets pendant la préparation : Claude ne démarre pas (le ticket refuserait
+      # de toute façon son compte rendu). Serveur des tickets injoignable : Claude démarre quand même.
+      - id: live
+        if: steps.t.outputs.id != ''
+        env:
+          ID: ${{ steps.t.outputs.id }}
+        run: |
+          status=$(node scripts/tickets.ts get "$ID" | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{try{console.log(JSON.parse(s).ticket?.status||"")}catch{console.log("")}})' || true)
+          if [ -n "$status" ] && [ "$status" != work ]; then
+            echo "Envoi annulé (ticket « $status ») : Claude ne démarre pas"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
       - id: claude
+        if: steps.live.outputs.skip != '1'
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.TICKETS_GITHUB_TOKEN }}

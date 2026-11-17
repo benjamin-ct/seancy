@@ -835,7 +835,7 @@ export default function TicketsPage() {
         );
       } else if (key === "work>todo") {
         ask(
-          "Annuler l'envoi ? Le ticket revient dans « À faire ». Si Claude a déjà commencé sur GitHub, il peut finir et répondre quand même.",
+          "Annuler l'envoi ? Le ticket revient dans « À faire ». Si Claude a déjà commencé, il est arrêté et sa réponse n'est pas prise.",
           "Annuler l'envoi",
           () =>
             run(() => ticketAction(t.id, "unsend"), "Envoi annulé : ticket revenu dans « À faire »")
