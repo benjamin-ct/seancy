@@ -1101,6 +1101,9 @@
   box-shadow: var(--shadow-lift);
   cursor: pointer;
 }
+.zoomInline {
+  display: none;
+}
 .zoom:hover {
   background: var(--surface-3);
 }
@@ -1600,12 +1603,12 @@
     width: auto;
   }
   /* Une colonne = l'écran (comme Trello et Paddock Live), aimantées en
-     défilant de côté ; place en bas pour le bouton de zoom */
+     défilant de côté */
   .board {
     grid-auto-columns: 100%;
     gap: 10px;
     margin: 0 -16px;
-    padding: 0 16px 76px;
+    padding: 0 16px;
     scroll-snap-type: x mandatory;
     scroll-padding: 0 16px;
   }
@@ -1615,8 +1618,21 @@
     gap: 8px;
     scroll-snap-type: x proximity;
   }
+  /* Colonnes jusqu'au-dessus de la barre d'onglets : --board-top mesuré par la page */
   .col {
-    max-height: max(380px, calc(100dvh - var(--header-height) - var(--tabbar-offset) - 190px));
+    max-height: max(240px, calc(100dvh - var(--board-top, 240px) - var(--tabbar-offset) - 10px));
+  }
+  /* Zoom dans la ligne « Tous / Les miens » : plus de bouton flottant sur les colonnes */
+  .zoom:not(.zoomInline) {
+    display: none;
+  }
+  .zoomInline {
+    display: grid;
+    position: static;
+    width: 42px;
+    height: 42px;
+    margin-left: auto;
+    box-shadow: none;
   }
   .dialog,
   .dialogWide {
