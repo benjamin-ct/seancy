@@ -72,6 +72,20 @@ terminer.
    identifiant), par l'API REST Discord (`DISCORD_TOKEN` / `DISCORD_CHANNEL_ID`), en vérifiant que
    la requête a réussi.
 
+## Test de la chaîne (outil « Test ticket Sentry » de l'espace admin)
+
+Une issue dont le titre commence par `Test ticket Sentry` (tag `test: ticket`) est un **essai volontaire** de toute la
+chaîne, envoyé depuis l'espace admin (Outils) : ne pas l'analyser comme un bug ni chercher de correctif. Directement :
+
+1. Créer le ticket comme en 4b, sans rien d'autre :
+   `node scripts/tickets.ts add --status todo --labels "Sentry,Test" --title "Test Sentry : ticket créé par sentry-triage" --detail "…"`,
+   avec dans la description le lien de l'issue Sentry, l'heure de l'essai (dans le titre de l'issue) et la ligne
+   « Ticket de test : à supprimer, rien à corriger. ».
+2. Commenter l'issue Sentry (`🤖 [Claude]`) avec l'identifiant du ticket créé, puis la passer en `resolved` (essai
+   terminé : seule exception à la règle de ne pas résoudre avant un correctif fusionné).
+3. Résumé Discord habituel : « ✅ Test ticket Sentry : ticket <id> créé ». Sans `SEANCY_TICKETS_KEY`, ou si
+   `scripts/tickets.ts` échoue, le dire avec l'erreur exacte (c'est ce que le test doit révéler).
+
 ## Règles d'or
 
 - Ne jamais quitter en disant qu'un sous-agent ou une notification reprendra la main plus tard.
