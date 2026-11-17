@@ -73,6 +73,13 @@ export const FILE_TYPES =
 
 const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 
+/** Étiquettes du board avec leur couleur (celles des réglages de Claude, modèle, effort et hotfix, mises à part). */
+export function labelDefsOf(labels: TrelloLabel[]): { name: string; color: string }[] {
+  return labels
+    .map((l) => ({ name: (l.name || "").trim(), color: l.color ?? "" }))
+    .filter((l) => l.name && !/^(model|effort):/i.test(l.name) && plain(l.name) !== "hotfix");
+}
+
 /** Colonne d'arrivée d'une liste Trello, et l'étiquette ajoutée pour garder la trace de la liste d'origine. */
 export function statusOfList(name: string): { status: Status; label: string; rank: number } {
   const n = plain(name);

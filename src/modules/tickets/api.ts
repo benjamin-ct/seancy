@@ -59,6 +59,11 @@ export interface Ticket {
   authorEmail: string;
   createdAt: number;
 }
+/** Étiquette partagée : nom et couleur Trello (« green », « red_dark »… ; vide = sans couleur). */
+export interface LabelDef {
+  name: string;
+  color: string;
+}
 export interface TicketsConfig {
   github: boolean;
   discord: boolean;
@@ -89,7 +94,15 @@ const post = <T>(path: string, data: unknown, method = "POST") =>
     body: JSON.stringify(data),
   });
 
-export const listTickets = () => request<{ tickets: Ticket[]; config: TicketsConfig }>("");
+export const listTickets = () =>
+  request<{ tickets: Ticket[]; labels?: LabelDef[]; config: TicketsConfig }>("");
+/** Étiquette ajoutée ou changée (`from` : ancien nom si renommée), ou retirée (`remove`) de tous les tickets. */
+export const saveLabel = (change: {
+  name?: string;
+  color?: string;
+  from?: string;
+  remove?: boolean;
+}) => post<{ labels: LabelDef[] }>("/labels", change);
 export const createTicket = (data: Partial<Ticket> & { send?: boolean; before?: string }) =>
   post<{ ticket: Ticket }>("", data);
 export const editTicket = (id: string, fields: Partial<Ticket>) =>
@@ -109,25 +122,33 @@ export const deleteFile = (id: string, fileId: string) =>
 export const fileUrl = (f: TicketFile) => `/api/tickets/files/${f.id}`;
 
 const MAX_BYTES = 1_500_000;
+// Au-delà, une image est réduite avant l'envoi : le Worker n'a que 10 ms de
+// calcul par requête (forfait gratuit) et enregistrer une grosse image dans
+// D1 les dépasse (HTTP 503)
+const SHRINK_ABOVE = 250_000;
 
-/** Image trop grosse : redimensionnée et recompressée en JPEG (2000 px au plus de côté). */
+/** Image de plus de 250 Ko : redimensionnée (1400 px au plus de côté) et recompressée en JPEG ; la plus petite version gardée. */
 async function shrink(file: File): Promise<Blob> {
-  if (file.size <= MAX_BYTES || !/^image\/(png|jpeg|webp)$/.test(file.type)) {
+  if (file.size <= SHRINK_ABOVE || !/^image\/(png|jpeg|webp)$/.test(file.type)) {
     return file;
   }
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  for (const q of [0.85, 0.7, 0.55]) {
+  let best: Blob = file;
+  for (const q of [0.8, 0.65, 0.5]) {
     const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/jpeg", q));
-    if (blob && blob.size <= MAX_BYTES) {
-      return blob;
+    if (blob && blob.size < best.size) {
+      best = blob;
+    }
+    if (best.size <= SHRINK_ABOVE) {
+      break;
     }
   }
-  return file;
+  return best;
 }
 
 export async function uploadFile(id: string, file: File): Promise<TicketFile> {

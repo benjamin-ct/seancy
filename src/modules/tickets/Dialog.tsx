@@ -28,7 +28,12 @@ export default function Dialog({ open, onClose, label, wide = false, children }:
       ref={ref}
       className={`${styles.dialog} ${wide ? styles.dialogWide : ""}`}
       aria-label={label}
-      onClose={onClose}
+      // Seulement sa propre fermeture (celle d'une modale imbriquée, la visionneuse, remonte aussi ici)
+      onClose={(e) => {
+        if (e.target === ref.current) {
+          onClose();
+        }
+      }}
       onClick={(e) => {
         if (e.target === ref.current) {
           onClose();

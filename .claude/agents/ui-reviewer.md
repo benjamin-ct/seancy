@@ -1,6 +1,6 @@
 ---
 name: ui-reviewer
-description: Contrôle de l'interface (responsive, accessibilité, cohérence visuelle) d'une PR Seancy avant passage en revue humaine, à partir de captures d'écran desktop/mobile. Sixième et dernier sous-agent du chantier "workflow de développement IA autonome" (carte Trello https://trello.com/c/Kwr35vrC) — câblé en pré-merge dans le skill trello-ticket-pipeline (étape 2c.4.4), uniquement sur les PR qui touchent l'interface, toujours en lecture seule et sans blocage automatique.
+description: Contrôle de l'interface (responsive, accessibilité, cohérence visuelle) d'une PR Seancy avant passage en revue humaine, à partir de captures d'écran desktop/mobile. Lancé en pré-merge par le skill ticket (étape 4.3, page Tickets), uniquement sur les PR qui touchent l'interface, toujours en lecture seule et sans blocage automatique.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
@@ -38,8 +38,8 @@ seancy-screenshot ...` si lancé hors du conteneur, voir `infra/trello-claude/RE
 Pour chaque PR : lis la description et le diff (`gh pr diff <numéro>`), identifie les routes/pages
 concernées, capture-les (preview déployée si accessible, sinon `wrangler dev` local — voir
 `infra/trello-claude/README.md`, section « Vérification visuelle »). Refais tes propres captures
-plutôt que de te fier à celles prises pendant le développement (étape 2c.2 du skill
-`trello-ticket-pipeline`) : ta revue est une passe indépendante du code déjà écrit, comme `reviewer`
+plutôt que de te fier à celles prises pendant le développement (étape 3.3 du skill
+`ticket`) : ta revue est une passe indépendante du code déjà écrit, comme `reviewer`
 relit le diff au lieu de se fier au résumé du développeur. Si l'outil de capture n'est pas disponible
 dans cet environnement, dis-le explicitement plutôt que de deviner à partir du code seul.
 

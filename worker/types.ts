@@ -73,6 +73,11 @@ export interface Env {
   GITHUB_TICKETS_REPO?: string;
   /** Adresse de l'espace admin dans les notifications (https://admin.seancy.com par défaut). */
   TICKETS_SITE_URL?: string;
+  // Quotas Cloudflare du tableau de bord admin (worker/cloudflare-usage.ts) :
+  // jeton API « Account Analytics : Read » du compte (lecture seule) ;
+  // identifiant du compte (celui de Seancy par défaut).
+  CF_ANALYTICS_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
 
   // Variables non sensibles (commitées dans wrangler.jsonc, voir vars).
   VAPID_PUBLIC_KEY: string;

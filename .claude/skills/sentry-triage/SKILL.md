@@ -1,13 +1,13 @@
 ---
 name: sentry-triage
-description: Traite une alerte Sentry reçue par le webhook de infra/trello-claude/listener/server.js (endpoint /sentry-webhook). Récupère le détail complet de l'issue via l'API Sentry, évalue sa sévérité et sa pertinence, puis décide d'ignorer, de corriger directement (PR), ou de créer un ticket Trello dans "A faire" si une décision humaine est nécessaire. Utilise ce skill dès qu'un prompt fournit un payload brut de webhook Sentry à traiter — jamais pour du travail Trello classique (voir trello-ticket-pipeline pour ça).
+description: Traite une alerte Sentry reçue par le webhook de infra/trello-claude/listener/server.js (endpoint /sentry-webhook). Récupère le détail complet de l'issue via l'API Sentry, évalue sa sévérité et sa pertinence, puis décide d'ignorer, de corriger directement (PR), ou de créer un ticket « À faire » sur la page Tickets si une décision humaine est nécessaire. Utilise ce skill dès qu'un prompt fournit un payload brut de webhook Sentry à traiter — jamais pour un ticket de la page Tickets (voir le skill ticket pour ça).
 ---
 
 # Triage automatique des alertes Sentry
 
 Ce skill traite une alerte Sentry unique, reçue via le webhook `/sentry-webhook` du listener
 (`infra/trello-claude/listener/server.js`). Il s'exécute dans le même conteneur `seancy-repo` que
-le skill `trello-ticket-pipeline`, dans un processus `claude -p` one-shot : mêmes contraintes
+l'ancien skill `trello-ticket-pipeline` (remplacé par la page Tickets et le skill `ticket`), dans un processus `claude -p` one-shot : mêmes contraintes
 (pas de reprise automatique après la sortie, pas de délégation d'attente à un sous-agent,
 notification Discord finale obligatoire).
 
@@ -51,29 +51,32 @@ terminer.
    - Cause ambiguë, correctif risqué/structurant, ou nécessitant une décision produit : passer à
      l'étape 4b.
 4. **Agir** :
-   - **4a. Corriger directement** : suivre exactement le flux de développement du skill
-     `trello-ticket-pipeline` (étape 2c) — créer une branche nommée clairement
-     (`fix/<description-courte>`), corriger, committer, ouvrir une PR avec un lien vers l'issue
-     Sentry en description. Ne pas créer de carte Trello dans ce cas (la PR suffit ; un humain la
-     review normalement via GitHub). Commenter sur l'issue Sentry (`POST
+   - **4a. Corriger directement** : suivre le flux de développement du skill `ticket`
+     (étapes 2 à 4 : branche, contrôles, changelog, PR en brouillon, CI, revues) — créer une branche
+     nommée clairement (`fix/<description-courte>`, base `develop`), corriger, committer, ouvrir une
+     PR en brouillon avec un lien vers l'issue Sentry en description. Pas de ticket dans ce cas (la
+     PR suffit ; un humain la review normalement via GitHub). Commenter sur l'issue Sentry (`POST
 .../issues/{issue_id}/comments/`) avec un lien vers la PR ouverte.
-   - **4b. Créer un ticket Trello** : ajouter une carte dans la liste "A faire" du board Bobine,
-     avec un titre clair et une description reprenant le lien de l'issue Sentry, le résumé du
-     problème, les hypothèses envisagées et pourquoi une décision humaine est nécessaire. Cette
-     carte entre alors dans le pipeline normal de `trello-ticket-pipeline` lors d'une prochaine
-     exécution. Commenter sur l'issue Sentry avec un lien vers la carte créée.
+   - **4b. Créer un ticket** sur la page Tickets, dans « À faire » :
+     `node scripts/tickets.ts add --status todo --labels "Bug,Sentry" --title "…" --detail "…"`
+     (clé `SEANCY_TICKETS_KEY` de l'environnement, jamais affichée), avec un titre clair et une
+     description reprenant le lien de l'issue Sentry, le résumé du problème, les hypothèses
+     envisagées et pourquoi une décision humaine est nécessaire. L'utilisateur l'enverra à Claude
+     depuis la page. Commenter sur l'issue Sentry avec l'identifiant du ticket créé (pas de lien :
+     la page est réservée aux administrateurs). Sans `SEANCY_TICKETS_KEY` : ne rien créer ailleurs,
+     le dire dans le résumé Discord avec le titre et la description proposés.
    - Dans les deux cas 4a/4b, ne jamais résoudre (`status: resolved`) l'issue Sentry tant que le
      correctif n'est pas mergé — un simple commentaire de suivi suffit à ce stade.
 5. **Notifier Discord** (obligatoire, avant de terminer) : résumé de l'alerte traitée (titre,
-   lien Sentry), sévérité estimée, action prise (ignorée / PR ouverte avec lien / carte Trello
-   créée avec lien), en suivant le même format REST Discord que `trello-ticket-pipeline`
-   (`DISCORD_TOKEN` / `DISCORD_CHANNEL_ID`).
+   lien Sentry), sévérité estimée, action prise (ignorée / PR ouverte avec lien / ticket créé avec son
+   identifiant), par l'API REST Discord (`DISCORD_TOKEN` / `DISCORD_CHANNEL_ID`), en vérifiant que
+   la requête a réussi.
 
-## Règles d'or (reprises de trello-ticket-pipeline)
+## Règles d'or
 
 - Ne jamais quitter en disant qu'un sous-agent ou une notification reprendra la main plus tard.
 - Toujours envoyer le résumé Discord avant de terminer, même en cas d'échec ou d'ambiguïté.
-- Tous les commentaires postés sur Trello ou sur l'issue Sentry par ce skill sont préfixés par
+- Tous les commentaires postés sur l'issue Sentry par ce skill sont préfixés par
   `🤖 [Claude]`.
 - En cas d'incertitude sur l'architecture ou les credentials disponibles, ne pas deviner : décrire
   précisément le blocage dans le résumé Discord plutôt que d'agir à l'aveugle.

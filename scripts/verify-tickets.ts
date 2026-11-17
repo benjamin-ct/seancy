@@ -8,10 +8,13 @@ import {
   TicketError,
   applyAction,
   cleanData,
+  cleanLabelDefs,
   issueBody,
+  mergeLabels,
   positionBefore,
   previewFromComments,
   testedOnBase,
+  upsertLabel,
   type Gh,
   type PullRequest,
   type TicketData,
@@ -21,9 +24,11 @@ import {
   boardToTickets,
   cardToTicket,
   isImportableFile,
+  labelDefsOf,
   statusOfList,
   type TrelloCard,
 } from "./trelloLib.ts";
+import { parseBlocks, parseInline, safeHref } from "../src/modules/tickets/markdown.ts";
 
 let passed = 0;
 let failed = 0;
@@ -443,6 +448,148 @@ const main = async () => {
     [
       ["y", "todo", 1024],
       ["x", "todo", 2048],
+    ]
+  );
+
+  // ---------- Étiquettes ----------
+  const defs = cleanLabelDefs([
+    { name: " Bug ", color: "red" },
+    { name: "bug", color: "blue" },
+    { name: "UI", color: "rose-vif" },
+    { name: "", color: "green" },
+    "n'importe quoi",
+  ]);
+  check("Étiquettes : nettoyées, sans doublon, couleur inconnue retirée", defs, [
+    { name: "Bug", color: "red" },
+    { name: "UI", color: "" },
+  ]);
+  check(
+    "Étiquette ajoutée en fin de liste",
+    upsertLabel(defs, { name: "Back", color: "sky_dark" }).map((d) => d.name),
+    ["Bug", "UI", "Back"]
+  );
+  check(
+    "Étiquette renommée à sa place, avec sa nouvelle couleur",
+    upsertLabel(defs, { from: "bug", name: "Bogue", color: "orange_light" }),
+    [
+      { name: "Bogue", color: "orange_light" },
+      { name: "UI", color: "" },
+    ]
+  );
+  check(
+    "Étiquette renommée sur une autre : fusionnées",
+    upsertLabel(defs, { from: "Bug", name: "ui", color: "green" }),
+    [{ name: "ui", color: "green" }]
+  );
+  check("Étiquette retirée", upsertLabel(defs, { from: "UI", remove: true }), [
+    { name: "Bug", color: "red" },
+  ]);
+  refused("Étiquette sans nom refusée", () => upsertLabel(defs, { name: "  " }));
+  check(
+    "Import : couleurs reprises, nouvelles étiquettes ajoutées, sans couleur ne change rien",
+    mergeLabels(defs, [
+      { name: "ui", color: "purple" },
+      { name: "Bug", color: "" },
+      { name: "Docs", color: "lime" },
+    ]),
+    [
+      { name: "Bug", color: "red" },
+      { name: "UI", color: "purple" },
+      { name: "Docs", color: "lime" },
+    ]
+  );
+  check(
+    "Trello : étiquettes du board sans les réglages de Claude",
+    labelDefsOf([
+      { name: "Bug", color: "red" },
+      { name: "model:sonnet", color: "blue" },
+      { name: "Hotfix", color: "red" },
+      { name: "", color: "green" },
+      { name: "Idée", color: null },
+    ]),
+    [
+      { name: "Bug", color: "red" },
+      { name: "Idée", color: "" },
+    ]
+  );
+
+  // ---------- Markdown ----------
+  check(
+    "Markdown : gras, italique, code, lien, adresse nue, barré",
+    parseInline("**a** *b* _c_ `d` [e](https://x.fr) https://y.fr/z. ~~f~~"),
+    [
+      { t: "b", c: ["a"] },
+      " ",
+      { t: "i", c: ["b"] },
+      " ",
+      { t: "i", c: ["c"] },
+      " ",
+      { t: "code", v: "d" },
+      " ",
+      { t: "a", href: "https://x.fr", c: ["e"] },
+      " ",
+      { t: "a", href: "https://y.fr/z", c: ["https://y.fr/z"] },
+      ". ",
+      { t: "s", c: ["f"] },
+    ]
+  );
+  check(
+    "Markdown : snake_case et 2 * 3 * 4 restent du texte",
+    parseInline("snake_case_var 2 * 3 * 4"),
+    ["snake_case_var 2 * 3 * 4"]
+  );
+  check(
+    "Markdown : lien javascript: rendu en texte seul",
+    parseInline("[clic](javascript:alert)"),
+    ["clic"]
+  );
+  check(
+    "Markdown : adresses permises",
+    ["https://a.fr", "mailto:x@y.fr", "/api/tickets/files/1", "//evil.fr", "data:text/html,x"].map(
+      safeHref
+    ),
+    ["https://a.fr", "mailto:x@y.fr", "/api/tickets/files/1", "", ""]
+  );
+  check(
+    "Markdown : blocs (titre, paragraphe sur deux lignes, listes imbriquées, cases, liste numérotée)",
+    parseBlocks("## Titre\nligne 1\nligne 2\n- a\n  - b\n- [x] c\n1. un\n2. deux").map((b) =>
+      b.k === "list"
+        ? [b.k, b.ordered, b.items.map((i) => [i.text, i.check, i.children.map((c) => c.text)])]
+        : b.k === "p"
+          ? [b.k, b.lines]
+          : b.k === "h"
+            ? [b.k, b.level, b.text]
+            : [b.k]
+    ),
+    [
+      ["h", 2, "Titre"],
+      ["p", ["ligne 1", "ligne 2"]],
+      [
+        "list",
+        false,
+        [
+          ["a", null, ["b"]],
+          ["c", true, []],
+        ],
+      ],
+      [
+        "list",
+        true,
+        [
+          ["un", null, []],
+          ["deux", null, []],
+        ],
+      ],
+    ]
+  );
+  check(
+    "Markdown : code, citation, tableau, séparateur",
+    parseBlocks("```\nx = 1\n```\n> cité\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n---"),
+    [
+      { k: "code", text: "x = 1" },
+      { k: "quote", text: "cité" },
+      { k: "table", head: ["a", "b"], rows: [["1", "2"]] },
+      { k: "hr" },
     ]
   );
 

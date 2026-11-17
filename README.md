@@ -245,7 +245,14 @@ ne renvoie jamais de lien ni de code de connexion dans la réponse.
    séparées par des virgules), `ACCESS_TEAM_DOMAIN` (`<équipe>.cloudflareaccess.com`) et `ACCESS_AUD` (le tag de
    l'étape 3). Sans ces deux derniers, le tableau de bord signale Access « non réglé » et seule la connexion admin de
    Seancy protège l'espace.
-5. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
+5. **Quotas Cloudflare** (facultatif) : Cloudflare → My Profile → API Tokens → _Create Custom Token_ avec la seule
+   permissions **Account · Account Analytics · Read** et **Account · D1 · Read** (lecture seule) sur le compte de
+   Seancy, puis secret `CF_ANALYTICS_TOKEN` du Worker `seancy`. Le tableau de bord montre alors les quotas gratuits du
+   jour (requêtes des Workers, neurones Workers AI, lignes lues et écrites dans D1, stockage, nombre de bases), le
+   détail par Worker et par modèle, la liste des bases D1 (nom, tables, taille, activité du jour), les erreurs et
+   dépassements de calcul du Worker, et les 7 derniers jours (`worker/cloudflare-usage.ts`, API d'analyse GraphQL, relue au plus toutes
+   les 2 minutes).
+6. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
    manque encore.
 
 ## Tickets (Claude)
@@ -307,9 +314,11 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
    jointes (fichiers de 1,5 Mo au plus recopiés, les autres gardés en liens). Rien n'est envoyé à Claude : les cartes
    « En cours » arrivent dans **À faire** (étiquette « Était en cours sur Trello »), « To merge » dans **À valider**.
    L'import est rejouable : une carte déjà importée est sautée.
-3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Le skill `trello-ticket-pipeline` et la
-   création de cartes Trello par `sentry-triage` seront retirés ou adaptés (`node scripts/tickets.ts add`) une fois
-   la bascule faite.
+3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Les règles de `trello-ticket-pipeline` sont
+   reprises dans le skill `ticket` ; l'ancien skill ne fait plus que prévenir sur Discord qu'un webhook Trello est
+   arrivé. `sentry-triage` crée ses tickets avec `node scripts/tickets.ts add` : ajouter `SEANCY_TICKETS_KEY` (la
+   clé de la page Tickets) au `.env` du NAS (passée au conteneur par `docker-compose-seancy.yml`), puis `seancy-pull` et
+   `seancy-rebuild claude`.
 
 ## Sécurité
 
