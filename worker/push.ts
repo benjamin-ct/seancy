@@ -44,6 +44,12 @@ export interface PushPayload {
   title: string;
   body: string;
   url: string;
+  /** Icône de la notification (celle de l'espace admin pour les tickets ; /icon-192.png sinon). */
+  icon?: string;
+  /** Même tag : la notification remplace la précédente (un ticket = une notification). */
+  tag?: string;
+  /** Pastille de l'icône de l'appli installée (tickets qui attendent). */
+  count?: number;
 }
 
 // `subscription` : { endpoint, p256dh, auth } (forme stockée en base).

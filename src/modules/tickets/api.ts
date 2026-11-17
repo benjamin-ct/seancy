@@ -117,6 +117,9 @@ export const ticketAction = (id: string, action: TicketAction, text = "") =>
     { action, text }
   );
 export const newKey = () => post<{ key: string }>("/key", {});
+/** Notifications push des tickets pour un abonnement de cet appareil : état, activation, arrêt. */
+export const ticketPush = (action: "state" | "on" | "off", sub: PushSubscriptionJSON) =>
+  post<{ on: boolean }>("/push", { action, endpoint: sub.endpoint, keys: sub.keys });
 export const deleteFile = (id: string, fileId: string) =>
   request<{ ok: true }>(`/${id}/files/${fileId}`, { method: "DELETE" });
 export const fileUrl = (f: TicketFile) => `/api/tickets/files/${f.id}`;

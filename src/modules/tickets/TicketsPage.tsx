@@ -25,6 +25,7 @@ import {
   moveTicket,
   newKey,
   ticketAction,
+  ticketPush,
   uploadFile,
   type Effort,
   type LabelDef,
@@ -352,6 +353,80 @@ function NewTicket({
   );
 }
 
+// Clé VAPID publique (base64 URL) → octets, pour l'abonnement push
+const vapidBytes = (b64: string) =>
+  Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+/**
+ * Notifications de cet appareil : ticket prêt à valider, arrêté, en pause, validé. Abonnement
+ * push du navigateur (même clé VAPID que le site), gardé par le serveur à part de ceux du site.
+ */
+function PushSetting({ run }: { run: Run }) {
+  const supported = "serviceWorker" in navigator && "PushManager" in window;
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!supported) {
+      return;
+    }
+    void navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then(async (sub) => setOn(sub ? (await ticketPush("state", sub.toJSON())).on : false))
+      .catch(() => setOn(false));
+  }, [supported]);
+  if (!supported) {
+    return (
+      <p className={styles.muted}>
+        Ce navigateur ne reçoit pas de notifications. Sur iPhone : Partager → « Sur l'écran
+        d'accueil », puis ouvre Seancy Admin depuis son icône.
+      </p>
+    );
+  }
+  const toggle = () =>
+    run(
+      async () => {
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (on) {
+          if (sub) {
+            await ticketPush("off", sub.toJSON());
+          }
+          setOn(false);
+          return "off";
+        }
+        if ((await Notification.requestPermission()) !== "granted") {
+          throw new Error("notifications refusées pour ce site (réglages du navigateur)");
+        }
+        if (!sub) {
+          const { publicKey } = (await (await fetch("/api/vapid-public-key")).json()) as {
+            publicKey: string;
+          };
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidBytes(publicKey) as BufferSource,
+          });
+        }
+        setOn((await ticketPush("on", sub.toJSON())).on);
+        return "on";
+      },
+      (r) => (r === "on" ? "Notifications activées sur cet appareil" : "Notifications coupées")
+    );
+  return (
+    <div className={styles.row}>
+      <button
+        type="button"
+        className={on ? styles.btn : styles.primary}
+        disabled={on === null}
+        onClick={toggle}
+      >
+        {on ? "Couper les notifications" : "Activer les notifications"}
+      </button>
+      <span className={styles.muted}>
+        {on === null ? "…" : on ? "Activées sur cet appareil" : "Coupées sur cet appareil"}
+      </span>
+    </div>
+  );
+}
+
 function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
   const [key, setKey] = useState("");
   const [sure, setSure] = useState(false);
@@ -366,6 +441,12 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
   return (
     <div className={styles.form}>
       <h2>Réglages des tickets</h2>
+      <h3>Notifications de cet appareil</h3>
+      <p className={styles.muted}>
+        Ticket prêt à valider, arrêté, en pause, validé ou validation impossible : une notification
+        qui ouvre le ticket, et le nombre de tickets qui attendent sur l'icône de l'appli installée.
+      </p>
+      <PushSetting run={run} />
       <ul className={styles.config}>
         {item(
           config?.github,
@@ -704,6 +785,20 @@ export default function TicketsPage() {
   }, [labelDefs, tickets]);
   const byId = useMemo(() => new Map((tickets ?? []).map((t) => [t.id, t])), [tickets]);
   const open = sheet ? byId.get(sheet.id) : undefined;
+  // Pastille de l'icône de l'appli installée : tickets à valider ou arrêtés (comme les notifications)
+  useEffect(() => {
+    if (!tickets) {
+      return;
+    }
+    const n = tickets.filter(
+      (t) => t.status === "review" || (t.status === "work" && t.stage === "fail")
+    ).length;
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    void (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
+  }, [tickets]);
   // Lien vers un ticket qui n'existe pas (ou plus) : retour au tableau
   useEffect(() => {
     if (ticketId && tickets && !byId.has(ticketId)) {
