@@ -13,6 +13,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
@@ -635,25 +636,17 @@ let lastScrollX = 0;
 
 /** Message du bas de l'écran, en popover : il passe au-dessus d'une fiche ouverte (fenêtre modale). */
 function Toast({ text, bad }: { text: string; bad: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    try {
-      el?.hidePopover();
-      el?.showPopover();
-    } catch {
-      // Navigateur sans popover : le message reste en position fixe, sous une fiche ouverte
-    }
-  }, [text]);
-  return (
+  // Dans la fiche ouverte (fenêtre modale, au premier plan) s'il y en a une : ailleurs, Safari sur iPhone
+  // le laisse derrière elle, même en popover
+  const host = [...document.querySelectorAll("dialog[open]")].pop() ?? document.body;
+  return createPortal(
     <div
-      ref={ref}
-      popover="manual"
       className={`${styles.toast} ${bad ? styles.toastBad : ""}`}
       role={bad ? "alert" : "status"}
     >
       {text}
-    </div>
+    </div>,
+    host
   );
 }
 
