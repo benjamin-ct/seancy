@@ -11,6 +11,13 @@
   display: flex;
   flex-direction: column;
 }
+/* Pas de barre d'onglets du site en bas de l'espace admin : sans ça, le
+   <body> garde sur téléphone la place qu'elle occupe (styles/global.css), un
+   grand vide sous chaque page */
+:global(body):has(.shell) {
+  --tabbar-offset: 0px;
+  padding-bottom: 0;
+}
 
 .top {
   position: sticky;

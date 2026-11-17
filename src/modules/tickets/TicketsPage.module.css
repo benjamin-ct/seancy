@@ -1539,6 +1539,8 @@
     padding-top: 16px;
     padding-left: 16px;
     padding-right: 16px;
+    /* Le bas du tableau garde déjà la place du bouton de zoom */
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
   }
   .tools {
     width: 100%;
