@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { claudeUsage, type ClaudeUsage as Usage } from "../tickets/api.ts";
+import QuotaAlerts from "./QuotaAlerts";
 import styles from "./Admin.module.css";
 
 let last: Usage | null = null;
@@ -77,6 +78,7 @@ export default function ClaudeUsage() {
       {error && <p className={styles.error}>Consommation non chargée : {error}</p>}
       {usage && (
         <>
+          <QuotaAlerts alerts={usage.alerts} />
           {usage.limits.length > 0 ? (
             <div className={styles.meters}>
               {usage.limits.map((l) => {

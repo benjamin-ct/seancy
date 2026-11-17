@@ -121,6 +121,8 @@ export interface ClaudeUsage {
   byTicket: { ticket: string; title: string; runs: number; tokens: number; cost: number }[];
   limits: { type: string; status: string; used: number | null; resetsAt: number; at: number }[];
   last: number;
+  /** Fenêtres du quota qui approchent de leur fin ou sont atteintes (worker/quota-alerts.ts). */
+  alerts?: { key: string; level: "warn" | "bad"; text: string }[];
 }
 export const claudeUsage = () => request<{ usage: ClaudeUsage }>("/usage");
 export const listDeps = () => request<{ deps: DepPr[] }>("/deps");

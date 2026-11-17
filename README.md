@@ -264,6 +264,11 @@ ne renvoie jamais de lien ni de code de connexion dans la réponse.
    détail par Worker et par modèle, la liste des bases D1 (nom, tables, taille, activité du jour), les erreurs et
    dépassements de calcul du Worker, et les 7 derniers jours (`worker/cloudflare-usage.ts`, API d'analyse GraphQL, relue au plus toutes
    les 2 minutes).
+   **Alertes de quota** (`worker/quota-alerts.ts`, au passage régulier du serveur, toutes les 10 minutes) : notification
+   aux appareils abonnés aux tickets (et Discord) quand un volume inclus dépasse 80 % ou sera épuisé avant la remise à
+   zéro au rythme actuel, puis quand il est épuisé (facturé au-delà) ; pareil pour les neurones gratuits du jour et pour
+   les fenêtres du quota de l'abonnement Claude (80 % ou alerte de Claude, puis atteint). Une seule fois par seuil et par
+   période ; rappel en tête des cartes « Quotas Cloudflare » et « Claude ».
 6. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
    manque encore.
 

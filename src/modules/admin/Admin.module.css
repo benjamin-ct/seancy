@@ -472,6 +472,27 @@
 .meterWarn {
   --level: var(--gold);
 }
+/* Quotas qui approchent de leur fin (QuotaAlerts.tsx) : doré comme les jauges, rouge une fois atteints */
+.quotaAlerts {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.quotaAlerts li {
+  padding: 10px 12px;
+  border: 1px solid var(--gold);
+  border-left-width: 4px;
+  border-radius: 10px;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.quotaAlerts li.quotaBad {
+  border-color: var(--accent-ink);
+  font-weight: 600;
+}
 .meterBad {
   --level: var(--accent-ink);
   border-color: var(--accent-ink);

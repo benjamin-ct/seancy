@@ -14,6 +14,8 @@
 import { adminName, adminOf } from "./admin.ts";
 import { hashToken } from "./auth.ts";
 import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./claude-usage.ts";
+import { cloudflareUsage } from "./cloudflare-usage.ts";
+import { claudeAlerts, cloudflareAlerts, newAlerts } from "./quota-alerts.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import {
   ciState,
@@ -323,7 +325,12 @@ function gh(env: Env): Gh {
 // Lien d'une notification : la fiche du ticket, ou le tableau de bord (release, sans ticket)
 const pathOf = (id: string) => (id ? `/tickets/${id}` : "/");
 
-async function pushAdmins(env: Env, text: string, id: string): Promise<void> {
+async function pushAdmins(
+  env: Env,
+  text: string,
+  id: string,
+  tag = id ? `ticket-${id}` : "release"
+): Promise<void> {
   const { results } = await env.DB.prepare("SELECT endpoint, p256dh, auth FROM ticket_push").all<{
     endpoint: string;
     p256dh: string;
@@ -345,7 +352,7 @@ async function pushAdmins(env: Env, text: string, id: string): Promise<void> {
           body: rest.join(" : "),
           url: pathOf(id),
           icon: "/admin/icon-192.png",
-          tag: id ? `ticket-${id}` : "release",
+          tag,
           count: waiting?.n ?? 0,
         },
         env
@@ -359,8 +366,8 @@ async function pushAdmins(env: Env, text: string, id: string): Promise<void> {
 }
 
 /** Notification Discord, avec le lien direct vers la fiche du ticket (adresse partageable /tickets/<id>), et push. */
-async function notify(env: Env, text: string, id: string): Promise<void> {
-  await pushAdmins(env, text, id).catch(() => {});
+async function notify(env: Env, text: string, id: string, tag?: string): Promise<void> {
+  await pushAdmins(env, text, id, tag).catch(() => {});
   if (!env.DISCORD_TICKETS_WEBHOOK_URL) {
     return;
   }
@@ -719,12 +726,34 @@ async function checkCi(env: Env): Promise<void> {
   await setMeta(env, "ci", JSON.stringify(states));
 }
 
+/** Quotas Cloudflare et Claude qui approchent de leur fin ou sont atteints : notifiés une fois par seuil et par période. */
+async function checkQuotas(env: Env, now: number): Promise<void> {
+  const cf = env.CF_ANALYTICS_TOKEN ? await cloudflareUsage(env, now) : null;
+  const limits = JSON.parse((await getMeta(env, "claudeLimits")) || "[]") as Limit[];
+  const alerts = [
+    ...(cf && "usage" in cf ? cloudflareAlerts(cf.usage, now) : []),
+    ...claudeAlerts(limits, now),
+  ];
+  const { fresh, sent } = newAlerts(
+    alerts,
+    JSON.parse((await getMeta(env, "quotaAlerts")) || "[]") as string[]
+  );
+  if (!fresh.length) {
+    return;
+  }
+  await setMeta(env, "quotaAlerts", JSON.stringify(sent));
+  for (const a of fresh) {
+    await notify(env, a.text, "", "quota");
+  }
+}
+
 export async function runTicketsCron(env: Env, now = Date.now()): Promise<void> {
   for (const [name, job] of [
     ["file de validation", () => validateQueue(env, now)],
     ["relances", () => retryTickets(env, now)],
     ["previews", () => findPreviews(env, now)],
     ["CI des tickets à valider", () => checkCi(env)],
+    ["alertes de quota", () => checkQuotas(env, now)],
     [
       "release",
       async () =>
@@ -979,6 +1008,7 @@ export async function handleTickets(
           usage: {
             ...sum,
             byTicket: sum.byTicket.map((x) => ({ ...x, title: titles.get(x.ticket) ?? "" })),
+            alerts: claudeAlerts(limits, now),
           },
         });
       }

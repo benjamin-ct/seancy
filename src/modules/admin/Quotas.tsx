@@ -5,6 +5,7 @@
 // GET /api/admin/usage (worker/cloudflare-usage.ts).
 import { useEffect, useState } from "react";
 import styles from "./Admin.module.css";
+import QuotaAlerts, { type QuotaAlert } from "./QuotaAlerts";
 
 interface Usage {
   day: string;
@@ -57,7 +58,7 @@ interface Usage {
     rowsWritten: number;
   }[];
 }
-type Reply = { usage: Usage } | { error: string; missing?: boolean };
+type Reply = { usage: Usage; alerts?: QuotaAlert[] } | { error: string; missing?: boolean };
 
 // Volumes inclus du forfait Workers Paid (mêmes valeurs que PAID dans worker/cloudflare-usage.ts)
 const PAID = {
@@ -221,6 +222,7 @@ export default function Quotas() {
     const m = u.month;
     body = (
       <>
+        <QuotaAlerts alerts={reply.alerts} />
         <p className={styles.muted}>
           Coût estimé au-delà de l'inclus depuis le {dateFr(m.from)} :{" "}
           <b className={m.cost.total ? styles.warnText : ""}>≈ {usd(m.cost.total)}</b>, en plus des{" "}
