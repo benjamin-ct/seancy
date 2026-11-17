@@ -1043,6 +1043,16 @@
 
 /* ---------- Étiquettes (Labels.tsx), couleurs de Trello ---------- */
 
+.btnIcon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
 .labBig {
   display: inline-flex;
   align-items: center;

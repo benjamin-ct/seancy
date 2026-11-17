@@ -193,6 +193,7 @@ export default function AdminApp() {
             <Route path="auth/verify" element={<AdminVerify base={base} />} />
             <Route index element={guarded(<Dashboard />)} />
             <Route path="tickets" element={guarded(<Tickets />)} />
+            <Route path="tickets/:ticketId" element={guarded(<Tickets />)} />
             <Route path="outils" element={guarded(<Tools />)} />
             <Route path="*" element={<Navigate to={base} replace />} />
           </Routes>

@@ -13,7 +13,8 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import {
@@ -437,7 +438,19 @@ export default function TicketsPage() {
   const [query, setQuery] = useState("");
   // « Les miens » : tickets créés par le compte connecté (les deux administrateurs partagent le tableau)
   const [mine, setMine] = useState(false);
-  const [sheet, setSheet] = useState<{ id: string; mode: ReplyMode | "" } | null>(null);
+  // Fiche ouverte : son adresse est /tickets/<id> (lien à partager, bouton Retour qui la ferme) ;
+  // mode : zone de réponse ouverte d'office (retouche, réouverture)
+  const { ticketId = "" } = useParams();
+  const navigate = useNavigate();
+  const [sheetMode, setSheetMode] = useState<ReplyMode | "">("");
+  const sheet = ticketId ? { id: ticketId, mode: sheetMode } : null;
+  const setSheet = useCallback(
+    (s: { id: string; mode: ReplyMode | "" } | null) => {
+      setSheetMode(s?.mode ?? "");
+      navigate(`${adminPrefix()}/tickets${s ? `/${s.id}` : ""}`);
+    },
+    [navigate]
+  );
   const [creating, setCreating] = useState(false);
   const [settings, setSettings] = useState(false);
   const [confirm, setConfirm] = useState<{ text: string; ok: string; job: () => void } | null>(
@@ -588,6 +601,13 @@ export default function TicketsPage() {
   }, [labelDefs, tickets]);
   const byId = useMemo(() => new Map((tickets ?? []).map((t) => [t.id, t])), [tickets]);
   const open = sheet ? byId.get(sheet.id) : undefined;
+  // Lien vers un ticket qui n'existe pas (ou plus) : retour au tableau
+  useEffect(() => {
+    if (ticketId && tickets && !byId.has(ticketId)) {
+      setToast({ text: "Ticket introuvable : supprimé, ou lien incomplet", bad: true });
+      navigate(`${adminPrefix()}/tickets`, { replace: true });
+    }
+  }, [ticketId, tickets, byId, navigate]);
 
   const moveTo = useCallback(
     (t: Ticket, to: TicketStatus, before: string) => {
@@ -639,7 +659,7 @@ export default function TicketsPage() {
         setSheet({ id: t.id, mode: "reopen" });
       }
     },
-    [ask, run]
+    [ask, run, setSheet]
   );
 
   // ---------- Glisser-déposer ----------
