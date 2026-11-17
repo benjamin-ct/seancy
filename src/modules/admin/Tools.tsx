@@ -32,6 +32,12 @@ const TOOLS = [
     text: "Envoie une erreur de test à Sentry pour vérifier la remontée des erreurs du Worker.",
     confirm: "",
   },
+  {
+    id: "test-sentry-ticket",
+    name: "Test ticket Sentry",
+    text: "Envoie à Sentry une erreur marquée « Test ticket Sentry », nouvelle à chaque essai : l'alerte part sur Discord et sentry-triage (NAS) crée un ticket « À faire » (étiquettes Sentry et Test), à supprimer ensuite.",
+    confirm: "",
+  },
 ] as const;
 
 export default function Tools() {

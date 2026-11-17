@@ -12,6 +12,7 @@
 import { getUserFromRequest, type AuthUser } from "./auth.ts";
 import { verifyAccessJwt } from "./access.ts";
 import { cloudflareUsage } from "./cloudflare-usage.ts";
+import * as Sentry from "@sentry/cloudflare";
 import { logError } from "./logger.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import { vapidProblem } from "./vapid.ts";
@@ -310,6 +311,22 @@ export async function handleAdmin(
           return json({ ok: true, message: "Erreur de test envoyée à Sentry" });
         case "test-notification":
           return testNotification(env, user);
+        // Toute la chaîne jusqu'à la page Tickets : erreur nouvelle à chaque essai (empreinte unique,
+        // donc nouvelle issue et nouvelle alerte), reconnue par sentry-triage, qui en fait un ticket
+        case "test-sentry-ticket": {
+          const essai = new Date().toISOString().slice(0, 16).replace("T", " ");
+          const err = new Error(`Test ticket Sentry — essai du ${essai} UTC (${adminName(user)})`);
+          console.error(err.message);
+          Sentry.captureException(err, {
+            fingerprint: ["test-ticket-sentry", crypto.randomUUID()],
+            tags: { test: "ticket" },
+          });
+          return json({
+            ok: true,
+            message:
+              "Erreur « Test ticket Sentry » envoyée : alerte sur Discord, puis ticket « À faire » créé par sentry-triage (quelques minutes)",
+          });
+        }
       }
     } catch (err) {
       return json({ error: err instanceof Error ? err.message : String(err) }, 502);
