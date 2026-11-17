@@ -111,6 +111,7 @@ jobs:
           npm run verify:access
           npm run verify:cloudflare-usage
           npm run verify:vapid
+          npm run verify:release
 
       - name: Build
         run: npm run build

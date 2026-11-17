@@ -308,6 +308,28 @@
   font-size: 14px;
   line-height: 1.5;
 }
+/* Mise en ligne (Release.tsx) */
+.release {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.release p {
+  margin: 0;
+}
+.releaseList {
+  max-height: 220px;
+  margin: 0;
+  padding-left: 20px;
+  overflow-y: auto;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.btnIconEnd {
+  margin-left: 6px;
+  opacity: 0.8;
+}
 .row {
   display: flex;
   flex-wrap: wrap;
