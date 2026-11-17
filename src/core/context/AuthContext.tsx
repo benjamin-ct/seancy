@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { getRecaptchaToken } from "../lib/recaptcha.ts";
 import { clearAccountDataFromDevice } from "../lib/accountStorage.ts";
@@ -497,7 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 // Les messages d'erreur du Worker sont en français : on les traduit côté
 // client à partir du `reason` (ou du statut HTTP) qu'il renvoie.
 function emailChangeErrorMessage(
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: TFunction,
   data: { reason?: unknown; retryAfter?: unknown },
   status: number
 ): string {
