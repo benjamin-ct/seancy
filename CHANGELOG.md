@@ -2,6 +2,12 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.1.13 — 2026-11-17
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
 ## 0.1.12 — 2026-11-17
 
 ### Correctifs
