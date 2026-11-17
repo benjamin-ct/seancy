@@ -10,6 +10,7 @@
 //                                                          ses commentaires, retouche demandée, PR, notes
 //   node scripts/tickets.ts answer <id> --text "…" [--pr URL] [--notes "…"]   compte rendu : ticket à valider
 //   node scripts/tickets.ts progress <id> --text "…" [--stage start|work|fail|quota] [--run URL] [--issue N]
+//   node scripts/tickets.ts usage <id> --file <execution.json> [--run URL]   jetons et quota d'un passage de Claude (workflow)
 //   node scripts/tickets.ts file <id> capture.png …         pièces jointes (images, PDF, vidéos ; 1,5 Mo au plus)
 //   node scripts/tickets.ts add --title "…" [--detail "…"] [--status idea|todo] [--labels "Bug,Sentry"]
 //   node scripts/tickets.ts list [idea|todo|work|review|done]
@@ -17,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { shrinkImage } from "./shrinkImage.ts";
+import { parseExecution, tokensOf } from "../worker/claude-usage.ts";
 
 const BASE = (
   process.env.SEANCY_TICKETS_URL || "https://seancy.creusatbenjamin.workers.dev/api/tickets"
@@ -184,6 +186,23 @@ const commands: Record<string, () => Promise<void>> = {
       body: { text: opt.text, pr: opt.pr ?? "", notes: opt.notes ?? "" },
     });
     console.log("Compte rendu enregistré : ticket à valider sur la page Tickets");
+  },
+  // Fin d'un passage de Claude (workflow) : jetons, coût estimé et quota relevés dans son journal
+  async usage() {
+    if (!pos[0] || !opt.file) {
+      throw new Error("usage : usage <id> --file <journal de claude-code-action> [--run URL]");
+    }
+    const run = parseExecution(fs.readFileSync(opt.file, "utf8"));
+    if (!run) {
+      console.log("Pas de résultat dans le journal de Claude : rien à relever");
+      return;
+    }
+    await call("/usage", { body: { ticket: pos[0], run: opt.run ?? "", usage: run } });
+    const tokens = Object.values(run.models).reduce((s, m) => s + tokensOf(m), 0);
+    // Seulement des nombres : le journal du workflow est public
+    console.log(
+      `Relevé : ${tokens.toLocaleString("fr-FR")} jetons, ≈ ${run.cost.toFixed(2)} $ (estimation), ${run.limits.length} relevé(s) de quota`
+    );
   },
   async progress() {
     const stage = opt.stage || "work";

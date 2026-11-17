@@ -41,6 +41,7 @@
     "verify:vapid": "node scripts/verify-vapid.ts",
     "verify:release": "node scripts/verify-release.ts",
     "verify:audit": "node scripts/verify-audit.ts",
+    "verify:claude-usage": "node scripts/verify-claude-usage.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
     "check:version-untouched": "node scripts/check-version-untouched.ts",

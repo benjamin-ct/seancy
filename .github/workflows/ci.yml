@@ -114,6 +114,7 @@ jobs:
           npm run verify:vapid
           npm run verify:release
           npm run verify:audit
+          npm run verify:claude-usage
 
       - name: Build
         run: npm run build

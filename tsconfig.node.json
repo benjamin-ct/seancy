@@ -43,6 +43,7 @@
     "worker/validate.ts",
     "worker/tickets-logic.ts",
     "worker/release.ts",
+    "worker/claude-usage.ts",
     "worker/access.ts",
     "worker/cloudflare-usage.ts",
     "worker/vapid.ts"

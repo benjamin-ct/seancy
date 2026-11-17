@@ -221,7 +221,10 @@ le site, mais sa propre mise en page (`src/modules/admin/`) et son propre domain
   passée, notification ; plus besoin d'un ticket pour demander une release : `worker/release.ts` ; la carte montre la
   prochaine version et les entrées du journal qui partiront ; pastille sur Accueil si une release est bloquée ou attend
   depuis plus de 3 jours), les **dépendances** (PR de Dependabot vers `develop` avec l'état de leur CI, « Fusionner »
-  quand elle est passée), quelques chiffres
+  quand elle est passée), la **consommation de Claude** (relevée à la fin de chaque passage d'un ticket dans le
+  journal de `claude-code-action` : jetons du jour, des 7 et 30 derniers jours, par modèle et par ticket, coût estimé au
+  prix public, et l'état du quota de l'abonnement, fenêtres de 5 h et de la semaine, tel que Claude l'a donné au dernier
+  passage, pas en direct : `worker/claude-usage.ts`, table `claude_usage`, gardée 90 jours), quelques chiffres
   (comptes, nouveaux comptes, connexions, abonnés aux notifications, bibliothèques, listes), les tickets par colonne et
   l'état des réglages (secrets présents ou non, jamais leur valeur).
 - **Tickets** : le tableau des demandes envoyées à Claude (voir [Tickets (Claude)](#tickets-claude)). Chaque ticket

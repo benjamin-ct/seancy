@@ -112,6 +112,17 @@ export interface DepPr {
   url: string;
   state: "ok" | "wait" | "fail";
 }
+/** Consommation de Claude par les tickets (worker/claude-usage.ts). */
+export interface ClaudeUsage {
+  today: { runs: number; tokens: number; output: number; cost: number };
+  week: { runs: number; tokens: number; output: number; cost: number };
+  month: { runs: number; tokens: number; output: number; cost: number };
+  byModel: { model: string; tokens: number; cost: number }[];
+  byTicket: { ticket: string; title: string; runs: number; tokens: number; cost: number }[];
+  limits: { type: string; status: string; used: number | null; resetsAt: number; at: number }[];
+  last: number;
+}
+export const claudeUsage = () => request<{ usage: ClaudeUsage }>("/usage");
 export const listDeps = () => request<{ deps: DepPr[] }>("/deps");
 export const mergeDep = (number: number) =>
   post<{ message: string; deps: DepPr[] }>("/deps", { number });

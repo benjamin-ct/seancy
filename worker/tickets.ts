@@ -13,6 +13,7 @@
 // Notifications sur Discord (secret DISCORD_TICKETS_WEBHOOK_URL, facultatif).
 import { adminName, adminOf } from "./admin.ts";
 import { hashToken } from "./auth.ts";
+import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./claude-usage.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import {
   ciState,
@@ -937,6 +938,49 @@ export async function handleTickets(
       }
       if (m === "POST" && (await body(request)).action === "start") {
         return json({ release: await startRelease(releaseDeps(env), now) });
+      }
+    }
+    // Consommation de Claude : relevé d'un passage (workflow, avec la clé) ; totaux et quota (page)
+    if (parts[0] === "usage") {
+      if (m === "POST") {
+        const b = await body(request);
+        const run = cleanRun(b.usage, now);
+        if (!run) {
+          throw new TicketError("Relevé illisible");
+        }
+        await env.DB.prepare("INSERT INTO claude_usage (ticket, run, at, data) VALUES (?, ?, ?, ?)")
+          .bind(text(b.ticket, 40), text(b.run, 300), now, JSON.stringify(run))
+          .run();
+        await env.DB.prepare("DELETE FROM claude_usage WHERE at < ?")
+          .bind(now - 90 * 86_400_000)
+          .run();
+        if (run.limits.length) {
+          const old = JSON.parse((await getMeta(env, "claudeLimits")) || "[]") as Limit[];
+          await setMeta(env, "claudeLimits", JSON.stringify(mergeLimits(old, run.limits)));
+        }
+        return json({ ok: true });
+      }
+      if (m === "GET") {
+        adminOnly();
+        const { results } = await env.DB.prepare(
+          "SELECT ticket, at, data FROM claude_usage WHERE at >= ? ORDER BY at"
+        )
+          .bind(now - 31 * 86_400_000)
+          .all<{ ticket: string; at: number; data: string }>();
+        const rows = results.map((r) => ({
+          ticket: r.ticket,
+          at: r.at,
+          run: JSON.parse(r.data) as RunUsage,
+        }));
+        const limits = JSON.parse((await getMeta(env, "claudeLimits")) || "[]") as Limit[];
+        const titles = new Map((await loadAll(env)).map((t) => [t.id, t.title] as const));
+        const sum = summarize(rows, limits, now);
+        return json({
+          usage: {
+            ...sum,
+            byTicket: sum.byTicket.map((x) => ({ ...x, title: titles.get(x.ticket) ?? "" })),
+          },
+        });
       }
     }
     // Dépendances : PR de Dependabot vers develop, et fusion de l'une d'elles (CI passée)
