@@ -20,10 +20,15 @@ let sentry: SentryModule | null = null;
 // "production" par défaut — voir ticket Trello "Dashboard de suivis de
 // Claude".
 const PRODUCTION_HOSTNAME = "seancy.com";
+// Espace admin (voir worker/admin.ts) : même Worker, domaine à part, compté
+// comme la prod (voir worker/sentry.ts, ADMIN_HOSTNAME) — sans cette entrée,
+// les erreurs client de admin.seancy.com retombaient à tort sur "preview"
+// (Sentry SEANCY-LOGS-3T).
+const ADMIN_HOSTNAME = "admin.seancy.com";
 const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
 
 function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
-  if (hostname === PRODUCTION_HOSTNAME) {
+  if (hostname === PRODUCTION_HOSTNAME || hostname === ADMIN_HOSTNAME) {
     return "production";
   }
   if (hostname === PREPROD_HOSTNAME) {
