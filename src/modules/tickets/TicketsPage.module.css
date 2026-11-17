@@ -434,6 +434,41 @@
 .compose textarea {
   font-size: 14px;
 }
+.composeFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.composeFile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.composeFile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.composeFile button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: oklch(0 0 0 / 0.65);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
 .add {
   margin: 0 10px 12px;
   padding: 8px;

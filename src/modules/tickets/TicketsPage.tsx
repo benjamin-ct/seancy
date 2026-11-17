@@ -25,6 +25,7 @@ import {
   moveTicket,
   newKey,
   ticketAction,
+  ticketPush,
   uploadFile,
   type Effort,
   type LabelDef,
@@ -352,6 +353,80 @@ function NewTicket({
   );
 }
 
+// Clé VAPID publique (base64 URL) → octets, pour l'abonnement push
+const vapidBytes = (b64: string) =>
+  Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+/**
+ * Notifications de cet appareil : ticket prêt à valider, arrêté, en pause, validé. Abonnement
+ * push du navigateur (même clé VAPID que le site), gardé par le serveur à part de ceux du site.
+ */
+function PushSetting({ run }: { run: Run }) {
+  const supported = "serviceWorker" in navigator && "PushManager" in window;
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!supported) {
+      return;
+    }
+    void navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then(async (sub) => setOn(sub ? (await ticketPush("state", sub.toJSON())).on : false))
+      .catch(() => setOn(false));
+  }, [supported]);
+  if (!supported) {
+    return (
+      <p className={styles.muted}>
+        Ce navigateur ne reçoit pas de notifications. Sur iPhone : Partager → « Sur l'écran
+        d'accueil », puis ouvre Seancy Admin depuis son icône.
+      </p>
+    );
+  }
+  const toggle = () =>
+    run(
+      async () => {
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (on) {
+          if (sub) {
+            await ticketPush("off", sub.toJSON());
+          }
+          setOn(false);
+          return "off";
+        }
+        if ((await Notification.requestPermission()) !== "granted") {
+          throw new Error("notifications refusées pour ce site (réglages du navigateur)");
+        }
+        if (!sub) {
+          const { publicKey } = (await (await fetch("/api/vapid-public-key")).json()) as {
+            publicKey: string;
+          };
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidBytes(publicKey) as BufferSource,
+          });
+        }
+        setOn((await ticketPush("on", sub.toJSON())).on);
+        return "on";
+      },
+      (r) => (r === "on" ? "Notifications activées sur cet appareil" : "Notifications coupées")
+    );
+  return (
+    <div className={styles.row}>
+      <button
+        type="button"
+        className={on ? styles.btn : styles.primary}
+        disabled={on === null}
+        onClick={toggle}
+      >
+        {on ? "Couper les notifications" : "Activer les notifications"}
+      </button>
+      <span className={styles.muted}>
+        {on === null ? "…" : on ? "Activées sur cet appareil" : "Coupées sur cet appareil"}
+      </span>
+    </div>
+  );
+}
+
 function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
   const [key, setKey] = useState("");
   const [sure, setSure] = useState(false);
@@ -366,6 +441,12 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
   return (
     <div className={styles.form}>
       <h2>Réglages des tickets</h2>
+      <h3>Notifications de cet appareil</h3>
+      <p className={styles.muted}>
+        Ticket prêt à valider, arrêté, en pause, validé ou validation impossible : une notification
+        qui ouvre le ticket, et le nombre de tickets qui attendent sur l'icône de l'appli installée.
+      </p>
+      <PushSetting run={run} />
       <ul className={styles.config}>
         {item(
           config?.github,
@@ -428,6 +509,110 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
   );
 }
 
+const IMAGE_TYPES = "image/*,video/mp4,video/quicktime,video/webm";
+
+/** Noter une idée (colonne Idées) : texte (1re ligne = titre), images collées ou choisies (bouton Photo, téléphone). */
+function IdeaCompose({ run }: { run: Run }) {
+  const [idea, setIdea] = useState("");
+  // Fichiers et leur aperçu en data: (la CSP du site refuse les images blob:)
+  const [files, setFiles] = useState<{ file: File; url: string; key: string }[]>([]);
+  const add = (list: File[]) => {
+    const media = list.filter((f) => /^(image|video)\//.test(f.type));
+    for (const file of media) {
+      const key = `${file.name}-${file.size}-${Math.random()}`;
+      setFiles((l) => [...l, { file, url: "", key }]);
+      if (/^image\//.test(file.type)) {
+        const r = new FileReader();
+        r.onload = () =>
+          setFiles((l) => l.map((x) => (x.key === key ? { ...x, url: String(r.result) } : x)));
+        r.readAsDataURL(file);
+      }
+    }
+    return media.length;
+  };
+  const ready = !!idea.trim() || files.length > 0;
+  return (
+    <form
+      className={styles.compose}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const [first, ...rest] = idea.split("\n");
+        if (!ready) {
+          return;
+        }
+        void run(
+          async () => {
+            const { ticket } = await createTicket({
+              status: "idea",
+              title: first.trim() || "Idée en image",
+              detail: rest.join("\n").trim(),
+            });
+            for (const f of files) {
+              await uploadFile(ticket.id, f.file);
+            }
+            setIdea("");
+            setFiles([]);
+          },
+          files.length ? "Idée notée avec ses images" : "Idée notée"
+        );
+      }}
+    >
+      <textarea
+        rows={2}
+        value={idea}
+        placeholder="Une idée (1re ligne : le titre), ou colle une image"
+        aria-label="Nouvelle idée : la première ligne sert de titre ; une image collée y est jointe"
+        onChange={(e) => setIdea(e.target.value)}
+        onPaste={(e) => {
+          if (add([...e.clipboardData.files])) {
+            e.preventDefault();
+          }
+        }}
+      />
+      {files.length > 0 && (
+        <div className={styles.composeFiles}>
+          {files.map((f) => (
+            <span key={f.key} className={styles.composeFile}>
+              {f.url ? (
+                <img src={f.url} alt="" />
+              ) : (
+                <span>{/^video\//.test(f.file.type) ? "▶" : "…"}</span>
+              )}
+              <button
+                type="button"
+                aria-label={`Retirer ${f.file.name}`}
+                onClick={() => setFiles((l) => l.filter((x) => x.key !== f.key))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className={styles.row}>
+        <label className={styles.btn}>
+          Photo
+          <input
+            type="file"
+            accept={IMAGE_TYPES}
+            multiple
+            hidden
+            onChange={(e) => {
+              add([...(e.target.files ?? [])]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {ready && (
+          <button type="submit" className={styles.primary}>
+            Noter l'idée
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
 export default function TicketsPage() {
   useDocumentTitle("Tickets");
   const { status: authStatus, email } = useAuth();
@@ -457,7 +642,6 @@ export default function TicketsPage() {
     null
   );
   const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
-  const [idea, setIdea] = useState("");
   const [drag, setDrag] = useState<Drag | null>(null);
   const [target, setTarget] = useState<{ col: TicketStatus; before: string } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -601,6 +785,20 @@ export default function TicketsPage() {
   }, [labelDefs, tickets]);
   const byId = useMemo(() => new Map((tickets ?? []).map((t) => [t.id, t])), [tickets]);
   const open = sheet ? byId.get(sheet.id) : undefined;
+  // Pastille de l'icône de l'appli installée : tickets à valider ou arrêtés (comme les notifications)
+  useEffect(() => {
+    if (!tickets) {
+      return;
+    }
+    const n = tickets.filter(
+      (t) => t.status === "review" || (t.status === "work" && t.stage === "fail")
+    ).length;
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    void (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
+  }, [tickets]);
   // Lien vers un ticket qui n'existe pas (ou plus) : retour au tableau
   useEffect(() => {
     if (ticketId && tickets && !byId.has(ticketId)) {
@@ -916,39 +1114,7 @@ export default function TicketsPage() {
                       </p>
                     )}
                   </div>
-                  {c.key === "idea" && (
-                    <form
-                      className={styles.compose}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const [title, ...rest] = idea.split("\n");
-                        if (!title.trim()) {
-                          return;
-                        }
-                        void run(async () => {
-                          await createTicket({
-                            status: "idea",
-                            title: title.trim(),
-                            detail: rest.join("\n").trim(),
-                          });
-                          setIdea("");
-                        }, "Idée notée");
-                      }}
-                    >
-                      <textarea
-                        rows={2}
-                        value={idea}
-                        placeholder="Une idée (1re ligne : le titre)"
-                        aria-label="Nouvelle idée : la première ligne sert de titre"
-                        onChange={(e) => setIdea(e.target.value)}
-                      />
-                      {idea.trim() && (
-                        <button type="submit" className={styles.btn}>
-                          Noter l'idée
-                        </button>
-                      )}
-                    </form>
-                  )}
+                  {c.key === "idea" && <IdeaCompose run={run} />}
                   {c.key === "todo" && (
                     <button type="button" className={styles.add} onClick={() => setCreating(true)}>
                       + Nouveau ticket

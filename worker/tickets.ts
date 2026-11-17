@@ -13,6 +13,7 @@
 // Notifications sur Discord (secret DISCORD_TICKETS_WEBHOOK_URL, facultatif).
 import { adminName, adminOf } from "./admin.ts";
 import { hashToken } from "./auth.ts";
+import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import {
   AUTOFIX_MAX,
   FIX_TEXT,
@@ -303,8 +304,49 @@ function gh(env: Env): Gh {
   };
 }
 
-/** Notification Discord, avec le lien direct vers la fiche du ticket (adresse partageable /tickets/<id>). */
+/**
+ * Notifications push des tickets : appareils des administrateurs abonnés (page Tickets → Réglages),
+ * avec le nombre de tickets qui attendent (à valider ou arrêtés) pour la pastille de l'icône.
+ * Un abonnement expiré est retiré ; un échec n'empêche jamais l'action qui l'a déclenchée.
+ */
+async function pushAdmins(env: Env, text: string, id: string): Promise<void> {
+  const { results } = await env.DB.prepare("SELECT endpoint, p256dh, auth FROM ticket_push").all<{
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+  }>();
+  if (!results.length) {
+    return;
+  }
+  const waiting = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM tickets WHERE status = 'review' OR (status = 'work' AND json_extract(data, '$.stage') = 'fail')"
+  ).first<{ n: number }>();
+  const [title, ...rest] = text.replace(/\*\*/g, "").split(" : ");
+  for (const s of results) {
+    try {
+      await sendPush(
+        s,
+        {
+          title: title || "Tickets",
+          body: rest.join(" : "),
+          url: `/tickets/${id}`,
+          icon: "/admin/icon-192.png",
+          tag: `ticket-${id}`,
+          count: waiting?.n ?? 0,
+        },
+        env
+      );
+    } catch (err) {
+      if (err instanceof ExpiredSubscriptionError) {
+        await env.DB.prepare("DELETE FROM ticket_push WHERE endpoint = ?").bind(s.endpoint).run();
+      }
+    }
+  }
+}
+
+/** Notification Discord, avec le lien direct vers la fiche du ticket (adresse partageable /tickets/<id>), et push. */
 async function notify(env: Env, text: string, id: string): Promise<void> {
+  await pushAdmins(env, text, id).catch(() => {});
   if (!env.DISCORD_TICKETS_WEBHOOK_URL) {
     return;
   }
@@ -813,6 +855,29 @@ export async function handleTickets(
         }
       }
       return json({ ok: true, ticket: await loadTicket(env, id) });
+    }
+    // Notifications push de cet appareil (Réglages) : état, abonnement, désabonnement
+    if (parts[0] === "push" && m === "POST") {
+      adminOnly();
+      const b = await body(request);
+      const endpoint = text(b.endpoint, 1000);
+      if (!/^https:\/\//.test(endpoint)) {
+        throw new TicketError("Abonnement invalide");
+      }
+      if (b.action === "on") {
+        const keys = (b.keys ?? {}) as Record<string, unknown>;
+        await env.DB.prepare(
+          "INSERT INTO ticket_push (endpoint, p256dh, auth, email, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, email = excluded.email"
+        )
+          .bind(endpoint, text(keys.p256dh, 200), text(keys.auth, 100), access.email, now)
+          .run();
+      } else if (b.action === "off") {
+        await env.DB.prepare("DELETE FROM ticket_push WHERE endpoint = ?").bind(endpoint).run();
+      }
+      const row = await env.DB.prepare("SELECT 1 AS on1 FROM ticket_push WHERE endpoint = ?")
+        .bind(endpoint)
+        .first();
+      return json({ ok: true, on: !!row });
     }
     if (parts[0] === "key" && m === "POST") {
       adminOnly();
