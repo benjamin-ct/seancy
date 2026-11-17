@@ -67,7 +67,8 @@ jobs:
         run: npm ci
 
       - name: Audit dépendances (vulnérabilités connues)
-        run: npm audit --audit-level=high
+        # Exceptions datées pour un avis sans version corrigée : scripts/audit.ts
+        run: node scripts/audit.ts high
 
       - name: Formatage (Prettier, bloquant)
         run: npm run format:check
@@ -112,6 +113,7 @@ jobs:
           npm run verify:cloudflare-usage
           npm run verify:vapid
           npm run verify:release
+          npm run verify:audit
 
       - name: Build
         run: npm run build
@@ -188,7 +190,7 @@ jobs:
       # juste avant une release possible, on veut voir les vulnérabilités
       # modérées aussi, pas seulement les plus critiques.
       - name: Audit dépendances (plus restrictif, pré-release)
-        run: npm audit --audit-level=moderate
+        run: node scripts/audit.ts moderate
       - run: node scripts/check-pii-fixtures.ts
 
   deploy-preview:
