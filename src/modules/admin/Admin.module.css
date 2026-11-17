@@ -489,6 +489,7 @@
   font-family: var(--font-display);
   font-size: 22px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .meterBad .meterHead b {
   color: var(--accent-ink);
