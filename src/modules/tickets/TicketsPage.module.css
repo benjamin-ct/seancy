@@ -1086,7 +1086,8 @@
 .zoom {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
+  /* Au-dessus de la barre d'onglets sur téléphone (--tabbar-offset : 0 sur ordinateur) */
+  bottom: max(16px, env(safe-area-inset-bottom), calc(var(--tabbar-offset) + 8px));
   z-index: 40;
   display: grid;
   place-items: center;
@@ -1532,15 +1533,64 @@
   right: 10px;
 }
 
+/* ---------- Boutons de l'en-tête de l'espace admin (téléphone, HeaderActions) ---------- */
+
+.headBtn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.headBtn[aria-pressed="true"] {
+  background: var(--selected-bg);
+  border-color: var(--selected-border);
+}
+.headBtn:active {
+  transform: scale(0.94);
+}
+.headBtn:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.headNew {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 /* ---------- Téléphone ---------- */
 
 @media (max-width: 860px) {
+  /* Titre déjà dans l'en-tête de l'espace admin : gardé pour les lecteurs d'écran */
+  .pageHead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Réglages et « Nouveau ticket » passent dans l'en-tête ; la recherche s'ouvre avec la loupe */
+  .deskOnly,
+  .search:not(.searchOpen) {
+    display: none;
+  }
+  .top {
+    margin-bottom: 12px;
+  }
   .page {
     padding-top: 16px;
     padding-left: 16px;
     padding-right: 16px;
-    /* Le bas du tableau garde déjà la place du bouton de zoom */
-    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    /* Le bas du tableau garde déjà la place du bouton de zoom (et <body> celle de la barre d'onglets) */
+    padding-bottom: 8px;
   }
   .tools {
     width: 100%;

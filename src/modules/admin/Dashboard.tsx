@@ -60,8 +60,10 @@ export default function Dashboard() {
   const missing = data.config.flatMap((g) => g.items).filter((i) => !i.ok).length;
   return (
     <div className={styles.page}>
-      <p className={styles.eyebrow}>Espace admin</p>
-      <h1 className={styles.title}>Tableau de bord</h1>
+      <div className={styles.pageHead}>
+        <p className={styles.eyebrow}>Espace admin</p>
+        <h1 className={styles.title}>Tableau de bord</h1>
+      </div>
 
       <section aria-labelledby="dash-site" className={styles.section}>
         <h2 id="dash-site">Le site</h2>

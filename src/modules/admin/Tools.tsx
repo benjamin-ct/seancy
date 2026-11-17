@@ -64,8 +64,10 @@ export default function Tools() {
 
   return (
     <div className={styles.page}>
-      <p className={styles.eyebrow}>Espace admin</p>
-      <h1 className={styles.title}>Outils</h1>
+      <div className={styles.pageHead}>
+        <p className={styles.eyebrow}>Espace admin</p>
+        <h1 className={styles.title}>Outils</h1>
+      </div>
       <div className={styles.tools}>
         {TOOLS.map((t) => (
           <article key={t.id} className={styles.card}>
