@@ -11,8 +11,10 @@
 // /admin, pour l'essayer).
 import { getUserFromRequest, type AuthUser } from "./auth.ts";
 import { verifyAccessJwt } from "./access.ts";
+import { cloudflareUsage } from "./cloudflare-usage.ts";
 import { logError } from "./logger.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
+import { vapidProblem } from "./vapid.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { syncPopularTitles } from "./search-index.ts";
 import {
@@ -148,6 +150,11 @@ async function overview(env: Env, request: Request) {
             ok: adminEmails(env).length > 0,
             help: `secret ADMIN_EMAILS (${adminEmails(env).length})`,
           },
+          {
+            name: "Quotas Cloudflare",
+            ok: has(env.CF_ANALYTICS_TOKEN),
+            help: "secret CF_ANALYTICS_TOKEN (jeton « Account Analytics : Read »)",
+          },
         ],
       },
       {
@@ -171,8 +178,8 @@ async function overview(env: Env, request: Request) {
           { name: "TMDB", ok: has(env.TMDB_API_KEY), help: "secret TMDB_API_KEY" },
           {
             name: "Notifications push",
-            ok: has(env.VAPID_PRIVATE_KEY),
-            help: "secret VAPID_PRIVATE_KEY",
+            ok: !vapidProblem(env),
+            help: vapidProblem(env) ?? "clés VAPID au bon format",
           },
           { name: "E-mails (Resend)", ok: has(env.RESEND_API_KEY), help: "secret RESEND_API_KEY" },
           { name: "Sentry", ok: has(env.SENTRY_DSN), help: "secret SENTRY_DSN" },
@@ -217,6 +224,8 @@ async function testNotification(env: Env, user: AuthUser) {
     );
   }
   let sent = 0;
+  let expired = 0;
+  const reasons = new Set<string>();
   for (const s of results) {
     try {
       await sendPush(
@@ -231,14 +240,24 @@ async function testNotification(env: Env, user: AuthUser) {
       sent++;
     } catch (err) {
       if (err instanceof ExpiredSubscriptionError) {
+        expired++;
         await env.DB.prepare("DELETE FROM subscriptions WHERE id = ?").bind(s.id).run();
+      } else {
+        reasons.add(err instanceof Error ? err.message : String(err));
       }
     }
   }
-  return json({
-    ok: true,
-    message: `Notification envoyée à ${sent} appareil${sent > 1 ? "s" : ""} sur ${results.length}`,
-  });
+  // Raison des échecs dite sur la page (avant : « 0 appareil sur 8 » sans explication)
+  const message = [
+    `Notification envoyée à ${sent} appareil${sent > 1 ? "s" : ""} sur ${results.length}`,
+    expired
+      ? `${expired} abonnement${expired > 1 ? "s" : ""} expiré${expired > 1 ? "s" : ""}, retiré${expired > 1 ? "s" : ""}`
+      : "",
+    reasons.size ? `échec : ${[...reasons].slice(0, 2).join(" ; ")}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return sent || !reasons.size ? json({ ok: true, message }) : json({ error: message }, 502);
 }
 
 export async function handleAdmin(
@@ -264,6 +283,11 @@ export async function handleAdmin(
   }
   if (sub === "overview" && request.method === "GET") {
     return json(await overview(env, request));
+  }
+  // Quotas Cloudflare du compte (à part : le tableau de bord s'affiche même si Cloudflare tarde)
+  if (sub === "usage" && request.method === "GET") {
+    const r = await cloudflareUsage(env);
+    return json(r, "usage" in r || r.missing ? 200 : 502);
   }
   if (request.method === "POST" && sub.startsWith("tools/")) {
     // Échec d'un outil (secret manquant, TMDB injoignable…) : sa raison affichée sur la page

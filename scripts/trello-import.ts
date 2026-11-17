@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Import unique du board Trello dans les tickets de Seancy (page /tickets) :
 // toutes les cartes ouvertes, avec leur colonne, description, checklists,
-// étiquettes, commentaires et pièces jointes (fichiers de 1,5 Mo au plus
+// étiquettes (et leurs couleurs), commentaires et pièces jointes (fichiers de 1,5 Mo au plus
 // recopiés dans le ticket, les autres gardés en liens). Conversion :
 // scripts/trelloLib.ts. Rejouable : une carte déjà importée est sautée.
 // Rien n'est envoyé à Claude : les cartes « En cours » arrivent dans « À faire ».
@@ -15,8 +15,10 @@ import { shrinkImage, storedName } from "./shrinkImage.ts";
 import {
   boardToTickets,
   isImportableFile,
+  labelDefsOf,
   type TrelloCard,
   type TrelloComment,
+  type TrelloLabel,
 } from "./trelloLib.ts";
 
 const KEY = process.env.TRELLO_KEY || "";
@@ -124,6 +126,9 @@ async function main() {
     `/boards/${board}/cards/open?fields=name,desc,idList,pos,shortUrl,dateLastActivity,labels&attachments=true&attachment_fields=id,name,url,mimeType,bytes,isUpload&checklists=all&checklist_fields=name`
   );
   const { comments, creators } = await allActions();
+  const labels = labelDefsOf(
+    await trello<TrelloLabel[]>(`/boards/${board}/labels?fields=name,color&limit=1000`)
+  );
   const list = boardToTickets(
     lists.filter((l) => !l.closed),
     cards,
@@ -142,6 +147,9 @@ async function main() {
       `  liste « ${l.name} »${l.closed ? " (archivée, ignorée)" : ""} : ${cards.filter((c) => c.idList === l.id).length} cartes`
     );
   }
+  console.log(
+    `${labels.length} étiquettes : ${labels.map((l) => `${l.name} (${l.color || "sans couleur"})`).join(", ")}`
+  );
   if (dry) {
     console.log("Essai à blanc (--dry-run) : rien n'a été envoyé.");
     for (const t of list.slice(0, 15)) {
@@ -151,6 +159,8 @@ async function main() {
     }
     return;
   }
+  // Couleurs des étiquettes : reprises à chaque lancement (celles changées sur la page Tickets sont remplacées)
+  await tickets("/labels", { method: "PUT", body: { labels } });
   // Tickets créés et déjà importés : les pièces jointes manquantes sont envoyées dans les deux cas (relancer l'import
   // complète les fichiers en échec d'un lancement précédent, sans doublon)
   const created = new Map<string, string>();

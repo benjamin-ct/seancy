@@ -475,6 +475,7 @@
 }
 .close {
   position: absolute;
+  z-index: 2;
   top: 10px;
   right: 10px;
   width: 36px;
@@ -621,24 +622,114 @@
   font-size: 13px;
   color: var(--muted);
 }
-.text p {
-  margin: 0 0 6px;
+/* Markdown (Markdown.tsx) : descriptions, comptes rendus, messages */
+.md {
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
-.text .bullet {
-  position: relative;
-  padding-left: 16px;
+.md > :first-child {
+  margin-top: 0;
 }
-.text .bullet::before {
-  content: "•";
-  position: absolute;
-  left: 2px;
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md pre,
+.md blockquote,
+.tableWrap {
+  margin: 0 0 8px;
+}
+.md ul,
+.md ol {
+  padding-left: 22px;
+}
+.md li {
+  margin: 2px 0;
+}
+.md li::marker {
   color: var(--col);
 }
-.text .subhead {
-  margin-top: 10px;
-  font-weight: 700;
+.md li ul,
+.md li ol {
+  margin: 2px 0 0;
+}
+.md .task {
+  list-style: none;
+  margin-left: -20px;
+}
+.md .task > input {
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--ok-ink);
+}
+.md h4,
+.md h5,
+.md h6 {
+  margin: 14px 0 6px;
+  line-height: 1.25;
+}
+.md h4 {
+  font-family: var(--font-display);
+  font-size: 1.2em;
+}
+.md h5 {
+  font-size: 1em;
+}
+.md h6 {
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.md code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+.md pre {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-x: auto;
+}
+.md pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+.md blockquote {
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--border-2);
+  color: var(--muted);
+}
+.md hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.tableWrap {
+  overflow-x: auto;
+}
+.md table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.md th,
+.md td {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.md th {
+  background: var(--surface);
 }
 .clip {
   max-height: 260px;
@@ -653,9 +744,22 @@
 .file {
   position: relative;
 }
-.file a {
+.file a,
+.thumb {
   display: block;
   color: var(--fg);
+}
+.thumb {
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  cursor: zoom-in;
+}
+.thumb:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
 }
 .file img {
   display: block;
@@ -665,14 +769,15 @@
   border-radius: 8px;
   border: 1px solid var(--border);
 }
-.file a span {
+.file a span,
+.thumb span {
   display: inline-block;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 13px;
 }
-.file button {
+.fileDel {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -798,12 +903,7 @@
 }
 
 .reply {
-  position: sticky;
-  bottom: 0;
-  margin: 14px -22px -22px;
-  padding: 14px 22px 18px;
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
+  margin: 0 0 14px;
 }
 .segs {
   display: inline-flex;
@@ -941,6 +1041,409 @@
   stroke-linejoin: round;
 }
 
+/* ---------- Étiquettes (Labels.tsx), couleurs de Trello ---------- */
+
+.labBig {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.labAdd {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.labAdd:hover,
+.labAdd[aria-expanded="true"] {
+  background: var(--border-2);
+}
+.sheetLabels {
+  margin-top: 12px;
+}
+.sheetLabels h3,
+.sheetSide > h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.meta2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(330px, 100%);
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+}
+.pickerHead,
+.pickerFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.picker .pickerSearch {
+  width: 100%;
+}
+.pickerList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 290px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.pickerList li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pickerList label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+.pickerBar {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 7px 12px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickerEdit {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pickerEdit:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.pickerPreview {
+  display: flex;
+  justify-content: center;
+  padding: 18px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.pickerField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pickerLabel {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.swatch {
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.swatch[aria-checked="true"],
+.swatch:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+
+/* ---------- Saisie en Markdown (barre d'outils et aperçu) ---------- */
+
+.mdInput {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.mdInput:focus-within {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.mdInput textarea,
+.mdInput textarea:focus-visible {
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+}
+.mdTools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.mdTools button {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mdTools button:hover:not(:disabled),
+.mdTools button[aria-pressed="true"] {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.mdTools button:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: -2px;
+}
+.mdTools button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mdTools button:nth-child(2) {
+  font-style: italic;
+}
+.mdTools .mdPreviewBtn {
+  margin-left: auto;
+  font-weight: 600;
+}
+.mdPreview {
+  min-height: 80px;
+  padding: 10px 12px;
+}
+
+/* ---------- Fiche : deux colonnes sur ordinateur, façon Trello ---------- */
+
+.sheetMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.sheetSide {
+  min-width: 0;
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+@media (min-width: 900px) {
+  .dialogWide {
+    width: min(1120px, calc(100% - 2 * var(--gutter)));
+  }
+  .dialogWide > .dialogBody {
+    padding: 0;
+  }
+  /* Deux colonnes de toute la hauteur, chacune défile toute seule */
+  .sheet {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  }
+  .sheetMain,
+  .sheetSide {
+    max-height: calc(100dvh - 42px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .sheetMain {
+    padding: 22px 28px 22px 22px;
+  }
+  .sheetSide {
+    margin: 0;
+    padding: 22px 22px 22px 20px;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .sheetSide > h3 {
+    margin-right: 40px;
+  }
+}
+/* Téléphone : quand Claude a déjà travaillé sur le ticket, l'activité (son
+   compte rendu, la réponse) vient juste après le titre et les boutons */
+@media (max-width: 899px) {
+  .sheetTalk .sheetMain {
+    display: contents;
+  }
+  .sheetTalk .sheetMain > * {
+    order: 2;
+  }
+  .sheetTalk .sheetMain > :is(.sheetHead, .sheetLabels, .acts, .prog, .hint) {
+    order: 0;
+  }
+  .sheetTalk .sheetSide {
+    order: 1;
+  }
+}
+
+/* ---------- Visionneuse (Viewer.tsx) ---------- */
+
+.viewer {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: oklch(0.12 0 0 / 0.94);
+  color: #fff;
+  overflow: hidden;
+}
+.viewer[open] {
+  display: flex;
+  flex-direction: column;
+}
+.viewer::backdrop {
+  background: transparent;
+}
+.viewerBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+}
+.viewerName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viewerName small {
+  margin-right: 10px;
+  font-family: var(--font-mono);
+  opacity: 0.7;
+}
+.viewerBtn,
+.viewer a.viewerBtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  min-width: 40px;
+  justify-content: center;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: oklch(1 0 0 / 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.viewerBtn:hover,
+.viewerBtn[aria-pressed="true"] {
+  background: oklch(1 0 0 / 0.26);
+}
+.viewerBtn:focus-visible,
+.viewerNav:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.viewerStage {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 8px 64px 20px;
+  overflow: hidden;
+}
+.viewerStage img,
+.viewerStage video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.viewerStage img {
+  cursor: zoom-in;
+  user-select: none;
+}
+/* Taille réelle : l'image dépasse et se parcourt en défilant */
+.viewerFull {
+  display: block;
+  padding: 0;
+  overflow: auto;
+}
+.viewerFull img {
+  display: block;
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  cursor: zoom-out;
+}
+.viewerNav {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 64px;
+  border: 0;
+  border-radius: 12px;
+  background: oklch(1 0 0 / 0.14);
+  color: #fff;
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+  translate: 0 -50%;
+}
+.viewerNav:hover {
+  background: oklch(1 0 0 / 0.26);
+}
+.viewerPrev {
+  left: 10px;
+}
+.viewerNext {
+  right: 10px;
+}
+
 /* ---------- Téléphone ---------- */
 
 @media (max-width: 860px) {
@@ -987,11 +1490,14 @@
   .dialogBody {
     padding: 20px 16px 24px;
   }
-  /* Sur téléphone, la zone de réponse suit le texte : collée en bas, elle
-     cacherait la moitié de l'historique */
-  .reply {
-    position: static;
-    margin: 14px -16px -24px;
-    padding: 12px 16px 20px;
+  .mdTools button {
+    min-width: 34px;
+    height: 36px;
+  }
+  .viewerStage {
+    padding: 4px 0 12px;
+  }
+  .viewerNav {
+    opacity: 0.75;
   }
 }

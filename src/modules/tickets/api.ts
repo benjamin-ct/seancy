@@ -59,6 +59,11 @@ export interface Ticket {
   authorEmail: string;
   createdAt: number;
 }
+/** Étiquette partagée : nom et couleur Trello (« green », « red_dark »… ; vide = sans couleur). */
+export interface LabelDef {
+  name: string;
+  color: string;
+}
 export interface TicketsConfig {
   github: boolean;
   discord: boolean;
@@ -89,7 +94,15 @@ const post = <T>(path: string, data: unknown, method = "POST") =>
     body: JSON.stringify(data),
   });
 
-export const listTickets = () => request<{ tickets: Ticket[]; config: TicketsConfig }>("");
+export const listTickets = () =>
+  request<{ tickets: Ticket[]; labels?: LabelDef[]; config: TicketsConfig }>("");
+/** Étiquette ajoutée ou changée (`from` : ancien nom si renommée), ou retirée (`remove`) de tous les tickets. */
+export const saveLabel = (change: {
+  name?: string;
+  color?: string;
+  from?: string;
+  remove?: boolean;
+}) => post<{ labels: LabelDef[] }>("/labels", change);
 export const createTicket = (data: Partial<Ticket> & { send?: boolean; before?: string }) =>
   post<{ ticket: Ticket }>("", data);
 export const editTicket = (id: string, fields: Partial<Ticket>) =>

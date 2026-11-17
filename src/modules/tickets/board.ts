@@ -2,7 +2,16 @@
 // déposer ou boutons de la fiche), états affichés. Même fonctionnement que la
 // page Tickets de Paddock Live : la colonne d'arrivée fait l'action (envoi à
 // Claude, annulation, validation, retouche, réouverture).
-import type { Effort, Ticket, TicketStatus } from "./api.ts";
+import { createContext } from "react";
+import type { Effort, LabelDef, Ticket, TicketFile, TicketStatus } from "./api.ts";
+
+/** Étiquettes de la page (Labels.tsx) : définies, puis celles des tickets sans définition. */
+export const LabelsContext = createContext<{ defs: LabelDef[]; names: string[] }>({
+  defs: [],
+  names: [],
+});
+/** Pièce jointe ouverte dans la visionneuse (images et vidéos). */
+export const viewable = (f: TicketFile) => /^(image|video)\//.test(f.type);
 
 export const COLUMNS: { key: TicketStatus; name: string; empty: string }[] = [
   {

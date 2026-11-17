@@ -34,6 +34,7 @@
     "src/core/botDetection.ts",
     "worker/ai-suggestions-format.ts",
     "src/modules/changelog/changelogParser.ts",
+    "src/modules/tickets/markdown.ts",
     "worker/bots.ts",
     "worker/rate-limit-memory.ts",
     "worker/tmdb-proxy-policy.ts",
@@ -41,6 +42,8 @@
     "worker/security-headers.ts",
     "worker/validate.ts",
     "worker/tickets-logic.ts",
-    "worker/access.ts"
+    "worker/access.ts",
+    "worker/cloudflare-usage.ts",
+    "worker/vapid.ts"
   ]
 }

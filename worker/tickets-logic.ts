@@ -647,3 +647,65 @@ export function positionBefore(
   const prev = i > 0 ? list[i - 1].position : list[i].position - 2048;
   return (prev + list[i].position) / 2;
 }
+
+// ---------- Étiquettes (couleurs façon Trello) ----------
+
+/** Étiquette partagée par tous les tickets : nom et couleur Trello (« green », « red_dark »… ; vide = sans couleur). */
+export interface LabelDef {
+  name: string;
+  color: string;
+}
+const LABEL_COLOR = /^(green|yellow|orange|red|purple|blue|sky|lime|pink|black)(_light|_dark)?$/;
+const sameLabel = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** Liste d'étiquettes nettoyée : noms bornés, sans doublon (casse ignorée), couleurs connues seulement. */
+export function cleanLabelDefs(input: unknown): LabelDef[] {
+  const out: LabelDef[] = [];
+  for (const x of Array.isArray(input) ? input : []) {
+    const o = (x ?? {}) as Record<string, unknown>;
+    const name = str(o.name, 50).trim();
+    if (name && !out.some((d) => sameLabel(d.name, name))) {
+      out.push({ name, color: LABEL_COLOR.test(String(o.color)) ? String(o.color) : "" });
+    }
+  }
+  return out.slice(0, 300);
+}
+
+/**
+ * Étiquette ajoutée ou changée (`from` : son ancien nom quand elle est
+ * renommée), ou retirée (`remove`). Les autres gardent leur place.
+ */
+export function upsertLabel(
+  defs: LabelDef[],
+  change: { name?: unknown; color?: unknown; from?: unknown; remove?: unknown }
+): LabelDef[] {
+  const from = str(change.from, 50).trim();
+  if (change.remove) {
+    return defs.filter((d) => !sameLabel(d.name, from));
+  }
+  const [def] = cleanLabelDefs([{ name: change.name, color: change.color }]);
+  if (!def) {
+    throw new TicketError("Nom d'étiquette manquant");
+  }
+  const at = defs.findIndex((d) => sameLabel(d.name, from || def.name));
+  const rest = defs.filter((d, i) => i !== at && !sameLabel(d.name, def.name));
+  if (at < 0) {
+    return [...rest, def];
+  }
+  rest.splice(Math.min(at, rest.length), 0, def);
+  return rest;
+}
+
+/** Étiquettes venues d'ailleurs (import Trello) : couleur reprise pour les noms connus, les nouvelles ajoutées. */
+export function mergeLabels(defs: LabelDef[], incoming: unknown): LabelDef[] {
+  const out = [...defs];
+  for (const d of cleanLabelDefs(incoming)) {
+    const i = out.findIndex((x) => sameLabel(x.name, d.name));
+    if (i < 0) {
+      out.push(d);
+    } else if (d.color) {
+      out[i] = { ...out[i], color: d.color };
+    }
+  }
+  return out;
+}

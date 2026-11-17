@@ -1,11 +1,12 @@
-// Tableau de bord de l'espace admin : quelques chiffres du site, les tickets
-// par colonne et l'état des réglages (secrets présents ou non, jamais leur
+// Tableau de bord de l'espace admin : quelques chiffres du site, les quotas
+// Cloudflare (Quotas.tsx), les tickets par colonne et l'état des réglages (secrets présents ou non, jamais leur
 // valeur). Données : GET /api/admin/overview (worker/admin.ts).
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import styles from "./Admin.module.css";
+import Quotas from "./Quotas.tsx";
 
 interface Overview {
   stats: Record<
@@ -73,6 +74,8 @@ export default function Dashboard() {
           ))}
         </dl>
       </section>
+
+      <Quotas />
 
       <section aria-labelledby="dash-tickets" className={styles.section}>
         <div className={styles.sectionHead}>
