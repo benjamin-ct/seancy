@@ -1014,12 +1014,7 @@
 }
 
 .toast {
-  /* Popover : au premier plan, au-dessus d'une fiche ouverte (fenêtre modale) */
   position: fixed;
-  inset: auto;
-  margin: 0;
-  border: 0;
-  overflow: visible;
   left: 50%;
   bottom: calc(var(--tabbar-offset) + 24px);
   z-index: 60;
@@ -1031,6 +1026,10 @@
   box-shadow: var(--shadow-lift);
   font-size: 14px;
   transform: translateX(-50%);
+}
+/* Dans une fiche ouverte : en bas de la fiche (la barre d'onglets est dessous, cachée) */
+:global(dialog) .toast {
+  bottom: max(24px, env(safe-area-inset-bottom));
 }
 .toastBad {
   border: 1px solid var(--accent);

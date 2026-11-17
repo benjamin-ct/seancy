@@ -299,7 +299,7 @@ export default function TicketSheet({
       (r) => {
         setShared(r === "shared" ? "Lien partagé" : "Lien copié");
         window.setTimeout(() => setShared(""), 2500);
-        return r === "shared" ? "Lien partagé" : "Lien copié";
+        return r === "shared" ? "Lien partagé" : "Lien du ticket copié dans le presse-papiers";
       }
     );
 
