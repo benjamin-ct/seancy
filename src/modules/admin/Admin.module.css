@@ -11,13 +11,6 @@
   display: flex;
   flex-direction: column;
 }
-/* Pas de barre d'onglets du site en bas de l'espace admin : sans ça, le
-   <body> garde sur téléphone la place qu'elle occupe (styles/global.css), un
-   grand vide sous chaque page */
-:global(body):has(.shell) {
-  --tabbar-offset: 0px;
-  padding-bottom: 0;
-}
 
 .top {
   position: sticky;
@@ -104,6 +97,12 @@
 .main {
   flex: 1;
   outline: none;
+}
+/* Téléphone seulement : titre de la page, ses boutons et la barre d'onglets */
+.pageName,
+.actions,
+.tabbar {
+  display: none;
 }
 .main > .card,
 .main > p {
@@ -515,18 +514,127 @@
 }
 
 @media (max-width: 860px) {
+  /* En-tête compact, comme le panneau de Paddock Live : logo, titre de la
+     page et ses boutons (HeaderActions) ; les onglets passent en bas. */
   .top {
-    padding: 10px 16px;
+    flex-wrap: nowrap;
+    gap: 10px;
+    min-height: 60px;
+    padding: 8px 16px;
+    padding-top: max(8px, env(safe-area-inset-top));
   }
-  .nav {
-    order: 3;
-    width: 100%;
-    justify-content: space-between;
+  .logo {
+    width: 32px;
   }
-  .nav a {
-    flex: 1;
-    text-align: center;
-    padding: 7px 8px;
+  .brandName,
+  .badge,
+  .nav,
+  .side {
+    display: none;
+  }
+  .pageName {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .actions:empty {
+    display: none;
+  }
+  /* Titre de la page déjà dans l'en-tête : gardé pour les lecteurs d'écran */
+  .pageHead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .pageHead + * {
+    margin-top: 0;
+  }
+
+  /* Barre d'onglets flottante, même verre givré que celle du site
+     (NavBar.module.css) : <body> lui réserve déjà sa place (global.css). */
+  .tabbar {
+    position: fixed;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: max(var(--tabbar-gap), env(safe-area-inset-bottom));
+    z-index: 40;
+    display: flex;
+    max-width: 480px;
+    height: var(--tabbar-height);
+    margin-inline: auto;
+    padding: 6px;
+    border: 1px solid oklch(1 0 0 / 0.14);
+    border-radius: 999px;
+    background:
+      linear-gradient(oklch(1 0 0 / 0.26), oklch(1 0 0 / 0.18)),
+      linear-gradient(
+        color-mix(in oklab, var(--header-bg) 97%, transparent),
+        color-mix(in oklab, var(--header-bg) 97%, transparent)
+      );
+    backdrop-filter: blur(32px) saturate(190%);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.16),
+      inset 0 -1px 0 oklch(0 0 0 / 0.12);
+  }
+  @supports (-webkit-touch-callout: none) {
+    .tabbar {
+      background:
+        linear-gradient(oklch(1 0 0 / 0.12), oklch(1 0 0 / 0.06)),
+        linear-gradient(
+          color-mix(in oklab, var(--header-bg) 68%, transparent),
+          color-mix(in oklab, var(--header-bg) 68%, transparent)
+        );
+    }
+  }
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color 0.18s ease,
+      background-color 0.18s ease,
+      transform 0.18s ease;
+  }
+  .tab:active {
+    transform: scale(0.92);
+  }
+  .tab:focus-visible {
+    outline: 2px solid var(--control);
+    outline-offset: -2px;
+  }
+  .tabActive {
+    color: var(--fg);
+    background: oklch(1 0 0 / 0.13);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.14),
+      0 1px 4px oklch(0 0 0 / 0.18);
   }
   .page {
     padding: 20px 16px 48px;
@@ -546,5 +654,28 @@
   }
   .main > .card {
     margin: 24px 16px;
+  }
+}
+
+/* Thème clair : verre blanc laiteux, pastille sombre discrète (comme le site) */
+@media (max-width: 860px) {
+  [data-theme="light"] .tabbar {
+    background:
+      linear-gradient(oklch(1 0 0 / 0.55), oklch(1 0 0 / 0.4)),
+      linear-gradient(
+        color-mix(in oklab, var(--surface) 96%, transparent),
+        color-mix(in oklab, var(--surface) 96%, transparent)
+      );
+    border-color: oklch(1 0 0 / 0.7);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.8);
+  }
+  [data-theme="light"] .tabActive {
+    background: oklch(0 0 0 / 0.07);
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
   }
 }
