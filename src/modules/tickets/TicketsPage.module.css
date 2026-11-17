@@ -1009,7 +1009,12 @@
 }
 
 .toast {
+  /* Popover : au premier plan, au-dessus d'une fiche ouverte (fenêtre modale) */
   position: fixed;
+  inset: auto;
+  margin: 0;
+  border: 0;
+  overflow: visible;
   left: 50%;
   bottom: calc(var(--tabbar-offset) + 24px);
   z-index: 60;
@@ -1132,6 +1137,17 @@
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
+}
+/* Lien qui ouvre un nouvel onglet (Preview, PR) : flèche après le texte */
+.btnIconEnd {
+  margin-left: 6px;
+  vertical-align: -3px;
+  opacity: 0.8;
+}
+/* « Partager » qui vient de copier le lien */
+.btnDone {
+  border-color: var(--ok);
+  color: var(--ok);
 }
 .labBig {
   display: inline-flex;

@@ -39,6 +39,8 @@
     "verify:access": "node scripts/verify-access.ts",
     "verify:cloudflare-usage": "node scripts/verify-cloudflare-usage.ts",
     "verify:vapid": "node scripts/verify-vapid.ts",
+    "verify:release": "node scripts/verify-release.ts",
+    "verify:audit": "node scripts/verify-audit.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
     "check:version-untouched": "node scripts/check-version-untouched.ts",

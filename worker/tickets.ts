@@ -15,6 +15,13 @@ import { adminName, adminOf } from "./admin.ts";
 import { hashToken } from "./auth.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import {
+  finishRelease,
+  openRelease,
+  releaseState,
+  startRelease,
+  type ReleaseDeps,
+} from "./release.ts";
+import {
   AUTOFIX_MAX,
   FIX_TEXT,
   RETRY_EVERY,
@@ -309,6 +316,9 @@ function gh(env: Env): Gh {
  * avec le nombre de tickets qui attendent (à valider ou arrêtés) pour la pastille de l'icône.
  * Un abonnement expiré est retiré ; un échec n'empêche jamais l'action qui l'a déclenchée.
  */
+// Lien d'une notification : la fiche du ticket, ou le tableau de bord (release, sans ticket)
+const pathOf = (id: string) => (id ? `/tickets/${id}` : "/");
+
 async function pushAdmins(env: Env, text: string, id: string): Promise<void> {
   const { results } = await env.DB.prepare("SELECT endpoint, p256dh, auth FROM ticket_push").all<{
     endpoint: string;
@@ -329,9 +339,9 @@ async function pushAdmins(env: Env, text: string, id: string): Promise<void> {
         {
           title: title || "Tickets",
           body: rest.join(" : "),
-          url: `/tickets/${id}`,
+          url: pathOf(id),
           icon: "/admin/icon-192.png",
-          tag: `ticket-${id}`,
+          tag: id ? `ticket-${id}` : "release",
           count: waiting?.n ?? 0,
         },
         env
@@ -354,7 +364,7 @@ async function notify(env: Env, text: string, id: string): Promise<void> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      content: `${text}\n${siteOf(env)}/tickets/${id}`.slice(0, 1900),
+      content: `${text}\n${siteOf(env)}${pathOf(id)}`.slice(0, 1900),
       allowed_mentions: { parse: [] },
     }),
   }).catch(() => {});
@@ -658,6 +668,15 @@ async function findPreviews(env: Env, now: number): Promise<void> {
   }
 }
 
+/** Release develop → main (worker/release.ts) : GitHub, mémoire et notifications des tickets. */
+const releaseDeps = (env: Env): ReleaseDeps => ({
+  gh: gh(env),
+  repo: repoOf(env),
+  getMeta: (k) => getMeta(env, k),
+  setMeta: (k, v) => setMeta(env, k, v),
+  notify: (text) => notify(env, text, ""),
+});
+
 /** Passage si le dernier date de plus de 90 s (rafraîchissements de la page, réponses de Claude). */
 async function maybeTick(
   env: Env,
@@ -680,6 +699,12 @@ export async function runTicketsCron(env: Env, now = Date.now()): Promise<void> 
     ["file de validation", () => validateQueue(env, now)],
     ["relances", () => retryTickets(env, now)],
     ["previews", () => findPreviews(env, now)],
+    [
+      "release",
+      async () =>
+        env.GITHUB_TICKETS_TOKEN &&
+        finishRelease(releaseDeps(env), await openRelease(releaseDeps(env))),
+    ],
   ] as const) {
     try {
       await job();
@@ -877,6 +902,17 @@ export async function handleTickets(
       return json({ ok: true, ticket: await loadTicket(env, id) });
     }
     // Notifications push de cet appareil (Réglages) : état, abonnement, désabonnement
+    // Release develop → main : état (et fusion si la CI est passée), ou lancement
+    if (parts[0] === "release") {
+      adminOnly();
+      requireGitHub(env);
+      if (m === "GET") {
+        return json({ release: await releaseState(releaseDeps(env)) });
+      }
+      if (m === "POST" && (await body(request)).action === "start") {
+        return json({ release: await startRelease(releaseDeps(env), now) });
+      }
+    }
     if (parts[0] === "push" && m === "POST") {
       adminOnly();
       const b = await body(request);

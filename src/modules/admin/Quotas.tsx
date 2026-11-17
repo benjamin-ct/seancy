@@ -116,14 +116,22 @@ function Meter({
   );
 }
 
+// Dernière réponse (le serveur relit Cloudflare au plus toutes les 2 minutes) : affichée tout de suite au retour
+let lastReply: Reply | null = null;
+
 export default function Quotas() {
-  const [reply, setReply] = useState<Reply | null>(null);
+  const [reply, setReply] = useState<Reply | null>(lastReply);
   useEffect(() => {
     fetch("/api/admin/usage")
-      .then(async (r) =>
-        setReply(((await r.json().catch(() => null)) as Reply) ?? { error: `Erreur ${r.status}` })
-      )
-      .catch(() => setReply({ error: "Serveur injoignable" }));
+      .then(async (r) => {
+        const d = ((await r.json().catch(() => null)) as Reply) ?? { error: `Erreur ${r.status}` };
+        // Erreur passagère : on garde les derniers chiffres plutôt que de les effacer
+        if ("usage" in d || !lastReply) {
+          lastReply = d;
+          setReply(d);
+        }
+      })
+      .catch(() => !lastReply && setReply({ error: "Serveur injoignable" }));
   }, []);
 
   // Minuit UTC, à l'heure de Paris (1 h en hiver, 2 h en été)

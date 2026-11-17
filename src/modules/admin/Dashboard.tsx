@@ -7,6 +7,7 @@ import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import styles from "./Admin.module.css";
 import Quotas from "./Quotas.tsx";
+import Release from "./Release.tsx";
 
 interface Overview {
   stats: Record<
@@ -34,15 +35,19 @@ const COLUMNS: [keyof Overview["tickets"], string][] = [
   ["done", "Faits"],
 ];
 
+// Dernières données : revenir sur l'onglet les affiche tout de suite, puis elles se mettent à jour
+let lastOverview: Overview | null = null;
+
 export default function Dashboard() {
   useDocumentTitle("Admin");
-  const [data, setData] = useState<Overview | null>(null);
+  const [data, setData] = useState<Overview | null>(lastOverview);
   const [error, setError] = useState("");
   useEffect(() => {
     fetch("/api/admin/overview")
       .then(async (r) => {
         const d = (await r.json().catch(() => ({}))) as Overview & { error?: string };
         if (r.ok) {
+          lastOverview = d;
           setData(d);
         } else {
           setError(d.error || `Erreur ${r.status}`);
@@ -64,6 +69,8 @@ export default function Dashboard() {
         <p className={styles.eyebrow}>Espace admin</p>
         <h1 className={styles.title}>Tableau de bord</h1>
       </div>
+
+      <Release />
 
       <section aria-labelledby="dash-site" className={styles.section}>
         <h2 id="dash-site">Le site</h2>
