@@ -1,4 +1,5 @@
 import { useEffect, useState, type ClipboardEvent, type ReactNode } from "react";
+import { adminPrefix } from "../../core/lib/adminHost.ts";
 import {
   deleteFile,
   deleteTicket,
@@ -275,6 +276,25 @@ export default function TicketSheet({
     }
   };
 
+  // Lien direct vers la fiche (admin.seancy.com/tickets/<id>) : copié, sinon partagé (téléphone), sinon montré
+  const share = () =>
+    go(
+      async () => {
+        const url = `${location.origin}${adminPrefix()}/tickets/${t.id}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          return "copied";
+        } catch {
+          if (navigator.share) {
+            await navigator.share({ title: t.title, url });
+            return "shared";
+          }
+          throw new Error(`copie impossible, voici le lien : ${url}`);
+        }
+      },
+      (r) => (r === "shared" ? "Lien partagé" : "Lien copié")
+    );
+
   const prNo = prNumber(t.pr);
   const desc = lines(t.detail);
   const long = desc.length > 10 || t.detail.length > 900;
@@ -367,6 +387,18 @@ export default function TicketSheet({
           PR{prNo ? ` #${prNo}` : ""}
         </a>
       )}
+      <button
+        type="button"
+        className={styles.btn}
+        onClick={share}
+        aria-label="Partager : copier le lien du ticket"
+        title="Copier le lien du ticket"
+      >
+        <svg className={styles.btnIcon} viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+        </svg>
+        Partager
+      </button>
     </div>
   );
 
