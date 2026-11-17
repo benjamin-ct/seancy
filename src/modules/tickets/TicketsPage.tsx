@@ -51,7 +51,7 @@ import {
 } from "./board.ts";
 import Dialog from "./Dialog.tsx";
 import { Label } from "./Labels.tsx";
-import { MarkdownInput } from "./Markdown.tsx";
+import { MarkdownInput, TYPING } from "./Markdown.tsx";
 import TicketSheet, { type Ask, type ReplyMode, type Run } from "./TicketSheet.tsx";
 import styles from "./TicketsPage.module.css";
 
@@ -242,6 +242,7 @@ function NewTicket({
     >
       <h2>Nouveau ticket</h2>
       <input
+        {...TYPING}
         value={title}
         maxLength={200}
         placeholder="Titre (facultatif : sinon la 1re ligne de la description)"
@@ -558,6 +559,7 @@ function IdeaCompose({ run }: { run: Run }) {
       }}
     >
       <textarea
+        {...TYPING}
         rows={2}
         value={idea}
         placeholder="Une idée (1re ligne : le titre), ou colle une image"
@@ -833,7 +835,7 @@ export default function TicketsPage() {
         );
       } else if (key === "work>todo") {
         ask(
-          "Annuler l'envoi ? Le ticket revient dans « À faire ». Si Claude a déjà commencé sur GitHub, il peut finir et répondre quand même.",
+          "Annuler l'envoi ? Le ticket revient dans « À faire ». Si Claude a déjà commencé, il est arrêté et sa réponse n'est pas prise.",
           "Annuler l'envoi",
           () =>
             run(() => ticketAction(t.id, "unsend"), "Envoi annulé : ticket revenu dans « À faire »")

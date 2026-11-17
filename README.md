@@ -296,8 +296,9 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
 1. **Espace admin** en place (voir [sa mise en route](#mise-en-route-de-lespace-admin)).
 2. **Secrets du Worker** `seancy` (dashboard Cloudflare → Settings → Variables and Secrets, type **Secret**) :
    `GITHUB_TICKETS_TOKEN` (jeton GitHub _fine-grained_ sur le dépôt `seancy` : Contents, Issues et Pull requests en
-   écriture, Actions en lecture ; ajouter Workflows en écriture si Claude doit pouvoir modifier `.github/workflows`),
-   et facultativement `DISCORD_TICKETS_WEBHOOK_URL` (webhook Discord du salon des notifications).
+   écriture, Actions en écriture pour arrêter Claude quand un envoi est annulé ; ajouter Workflows en écriture si
+   Claude doit pouvoir modifier `.github/workflows`), et facultativement `DISCORD_TICKETS_WEBHOOK_URL` (webhook
+   Discord du salon des notifications).
 3. **Clé des sessions** : sur `admin.seancy.com/tickets` → **Réglages** → **Créer la clé**.
 4. **Secrets du dépôt** (GitHub → Settings → Secrets and variables → Actions) : `CLAUDE_CODE_OAUTH_TOKEN` (le même
    que sur le NAS), `TICKETS_GITHUB_TOKEN` (le même jeton qu'à l'étape 2 : les pushes et la PR passent par lui pour
