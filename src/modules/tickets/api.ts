@@ -97,13 +97,32 @@ const post = <T>(path: string, data: unknown, method = "POST") =>
 /** Release develop → main (tableau de bord) : voir worker/tickets.ts (ReleaseState). */
 export interface ReleaseState {
   version: string;
+  next: string;
+  notes: { bump: "patch" | "minor" | "major"; summary: string }[];
   pending: string[];
+  since: number;
   pr: { number: number; url: string; state: "wait" | "fail" | "merged"; why: string } | null;
 }
 export const releaseState = () => request<{ release: ReleaseState }>("/release");
 export const startRelease = () => post<{ release: ReleaseState }>("/release", { action: "start" });
+/** PR de Dependabot vers develop (worker/release.ts) : état de leur CI, fusion d'une PR prête. */
+export interface DepPr {
+  number: number;
+  title: string;
+  url: string;
+  state: "ok" | "wait" | "fail";
+}
+export const listDeps = () => request<{ deps: DepPr[] }>("/deps");
+export const mergeDep = (number: number) =>
+  post<{ message: string; deps: DepPr[] }>("/deps", { number });
 export const listTickets = () =>
-  request<{ tickets: Ticket[]; labels?: LabelDef[]; config: TicketsConfig }>("");
+  request<{
+    tickets: Ticket[];
+    labels?: LabelDef[];
+    config: TicketsConfig;
+    /** CI des PR à valider (passage régulier du serveur). */
+    ci?: Record<string, "ok" | "wait" | "fail">;
+  }>("");
 /** Étiquette ajoutée ou changée (`from` : ancien nom si renommée), ou retirée (`remove`) de tous les tickets. */
 export const saveLabel = (change: {
   name?: string;

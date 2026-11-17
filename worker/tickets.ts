@@ -15,7 +15,10 @@ import { adminName, adminOf } from "./admin.ts";
 import { hashToken } from "./auth.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
 import {
+  ciState,
+  dependencies,
   finishRelease,
+  mergeDependency,
   openRelease,
   releaseState,
   startRelease,
@@ -694,11 +697,33 @@ async function maybeTick(
   ctx.waitUntil(runTicketsCron(env, now));
 }
 
+/** État de la CI des PR des tickets à valider (pastille sur leur carte), gardé pour la page. */
+async function checkCi(env: Env): Promise<void> {
+  if (!env.GITHUB_TICKETS_TOKEN) {
+    return;
+  }
+  const d = releaseDeps(env);
+  const states: Record<string, string> = {};
+  const list = (await loadAll(env))
+    .filter((t) => t.status === "review" && !t.queued && prNumber(t.pr))
+    .slice(0, 12);
+  for (const t of list) {
+    try {
+      const pr = await d.gh<PullRequest>(`/repos/${d.repo}/pulls/${prNumber(t.pr)}`);
+      states[t.id] = await ciState(d, pr.head.sha);
+    } catch {
+      // GitHub injoignable : pas de pastille pour ce ticket
+    }
+  }
+  await setMeta(env, "ci", JSON.stringify(states));
+}
+
 export async function runTicketsCron(env: Env, now = Date.now()): Promise<void> {
   for (const [name, job] of [
     ["file de validation", () => validateQueue(env, now)],
     ["relances", () => retryTickets(env, now)],
     ["previews", () => findPreviews(env, now)],
+    ["CI des tickets à valider", () => checkCi(env)],
     [
       "release",
       async () =>
@@ -853,6 +878,8 @@ export async function handleTickets(
       return json({
         tickets: await loadAll(env),
         labels: await labelDefs(env),
+        // CI des PR à valider (passage régulier) : { id: "ok" | "wait" | "fail" }
+        ci: JSON.parse((await getMeta(env, "ci")) || "{}") as Record<string, string>,
         config: {
           github: !!env.GITHUB_TICKETS_TOKEN,
           discord: !!env.DISCORD_TICKETS_WEBHOOK_URL,
@@ -901,7 +928,6 @@ export async function handleTickets(
       }
       return json({ ok: true, ticket: await loadTicket(env, id) });
     }
-    // Notifications push de cet appareil (Réglages) : état, abonnement, désabonnement
     // Release develop → main : état (et fusion si la CI est passée), ou lancement
     if (parts[0] === "release") {
       adminOnly();
@@ -913,6 +939,20 @@ export async function handleTickets(
         return json({ release: await startRelease(releaseDeps(env), now) });
       }
     }
+    // Dépendances : PR de Dependabot vers develop, et fusion de l'une d'elles (CI passée)
+    if (parts[0] === "deps") {
+      adminOnly();
+      requireGitHub(env);
+      const d = releaseDeps(env);
+      if (m === "GET") {
+        return json({ deps: await dependencies(d) });
+      }
+      if (m === "POST") {
+        const message = await mergeDependency(d, Number((await body(request)).number) || 0);
+        return json({ message, deps: await dependencies(d) });
+      }
+    }
+    // Notifications push de cet appareil (Réglages) : état, abonnement, désabonnement
     if (parts[0] === "push" && m === "POST") {
       adminOnly();
       const b = await body(request);

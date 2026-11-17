@@ -227,11 +227,15 @@ le site, mais sa propre mise en page (`src/modules/admin/`) et son propre domain
 
 - **Tableau de bord** : la **mise en ligne** (ce qui attend sur `develop`, bouton « Lancer la release » : branche
   `release/<date>` depuis `develop` avec `main` refusionné, PR vers `main` fusionnée par le serveur dès que la CI est
-  passée, notification ; plus besoin d'un ticket pour demander une release : `worker/release.ts`), quelques chiffres
+  passée, notification ; plus besoin d'un ticket pour demander une release : `worker/release.ts` ; la carte montre la
+  prochaine version et les entrées du journal qui partiront ; pastille sur Accueil si une release est bloquée ou attend
+  depuis plus de 3 jours), les **dépendances** (PR de Dependabot vers `develop` avec l'état de leur CI, « Fusionner »
+  quand elle est passée), quelques chiffres
   (comptes, nouveaux comptes, connexions, abonnés aux notifications, bibliothèques, listes), les tickets par colonne et
   l'état des réglages (secrets présents ou non, jamais leur valeur).
 - **Tickets** : le tableau des demandes envoyées à Claude (voir [Tickets (Claude)](#tickets-claude)). Chaque ticket
-  garde son auteur et chaque action qui l'a faite ; filtre « Les miens ».
+  garde son auteur et chaque action qui l'a faite ; filtre « Les miens » ; pastille de CI sur les tickets à valider
+  (relue au passage régulier du serveur).
 - **Outils** : notification de test (vers ses propres appareils seulement), vérification des nouveautés tout de suite
   (le passage de 7 h, avec confirmation), resynchronisation de l'index de recherche, erreur de test Sentry. Les
   anciennes routes à clé de debug (`/api/run-check`…) restent en place.

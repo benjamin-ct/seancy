@@ -19,6 +19,7 @@ import { adminPrefix, isAdminHost } from "../../core/lib/adminHost.ts";
 import Icon, { type IconName } from "../../shared/components/Icon/Icon.tsx";
 import TicketLogo from "../../shared/components/TicketLogo/TicketLogo.tsx";
 import { LoginForm, VerifyAuthPage } from "../auth/index.ts";
+import { releaseState } from "../tickets/api.ts";
 import styles from "./Admin.module.css";
 import { HeaderSlot } from "./headerSlot.ts";
 
@@ -58,6 +59,32 @@ export default function AdminApp() {
     { to: `${prefix}/tickets`, label: "Tickets", short: "Tickets", icon: "list" },
     { to: `${prefix}/outils`, label: "Outils", short: "Outils", icon: "settings" },
   ];
+  // Pastille sur Accueil : release bloquée, ou changements en attente depuis plus de 3 jours
+  const [attention, setAttention] = useState("");
+  useEffect(() => {
+    if (!me?.admin) {
+      return;
+    }
+    const check = () =>
+      releaseState()
+        .then(({ release: r }) =>
+          setAttention(
+            r.pr?.state === "fail"
+              ? "Release bloquée"
+              : !r.pr && r.pending.length && r.since && Date.now() - r.since > 3 * 86_400_000
+                ? "Changements à mettre en ligne"
+                : ""
+          )
+        )
+        .catch(() => setAttention(""));
+    void check();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void check();
+      }
+    }, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [me?.admin]);
   const current =
     sections.find((s) => s.to !== base && pathname.startsWith(s.to))?.label ?? sections[0].label;
 
@@ -194,6 +221,14 @@ export default function AdminApp() {
                 className={({ isActive }) => (isActive ? styles.active : "")}
               >
                 {s.label}
+                {s.end && attention && (
+                  <span
+                    className={styles.dot}
+                    title={attention}
+                    role="img"
+                    aria-label={attention}
+                  />
+                )}
               </NavLink>
             ))}
           </nav>
@@ -231,7 +266,12 @@ export default function AdminApp() {
                 isActive ? `${styles.tab} ${styles.tabActive}` : styles.tab
               }
             >
-              <Icon name={s.icon} size={22} />
+              <span className={styles.tabIcon}>
+                <Icon name={s.icon} size={22} />
+                {s.end && attention && (
+                  <span className={styles.dot} role="img" aria-label={attention} />
+                )}
+              </span>
               <span>{s.short}</span>
             </NavLink>
           ))}

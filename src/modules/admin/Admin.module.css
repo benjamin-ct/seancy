@@ -88,6 +88,27 @@
   margin-left: auto;
   font-size: 14px;
 }
+/* Pastille « à regarder » (onglet Accueil : release bloquée ou en attente) */
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--header-bg);
+  vertical-align: 2px;
+}
+.tabIcon {
+  position: relative;
+  display: inline-grid;
+}
+.tabIcon .dot {
+  position: absolute;
+  top: -2px;
+  right: -6px;
+  margin: 0;
+}
 .who {
   color: var(--muted);
 }
@@ -325,6 +346,61 @@
   color: var(--muted);
   font-size: 14px;
   line-height: 1.5;
+}
+.releaseNext {
+  font-size: 15px;
+}
+.releaseNotes {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.releaseNotes h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.releaseNotes ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.releaseCommits summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+.releaseCommits[open] summary {
+  margin-bottom: 8px;
+}
+/* Dépendances (Dependencies.tsx) */
+.depList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.depList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 14px;
+}
+.depList a {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--fg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .btnIconEnd {
   margin-left: 6px;

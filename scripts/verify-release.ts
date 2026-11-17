@@ -5,14 +5,20 @@
 
 import {
   RELEASE_PREFIX,
+  dependencies,
   finishRelease,
+  mergeDependency,
+  nextVersion,
   openRelease,
   parisStamp,
+  parseFragment,
   releaseState,
   startRelease,
   type ReleaseDeps,
 } from "../worker/release.ts";
 import { TicketError } from "../worker/tickets-logic.ts";
+import { aggregateBump, bumpVersion } from "./changelogRelease.ts";
+import { isChangesetError, parseChangeset } from "./changesetLib.ts";
 
 let passed = 0;
 let failed = 0;
@@ -41,6 +47,7 @@ interface FakePr {
   html_url: string;
   base: { ref: string };
   head: { ref: string; sha: string };
+  user?: { login: string };
 }
 
 /** Faux GitHub : quelques routes de l'API utilisées par la release, appels notés dans `log`. */
@@ -50,6 +57,8 @@ function fakeGitHub(opts: {
   ci?: "success" | "failure" | "in_progress" | "none";
   conflict?: boolean;
   behindBy?: number;
+  /** Fragments du journal ajoutés sur develop : nom → contenu. */
+  fragments?: Record<string, string>;
 }) {
   const log: string[] = [];
   const meta = new Map<string, string>();
@@ -66,13 +75,32 @@ function fakeGitHub(opts: {
     if (m === "GET" && path.includes("/compare/main...develop")) {
       return ok({
         commits: [
-          ...(opts.commits ?? []).map((t) => ({
-            commit: { message: `${t}\n\ndétail` },
+          ...(opts.commits ?? []).map((t, i) => ({
+            commit: {
+              message: `${t}\n\ndétail`,
+              committer: { date: `2026-11-1${i}T10:00:00Z` },
+            },
             parents: [1],
           })),
           { commit: { message: "Merge branch 'main' into release" }, parents: [1, 2] },
         ],
+        files: [
+          ...Object.keys(opts.fragments ?? {}).map((n) => ({
+            filename: `.changeset/${n}`,
+            status: "added",
+          })),
+          { filename: ".changeset/ancien.md", status: "removed" },
+          { filename: "src/a.ts", status: "added" },
+        ],
       });
+    }
+    if (m === "GET" && path.includes("/contents/.changeset/")) {
+      const name = path.split("/contents/.changeset/")[1].split("?")[0];
+      return ok({ content: Buffer.from(opts.fragments?.[name] ?? "").toString("base64") });
+    }
+    if (m === "GET" && /\/pulls\/\d+$/.test(path)) {
+      const n = Number(path.split("/").pop());
+      return ok(prs.find((p) => p.number === n) ?? {});
     }
     if (m === "GET" && path.includes("/compare/main...")) {
       return ok({ behind_by: opts.behindBy ?? 0 });
@@ -81,7 +109,8 @@ function fakeGitHub(opts: {
       return ok({ content: pkg });
     }
     if (m === "GET" && path.includes("/pulls?state=open")) {
-      return ok(prs);
+      const base = /base=(\w+)/.exec(path)?.[1];
+      return ok(prs.filter((p) => !base || p.base.ref === base));
     }
     if (m === "GET" && path.includes("/actions/workflows/ci.yml/runs")) {
       const ci = opts.ci ?? "success";
@@ -288,6 +317,109 @@ const main = async () => {
       prs: [releasePr({ number: 7, head: { ref: "ticket/autre", sha: "x" } })],
     });
     check("PR vers main qui n'est pas une release : ignorée", await openRelease(d), null);
+  }
+
+  // Journal et version à venir : mêmes règles que la compilation de la release (scripts/)
+  {
+    const samples = [
+      "---\nbump: patch\n---\n\nCorrection.\n",
+      "---\nbump: minor\n---\nNouveauté.",
+      "---\nbump: major\n---\nGros changement.",
+      "---\nbump: oups\n---\nTexte",
+      "sans en-tête",
+      "---\nbump: patch\n---\n   \n",
+    ];
+    check(
+      "Fragments : même lecture que scripts/changesetLib.ts",
+      samples.map((c) => parseFragment(c)),
+      samples.map((c) => {
+        const r = parseChangeset("x.md", c);
+        return isChangesetError(r) ? null : { bump: r.bump, summary: r.summary };
+      })
+    );
+    for (const bumps of [["patch"], ["patch", "minor"], ["major", "patch"], []] as const) {
+      const notes = bumps.map((b) => ({ bump: b, summary: "s" }));
+      check(
+        `Version à venir (${bumps.join(", ") || "sans fragment"}) : même calcul que changelogRelease.ts`,
+        nextVersion("1.2.3", notes),
+        bumpVersion("1.2.3", aggregateBump(notes.map((n) => ({ file: "f", ...n }))))
+      );
+    }
+  }
+  {
+    const { d } = fakeGitHub({
+      commits: ["fix: a", "feat: b"],
+      fragments: {
+        "a.md": "---\nbump: patch\n---\nAméliorations internes.",
+        "b.md": "---\nbump: minor\n---\nNouvelle page.",
+        "c.md": "---\nbump: patch\n---\nAméliorations internes.",
+      },
+    });
+    const s = await releaseState(d);
+    check("État : prochaine version d'après les fragments (minor)", s.next, "0.2.0");
+    check("État : entrées du journal sans doublon", s.notes, [
+      { bump: "patch", summary: "Améliorations internes." },
+      { bump: "minor", summary: "Nouvelle page." },
+    ]);
+    check("État : date du plus ancien changement", s.since, Date.parse("2026-11-10T10:00:00Z"));
+  }
+  {
+    const { d } = fakeGitHub({ commits: [] });
+    const s = await releaseState(d);
+    check("État sans changement : ni version à venir ni date", [s.next, s.since], ["", 0]);
+  }
+
+  // Dépendances : PR de Dependabot vers develop
+  const depPr = (n: number, over: Partial<FakePr> = {}): FakePr => ({
+    ...releasePr({
+      number: n,
+      title: `chore(deps): bump x ${n}`,
+      base: { ref: "develop" },
+      head: { ref: `dependabot/npm/x-${n}`, sha: `s${n}` },
+      user: { login: "dependabot[bot]" },
+    }),
+    ...over,
+  });
+  {
+    const { d } = fakeGitHub({
+      prs: [depPr(1), depPr(2, { user: { login: "quelqu-un" } }), releasePr()],
+      ci: "success",
+    });
+    check(
+      "Dépendances : seulement les PR de Dependabot vers develop",
+      (await dependencies(d)).map((p) => [p.number, p.state]),
+      [[1, "ok"]]
+    );
+  }
+  {
+    const { d, log } = fakeGitHub({ prs: [depPr(1)], ci: "success" });
+    const msg = await mergeDependency(d, 1);
+    check(
+      "Dépendance à CI passée : fusionnée en squash",
+      [/fusionnée/.test(msg), log.includes("PUT /repos/o/r/pulls/1/merge")],
+      [true, true]
+    );
+  }
+  {
+    const { d, log } = fakeGitHub({ prs: [depPr(1)], ci: "in_progress" });
+    const msg = await mergeDependency(d, 1);
+    check(
+      "Dépendance à CI en cours : pas fusionnée, message d'attente",
+      [/réessaie/.test(msg), log.includes("PUT /repos/o/r/pulls/1/merge")],
+      [true, false]
+    );
+  }
+  {
+    const { d } = fakeGitHub({ prs: [depPr(1)], ci: "failure" });
+    await refusedAsync("Dépendance à CI en échec : refusée", () => mergeDependency(d, 1), /échec/);
+  }
+  {
+    const { d } = fakeGitHub({ prs: [depPr(2, { user: { login: "quelqu-un" } })] });
+    await refusedAsync(
+      "Fusion refusée pour une PR qui n'est pas de Dependabot",
+      () => mergeDependency(d, 2),
+      /Dependabot/
+    );
   }
 
   console.log(`\n${passed} OK, ${failed} en échec`);
