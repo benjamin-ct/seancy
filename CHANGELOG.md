@@ -2,6 +2,55 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.2.1 — 2026-11-18
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
+## 0.2.0 — 2026-11-18
+
+### Nouveautés
+
+- Sur la fiche d'une série, vous pouvez maintenant noter chaque épisode vu et chaque saison. La note
+  d'une saison devient la moyenne de ses épisodes notés, et celle de la série la moyenne de ses
+  saisons, mises à jour aussitôt et synchronisées entre vos appareils. Une note donnée à la main à une
+  saison ou à la série revient si vous retirez les notes qui la remplacent.
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
+## 0.1.22 — 2026-11-18
+
+### Correctifs
+
+- Quand le navigateur refuse l'activation des notifications push (par exemple Brave, ou un téléphone
+  Android sans services Google), Seancy explique maintenant en clair quoi faire au lieu d'afficher
+  le message d'erreur technique du navigateur.
+
+## 0.1.21 — 2026-11-18
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
+## 0.1.20 — 2026-11-18
+
+### Correctifs
+
+- Correction d'une erreur silencieuse dans le cron de notifications quotidien : un abonnement
+  push expiré n'est plus réutilisé pour les vérifications suivantes de la même exécution une fois
+  supprimé.
+
+## 0.1.19 — 2026-11-18
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
 ## 0.1.18 — 2026-11-18
 
 ### Correctifs
