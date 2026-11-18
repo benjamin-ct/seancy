@@ -2,6 +2,20 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.2.0 — 2026-11-18
+
+### Nouveautés
+
+- Sur la fiche d'une série, vous pouvez maintenant noter chaque épisode vu et chaque saison. La note
+  d'une saison devient la moyenne de ses épisodes notés, et celle de la série la moyenne de ses
+  saisons, mises à jour aussitôt et synchronisées entre vos appareils. Une note donnée à la main à une
+  saison ou à la série revient si vous retirez les notes qui la remplacent.
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
 ## 0.1.22 — 2026-11-18
 
 ### Correctifs
