@@ -114,6 +114,8 @@ jobs:
           npm run verify:vapid
           npm run verify:release
           npm run verify:audit
+          npm run verify:claude-usage
+          npm run verify:quota-alerts
 
       - name: Build
         run: npm run build
