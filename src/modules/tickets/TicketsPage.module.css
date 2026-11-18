@@ -13,6 +13,27 @@
 .pageWide {
   max-width: none;
 }
+/* Ordinateur : le tableau tient dans la hauteur de la fenêtre, seules les
+   colonnes défilent (pas la page entière) */
+@media (min-width: 861px) {
+  .pageWide {
+    display: flex;
+    flex-direction: column;
+    height: max(560px, calc(100dvh - var(--header-height)));
+    padding-bottom: 16px;
+  }
+  .pageWide .board {
+    flex: 1;
+    min-height: 0;
+    grid-auto-rows: minmax(
+      0,
+      1fr
+    ); /* rangée à la hauteur du tableau : max-height des colonnes en % */
+  }
+  .pageWide .col {
+    max-height: 100%;
+  }
+}
 
 .top {
   display: flex;
