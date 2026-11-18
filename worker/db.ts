@@ -1,6 +1,6 @@
 // Petites fonctions d'accès à D1. Pas d'ORM : le schéma est simple (voir
 // migrations/) et les requêtes préparées suffisent largement.
-import { decodeHtmlEntities } from "./validate.ts";
+import { decodeHtmlEntities, toPublicItem } from "./validate.ts";
 import {
   getFollowCounts,
   getFollowedByViewerFollowing,
@@ -388,12 +388,6 @@ export async function isUsernameAvailable(
     .bind(username)
     .first<{ id: number }>();
   return !row || row.id === userId;
-}
-
-// Le détail des épisodes vus n'est pas exposé : la page publique n'affiche
-// que les titres, affiches et notes.
-function toPublicItem({ watchedEpisodes: _watchedEpisodes, ...item }: LibraryItem): LibraryItem {
-  return item;
 }
 
 function byMostRecent(a: LibraryItem, b: LibraryItem): number {
@@ -906,7 +900,7 @@ export async function getPublicListBySlug(
     ratingRows.map((row) => [`${row.media_type}:${row.tmdb_id}`, row.rating])
   );
   const items = itemRows.map((row) => {
-    const { watchedEpisodes: _watchedEpisodes, ...item } = JSON.parse(row.data) as LibraryItem;
+    const item = toPublicItem(JSON.parse(row.data) as LibraryItem);
     if (typeof item.title === "string") {
       item.title = decodeHtmlEntities(item.title);
     }
