@@ -57,7 +57,7 @@
     // client saute la vérification anti-robot sans rien casser. Vide-la
     // avec ta clé depuis google.com/recaptcha/admin (voir README), et
     // ajoute RECAPTCHA_SECRET_KEY en Secret côté dashboard Cloudflare.
-    "RECAPTCHA_SITE_KEY": "6Ldgj4ctAAAAACH345AamgXKs4vXMlF1D1p1HHxz"
+    "RECAPTCHA_SITE_KEY": "6LeKNCcuAAAAAG-aoAslJE1UzqbCPmjuUKCmaLUq"
   },
   "d1_databases": [
     {

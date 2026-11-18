@@ -10,5 +10,6 @@ regexes = [
   '''^d627aa22e73c4390952ff06afcc1f076$''',
   '''^(seancy|bobine)\.[A-Za-z]+(\.[A-Za-z]+)*(\.v\d+)?$''',
   '''^6Ldgj4ctAAAAACH345AamgXKs4vXMlF1D1p1HHxz$''',
+  '''^6LeKNCcuAAAAAG-aoAslJE1UzqbCPmjuUKCmaLUq$''',  # clé du site reCAPTCHA (publique), depuis le 18 nov. 2026
   '''^ta_valeur_de_[A-Za-z_]+$''',
 ]
