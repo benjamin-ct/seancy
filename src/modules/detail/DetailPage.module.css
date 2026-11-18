@@ -536,6 +536,13 @@
   background: currentColor;
 }
 
+/* Série notée par saisons : la note manuelle mise de côté. */
+.yourRatingNote {
+  margin-top: 8px;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
 /* ─── Sous le bloc : 2 colonnes sur desktop ─────────────────────────── */
 .body {
   display: grid;

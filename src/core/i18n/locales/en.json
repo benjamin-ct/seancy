@@ -629,6 +629,8 @@
   "notificationSettings": {
     "unsupported": "Push notifications are not supported by this browser.",
     "permissionDenied": "Permission denied. Allow notifications in your browser settings for this site.",
+    "pushServiceError": "Your browser's notification service refused the registration. Try again in a moment; if the error persists, open Seancy in Chrome (on Android, push notifications require Google services).",
+    "pushServiceErrorBrave": "Brave is blocking push notification registration. Turn on “Use Google services for push messaging” in Brave settings (Privacy and security), then try again. Otherwise, open Seancy in Chrome.",
     "syncFailed": "Sync failed ({{status}})",
     "keyFetchError": "Unable to retrieve the server key.",
     "incompleteSubscription": "Incomplete push subscription.",
@@ -723,7 +725,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "October 19, 2026",
+    "lastUpdatedValue": "November 18, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -736,7 +738,7 @@
       },
       "library": {
         "label": "Personal library",
-        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
+        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", the ratings you give them (for a show, also per season and per episode), your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
       },
       "preferences": {
         "label": "Preferences",
@@ -894,6 +896,9 @@
     "whereToWatchSource": "{{region}} · via JustWatch",
     "yourRatingHeading": "Your rating",
     "rateAfterWatched": "Mark it as watched to rate it",
+    "seriesAverage_one": "Average of {{count}} rated season",
+    "seriesAverage_other": "Average of your {{count}} rated seasons",
+    "manualSeriesKept": "Your {{rating}}/10 show rating comes back if you remove the season and episode ratings.",
     "directing": "Directing",
     "mainCast": "Main cast",
     "showFullCast": "Full cast ({{count}})",
@@ -1025,7 +1030,15 @@
     "watchedUpToHere": "Watched up to here",
     "markSeason": "Mark season {{number}} as watched",
     "unmarkSeason": "Unmark season",
-    "watchDateAriaLabel": "Choose a watch date for season {{number}}"
+    "watchDateAriaLabel": "Choose a watch date for season {{number}}",
+    "seasonRatingHeading": "Your rating · {{name}}",
+    "seasonAverage_one": "Average of {{count}} rated episode",
+    "seasonAverage_other": "Average of {{count}} rated episodes",
+    "manualSeasonKept": "Your {{rating}}/10 season rating comes back if you remove the episode ratings.",
+    "seasonRateHint": "Mark an episode as watched to rate the season",
+    "specialsNotInSeries": "Specials don't count towards the show's rating.",
+    "rateEpisode": "Rate {{episode}}",
+    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit"
   },
   "profileShare": {
     "title": "Public link",
