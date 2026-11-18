@@ -343,7 +343,8 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
    L'import est rejouable : une carte déjà importée est sautée.
 3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Les règles de `trello-ticket-pipeline` sont
    reprises dans le skill `ticket` ; l'ancien skill ne fait plus que prévenir sur Discord qu'un webhook Trello est
-   arrivé. `sentry-triage` crée ses tickets avec `node scripts/tickets.ts add` : ajouter `SEANCY_TICKETS_KEY` (la
+   arrivé. `sentry-triage` crée ses tickets avec `node scripts/tickets.ts add` (et rattache un correctif direct à un
+   ticket « À valider » avec `answer --pr`) : ajouter `SEANCY_TICKETS_KEY` (la
    clé de la page Tickets) au `.env` du NAS (passée au conteneur par `docker-compose-seancy.yml`), puis `seancy-pull` et
    `seancy-rebuild claude`.
 
