@@ -221,7 +221,10 @@ le site, mais sa propre mise en page (`src/modules/admin/`) et son propre domain
   passée, notification ; plus besoin d'un ticket pour demander une release : `worker/release.ts` ; la carte montre la
   prochaine version et les entrées du journal qui partiront ; pastille sur Accueil si une release est bloquée ou attend
   depuis plus de 3 jours), les **dépendances** (PR de Dependabot vers `develop` avec l'état de leur CI, « Fusionner »
-  quand elle est passée), quelques chiffres
+  quand elle est passée), la **consommation de Claude** (relevée à la fin de chaque passage d'un ticket dans le
+  journal de `claude-code-action` : jetons du jour, des 7 et 30 derniers jours, par modèle et par ticket, coût estimé au
+  prix public, et l'état du quota de l'abonnement, fenêtres de 5 h et de la semaine, tel que Claude l'a donné au dernier
+  passage, pas en direct : `worker/claude-usage.ts`, table `claude_usage`, gardée 90 jours), quelques chiffres
   (comptes, nouveaux comptes, connexions, abonnés aux notifications, bibliothèques, listes), les tickets par colonne et
   l'état des réglages (secrets présents ou non, jamais leur valeur).
 - **Tickets** : le tableau des demandes envoyées à Claude (voir [Tickets (Claude)](#tickets-claude)). Chaque ticket
@@ -254,11 +257,18 @@ ne renvoie jamais de lien ni de code de connexion dans la réponse.
    Seancy protège l'espace.
 5. **Quotas Cloudflare** (facultatif) : Cloudflare → My Profile → API Tokens → _Create Custom Token_ avec la seule
    permissions **Account · Account Analytics · Read** et **Account · D1 · Read** (lecture seule) sur le compte de
-   Seancy, puis secret `CF_ANALYTICS_TOKEN` du Worker `seancy`. Le tableau de bord montre alors les quotas gratuits du
-   jour (requêtes des Workers, neurones Workers AI, lignes lues et écrites dans D1, stockage, nombre de bases), le
+   Seancy, puis secret `CF_ANALYTICS_TOKEN` du Worker `seancy`. Le tableau de bord montre alors les volumes du forfait
+   Workers Paid (depuis le 17 nov. 2026) sur la période de facturation en cours, du 17 au 16 (`BILLING_DAY`) : requêtes
+   des Workers, temps de calcul, lignes lues et écrites dans D1, stockage, avec le coût estimé au-delà de l'inclus, et les
+   neurones Workers AI du jour (10 000 gratuits par jour UTC), le
    détail par Worker et par modèle, la liste des bases D1 (nom, tables, taille, activité du jour), les erreurs et
    dépassements de calcul du Worker, et les 7 derniers jours (`worker/cloudflare-usage.ts`, API d'analyse GraphQL, relue au plus toutes
    les 2 minutes).
+   **Alertes de quota** (`worker/quota-alerts.ts`, au passage régulier du serveur, toutes les 10 minutes) : notification
+   aux appareils abonnés aux tickets (et Discord) quand un volume inclus dépasse 80 % ou sera épuisé avant la remise à
+   zéro au rythme actuel, puis quand il est épuisé (facturé au-delà) ; pareil pour les neurones gratuits du jour et pour
+   les fenêtres du quota de l'abonnement Claude (80 % ou alerte de Claude, puis atteint). Une seule fois par seuil et par
+   période ; rappel en tête des cartes « Quotas Cloudflare » et « Claude ».
 6. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
    manque encore.
 

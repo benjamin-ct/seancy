@@ -144,6 +144,16 @@ jobs:
             const lines = [...new Set(den.map((d) => `- ${d.tool_name}: ${String(d.tool_input?.command ?? "").trim().split(/\s+/).slice(0, 2).join(" ")}`))];
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Commandes refusées à Claude (${den.length})\n${lines.join("\n") || "Aucune"}\n`);
             console.log(lines.join("\n") || "Aucune commande refusée");'
+      # Jetons, coût estimé et quota relevés dans le journal de Claude, envoyés au serveur (tableau de bord de
+      # l'espace admin) ; seuls des nombres sont écrits dans le journal public du workflow
+      - name: Consommation de Claude
+        if: always() && steps.claude.outputs.execution_file != '' && steps.t.outputs.id != ''
+        continue-on-error: true
+        env:
+          ID: ${{ steps.t.outputs.id }}
+          EXEC: ${{ steps.claude.outputs.execution_file }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/tickets.ts usage "$ID" --file "$EXEC" --run "$RUN"
       # Pas de journal de Claude joint au lancement : sur ce dépôt public, n'importe qui pourrait le télécharger, et il
       # contient tout ce que Claude a lu (texte du ticket, commentaires Trello, notes). Ne pas activer non plus
       # show_full_output de claude-code-action, pour la même raison.

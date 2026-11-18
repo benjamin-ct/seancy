@@ -12,6 +12,7 @@
 import { getUserFromRequest, type AuthUser } from "./auth.ts";
 import { verifyAccessJwt } from "./access.ts";
 import { cloudflareUsage } from "./cloudflare-usage.ts";
+import { cloudflareAlerts } from "./quota-alerts.ts";
 import * as Sentry from "@sentry/cloudflare";
 import { logError } from "./logger.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
@@ -288,7 +289,11 @@ export async function handleAdmin(
   // Quotas Cloudflare du compte (à part : le tableau de bord s'affiche même si Cloudflare tarde)
   if (sub === "usage" && request.method === "GET") {
     const r = await cloudflareUsage(env);
-    return json(r, "usage" in r || r.missing ? 200 : 502);
+    // Volumes qui approchent de leur fin : rappel en tête de la carte (mêmes alertes que les notifications)
+    return json(
+      "usage" in r ? { ...r, alerts: cloudflareAlerts(r.usage) } : r,
+      "usage" in r || r.missing ? 200 : 502
+    );
   }
   if (request.method === "POST" && sub.startsWith("tools/")) {
     // Échec d'un outil (secret manquant, TMDB injoignable…) : sa raison affichée sur la page

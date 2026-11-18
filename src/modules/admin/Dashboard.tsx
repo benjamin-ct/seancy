@@ -7,6 +7,7 @@ import { adminPrefix } from "../../core/lib/adminHost.ts";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import styles from "./Admin.module.css";
 import Quotas from "./Quotas.tsx";
+import ClaudeUsage from "./ClaudeUsage.tsx";
 import Dependencies from "./Dependencies.tsx";
 import Release from "./Release.tsx";
 
@@ -84,6 +85,8 @@ export default function Dashboard() {
           ))}
         </dl>
       </section>
+
+      <ClaudeUsage />
 
       <Dependencies />
 

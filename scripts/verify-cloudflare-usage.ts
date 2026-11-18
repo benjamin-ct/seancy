@@ -2,7 +2,7 @@
 // (worker/cloudflare-usage.ts) : calcul des chiffres du jour et des 7 jours,
 // erreurs lisibles (secret absent, jeton refusé, Cloudflare injoignable).
 
-import { cloudflareUsage, summarize } from "../worker/cloudflare-usage.ts";
+import { billingPeriod, cloudflareUsage, summarize } from "../worker/cloudflare-usage.ts";
 
 let passed = 0;
 let failed = 0;
@@ -135,6 +135,82 @@ check(
     ],
   ]
 );
+
+// Forfait Workers Paid : période de facturation du 17 au 16, coût au-delà de l'inclus
+check(
+  "Période de facturation : le jour anniversaire, avant et après, mois courts",
+  [
+    billingPeriod("2026-11-17"),
+    billingPeriod("2026-12-03"),
+    billingPeriod("2027-01-16"),
+    billingPeriod("2027-02-10", 31),
+  ],
+  [
+    { from: "2026-11-17", renews: "2026-12-17" },
+    { from: "2026-11-17", renews: "2026-12-17" },
+    { from: "2026-12-17", renews: "2027-01-17" },
+    { from: "2027-01-31", renews: "2027-02-28" },
+  ]
+);
+check(
+  "Mois en cours le jour de l'abonnement : seulement ce jour",
+  [u.month.from, u.month.requests, u.month.rowsRead, u.month.rowsWritten, u.month.cost.total],
+  ["2026-11-17", 544, 1005, 11, 0]
+);
+{
+  const big = summarize(
+    {
+      w: [
+        {
+          sum: { requests: 12_000_000, errors: 0, cpuTimeUs: 40_000_000_000 },
+          dimensions: { date: "2026-11-20", scriptName: "seancy", status: "success" },
+        },
+        {
+          sum: { requests: 1_000_000, errors: 0, cpuTimeUs: 0 },
+          dimensions: { date: "2026-11-16", scriptName: "seancy", status: "success" },
+        },
+      ],
+      ai: [
+        {
+          count: 1,
+          sum: { totalNeurons: 12_000 },
+          dimensions: { date: "2026-11-20", modelId: "@cf/m" },
+        },
+        {
+          count: 1,
+          sum: { totalNeurons: 9_000 },
+          dimensions: { date: "2026-11-21", modelId: "@cf/m" },
+        },
+      ],
+      d1: [
+        {
+          sum: { rowsRead: 1_000_000, rowsWritten: 52_000_000 },
+          dimensions: { date: "2026-11-21", databaseId: "a" },
+        },
+      ],
+      st: [{ max: { databaseSizeBytes: 6 * 1024 ** 3 }, dimensions: { databaseId: "a" } }],
+    },
+    "2026-12-01"
+  );
+  check(
+    "Au-delà de l'inclus : coût estimé par poste (période commencée le 17, jour d'avant ignoré)",
+    [big.month.requests, big.month.cpuMs, big.month.neuronsBilled, big.month.cost],
+    [
+      12_000_000,
+      40_000_000,
+      2_000,
+      {
+        requests: 0.6,
+        cpuMs: 0.2,
+        rowsRead: 0,
+        rowsWritten: 2,
+        storage: 0.75,
+        neurons: 0.02,
+        total: 3.57,
+      },
+    ]
+  );
+}
 
 const main = async () => {
   const env = {};
