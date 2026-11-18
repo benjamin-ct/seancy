@@ -1106,7 +1106,7 @@ export default function TicketsPage() {
 
   return (
     <LabelsContext.Provider value={labelsInfo}>
-      <div className={styles.page}>
+      <div className={`${styles.page} ${styles.pageWide}`}>
         <HeaderActions>
           <button
             type="button"
