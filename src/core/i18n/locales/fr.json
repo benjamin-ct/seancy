@@ -629,6 +629,8 @@
   "notificationSettings": {
     "unsupported": "Les notifications push ne sont pas supportées par ce navigateur.",
     "permissionDenied": "Permission refusée. Autorisez les notifications dans les réglages du navigateur pour ce site.",
+    "pushServiceError": "Le service de notifications de votre navigateur a refusé l'inscription. Réessayez dans un moment ; si l'erreur revient, ouvrez Seancy dans Chrome (sur Android, les notifications push ont besoin des services Google).",
+    "pushServiceErrorBrave": "Brave bloque l'inscription aux notifications push. Activez « Utiliser les services Google pour la messagerie push » dans les paramètres de Brave (Confidentialité et sécurité), puis réessayez. Sinon, ouvrez Seancy dans Chrome.",
     "syncFailed": "Synchronisation échouée ({{status}})",
     "keyFetchError": "Impossible de récupérer la clé du serveur.",
     "incompleteSubscription": "Abonnement push incomplet.",

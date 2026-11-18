@@ -629,6 +629,8 @@
   "notificationSettings": {
     "unsupported": "Push notifications are not supported by this browser.",
     "permissionDenied": "Permission denied. Allow notifications in your browser settings for this site.",
+    "pushServiceError": "Your browser's notification service refused the registration. Try again in a moment; if the error persists, open Seancy in Chrome (on Android, push notifications require Google services).",
+    "pushServiceErrorBrave": "Brave is blocking push notification registration. Turn on “Use Google services for push messaging” in Brave settings (Privacy and security), then try again. Otherwise, open Seancy in Chrome.",
     "syncFailed": "Sync failed ({{status}})",
     "keyFetchError": "Unable to retrieve the server key.",
     "incompleteSubscription": "Incomplete push subscription.",
