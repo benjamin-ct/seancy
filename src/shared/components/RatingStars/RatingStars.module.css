@@ -7,18 +7,23 @@
 }
 
 .stars {
-  display: inline-flex;
+  /* Dix colonnes de 44px au plus, qui rétrécissent sur un mobile étroit au
+     lieu de passer à la ligne : les dix étoiles tiennent toujours sur une
+     seule ligne (sur un iPhone, environ 30px chacune, collées les unes aux
+     autres, donc sans zone morte entre deux cibles). */
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 44px));
   align-items: center;
-  flex-wrap: wrap;
-  /* Dix cibles de 44px continueraient hors écran sur un mobile étroit sans
-     ce retour à la ligne (audit F8). */
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .star {
-  /* Zone tactile 44px (audit F8) : la cible visuelle (icône, 22px) reste
-     inchangée, le hitbox cliquable grandit autour d'elle. */
-  width: 44px;
+  /* Zone tactile 44px de haut (audit F8), et de large dès que la place le
+     permet : la cible visuelle (icône, 22px) reste inchangée, le hitbox
+     cliquable grandit autour d'elle. */
+  width: 100%;
   height: 44px;
   display: grid;
   place-items: center;

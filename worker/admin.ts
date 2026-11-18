@@ -26,6 +26,7 @@ import {
   REDIRECTED_TO_PRODUCTION_HOSTNAMES,
   isProductionHostname,
 } from "./sentry.ts";
+import { INTERNAL_HOSTNAME } from "./admin-split.ts";
 import type { Env } from "./types.ts";
 
 const json = (data: unknown, status = 200) =>
@@ -102,6 +103,68 @@ async function count(env: Env, sql: string, ...args: unknown[]): Promise<number>
   }
 }
 
+type ConfigGroup = { group: string; items: { name: string; ok: boolean; help: string }[] };
+
+/** Réglages du site (présents ou non, jamais une valeur) : secrets du Worker du site. */
+export function siteConfig(env: Env): ConfigGroup {
+  const has = (v: unknown) => !!v;
+  return {
+    group: "Site",
+    items: [
+      { name: "TMDB", ok: has(env.TMDB_API_KEY), help: "secret TMDB_API_KEY" },
+      {
+        name: "Notifications push",
+        ok: !vapidProblem(env),
+        help: vapidProblem(env) ?? "clés VAPID au bon format",
+      },
+      { name: "E-mails (Resend)", ok: has(env.RESEND_API_KEY), help: "secret RESEND_API_KEY" },
+      { name: "Sentry", ok: has(env.SENTRY_DSN), help: "secret SENTRY_DSN" },
+      {
+        name: "reCAPTCHA",
+        ok: has(env.RECAPTCHA_SECRET_KEY),
+        help: "secret RECAPTCHA_SECRET_KEY",
+      },
+      {
+        name: "Connexion Google",
+        ok: has(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+        help: "secrets GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET",
+      },
+      {
+        name: "Connexion Apple",
+        ok: has(
+          env.APPLE_CLIENT_ID && env.APPLE_TEAM_ID && env.APPLE_KEY_ID && env.APPLE_PRIVATE_KEY
+        ),
+        help: "secrets APPLE_*",
+      },
+      { name: "Suggestions IA", ok: has(env.AI), help: "binding Workers AI" },
+    ],
+  };
+}
+
+/**
+ * Réglages du site vus depuis le Worker admin (worker/admin-split.ts) : les secrets du site restent sur
+ * le Worker du site, qui dit seulement lesquels sont présents.
+ */
+async function siteGroup(env: Env): Promise<ConfigGroup> {
+  if (!env.ADMIN_WORKER || !env.SITE) {
+    return siteConfig(env);
+  }
+  try {
+    const r = await env.SITE.fetch(`https://${INTERNAL_HOSTNAME}/api/internal/site-config`);
+    if (r.ok) {
+      return (await r.json()) as ConfigGroup;
+    }
+  } catch {
+    // Worker du site injoignable : signalé ci-dessous
+  }
+  return {
+    group: "Site",
+    items: [
+      { name: "Réglages du site", ok: false, help: "Worker du site injoignable depuis l'admin" },
+    ],
+  };
+}
+
 async function overview(env: Env, request: Request) {
   const day = 24 * 3600 * 1000;
   const now = Date.now();
@@ -174,37 +237,7 @@ async function overview(env: Env, request: Request) {
           },
         ],
       },
-      {
-        group: "Site",
-        items: [
-          { name: "TMDB", ok: has(env.TMDB_API_KEY), help: "secret TMDB_API_KEY" },
-          {
-            name: "Notifications push",
-            ok: !vapidProblem(env),
-            help: vapidProblem(env) ?? "clés VAPID au bon format",
-          },
-          { name: "E-mails (Resend)", ok: has(env.RESEND_API_KEY), help: "secret RESEND_API_KEY" },
-          { name: "Sentry", ok: has(env.SENTRY_DSN), help: "secret SENTRY_DSN" },
-          {
-            name: "reCAPTCHA",
-            ok: has(env.RECAPTCHA_SECRET_KEY),
-            help: "secret RECAPTCHA_SECRET_KEY",
-          },
-          {
-            name: "Connexion Google",
-            ok: has(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
-            help: "secrets GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET",
-          },
-          {
-            name: "Connexion Apple",
-            ok: has(
-              env.APPLE_CLIENT_ID && env.APPLE_TEAM_ID && env.APPLE_KEY_ID && env.APPLE_PRIVATE_KEY
-            ),
-            help: "secrets APPLE_*",
-          },
-          { name: "Suggestions IA", ok: has(env.AI), help: "binding Workers AI" },
-        ],
-      },
+      await siteGroup(env),
     ],
   };
 }

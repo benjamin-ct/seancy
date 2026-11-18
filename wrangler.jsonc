@@ -71,6 +71,9 @@
   // gratuit pour démarrer : ~10 000 neurones/jour partagés par tout le compte,
   // remis à zéro à 00:00 UTC ; au-delà, repli sur l'algo non-IA.
   "ai": { "binding": "AI" },
+  // Espace admin sur son propre Worker (wrangler.admin.jsonc, worker/admin-split.ts) : l'API de l'admin
+  // et des tickets reçue sur les adresses de production lui est renvoyée
+  "services": [{ "binding": "ADMIN", "service": "seancy-admin" }],
   // Binding natif « Rate Limiting » de Workers (audit F4) : compteur partagé
   // entre isolats/colos, sans écriture D1 — contrairement à
   // `checkRateLimitInMemory` (worker/rate-limit-memory.ts), qui compte par

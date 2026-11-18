@@ -57,8 +57,9 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
-import { handleTickets } from "./tickets.ts";
-import { accessGate, handleAdmin, isAdminHostname } from "./admin.ts";
+import { handleTickets, pushAdmins } from "./tickets.ts";
+import { accessGate, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
+import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
   buildTasteProfile,
@@ -2912,9 +2913,48 @@ async function handleTmdbProxy(
   return response;
 }
 
+/**
+ * Appels internes du Worker admin (service binding, voir worker/admin-split.ts) : ce qui demande un
+ * secret du site, gardé par ce Worker seul (clé privée des notifications, état des réglages du site).
+ */
+async function internalApi(request: Request, env: Env): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (pathname === "/api/internal/push-admins" && request.method === "POST") {
+    const b = (await request.json().catch(() => ({}))) as {
+      text?: string;
+      id?: string;
+      tag?: string;
+    };
+    await pushAdmins(env, String(b.text ?? ""), String(b.id ?? ""), b.tag || undefined);
+    return json({ ok: true });
+  }
+  if (pathname === "/api/internal/site-config" && request.method === "GET") {
+    return json(siteConfig(env));
+  }
+  return json({ error: "Introuvable" }, 404);
+}
+
 export default withSentry({
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    // Espace admin sur son propre Worker (voir worker/admin-split.ts)
+    if (env.ADMIN_WORKER && env.SITE) {
+      const route = adminWorkerRoute(url.pathname);
+      if (route === "site") {
+        return env.SITE.fetch(request);
+      }
+      if (route === "assets") {
+        return env.ASSETS.fetch(request);
+      }
+    } else {
+      // Worker du site : appels internes du Worker admin, et API de l'admin et des tickets qui lui revient
+      if (url.hostname === INTERNAL_HOSTNAME) {
+        return internalApi(request, env);
+      }
+      if (env.ADMIN && forwardToAdmin(url.hostname, url.pathname)) {
+        return env.ADMIN.fetch(request);
+      }
+    }
     // Exception : l'API des tickets appelée avec la clé des sessions Claude
     // (workflows GitHub, import Trello) passe par l'adresse workers.dev, hors
     // de la zone seancy.com, dont le Bot Fight Mode (forfait gratuit, sans

@@ -21,6 +21,7 @@
   "include": [
     "worker",
     "src/core/types/library.ts",
+    "src/core/lib/seriesRatings.ts",
     "src/core/types/tmdb.ts",
     "src/core/types/social.ts",
     "src/core/api/movieMeta.ts",

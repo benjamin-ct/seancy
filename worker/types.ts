@@ -3,6 +3,12 @@
 export interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  // Espace admin sur son propre Worker (voir worker/admin-split.ts) : sur le
+  // Worker du site, ADMIN mène au Worker `seancy-admin` ; sur celui-ci,
+  // ADMIN_WORKER vaut « 1 » et SITE mène au Worker du site.
+  ADMIN?: Fetcher;
+  SITE?: Fetcher;
+  ADMIN_WORKER?: string;
   // Binding natif Rate Limiting (audit F4, voir wrangler.jsonc) : slugs
   // publics (profil, abonnés, avatar partagé, liste) et upload d'avatar.
   // Optionnel : absent sur les previews de PR (limitation Cloudflare, voir

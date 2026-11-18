@@ -9,6 +9,10 @@
   margin: 0 auto;
   padding: 24px var(--gutter) 60px;
 }
+/* Tableau : toute la largeur de l'écran, les colonnes se partagent la place */
+.pageWide {
+  max-width: none;
+}
 
 .top {
   display: flex;

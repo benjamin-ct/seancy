@@ -12,6 +12,7 @@
 // ticket attend en file, avancée par runTicketsCron (voir « Passages » plus bas).
 // Notifications sur Discord (secret DISCORD_TICKETS_WEBHOOK_URL, facultatif).
 import { adminName, adminOf } from "./admin.ts";
+import { INTERNAL_HOSTNAME } from "./admin-split.ts";
 import { hashToken } from "./auth.ts";
 import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./claude-usage.ts";
 import { cloudflareUsage } from "./cloudflare-usage.ts";
@@ -325,12 +326,21 @@ function gh(env: Env): Gh {
 // Lien d'une notification : la fiche du ticket, ou le tableau de bord (release, sans ticket)
 const pathOf = (id: string) => (id ? `/tickets/${id}` : "/");
 
-async function pushAdmins(
+export async function pushAdmins(
   env: Env,
   text: string,
   id: string,
   tag = id ? `ticket-${id}` : "release"
 ): Promise<void> {
+  // Worker admin (worker/admin-split.ts) : la clé privée des notifications reste sur le Worker du site
+  if (env.ADMIN_WORKER && env.SITE) {
+    await env.SITE.fetch(`https://${INTERNAL_HOSTNAME}/api/internal/push-admins`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, id, tag }),
+    });
+    return;
+  }
   const { results } = await env.DB.prepare("SELECT endpoint, p256dh, auth FROM ticket_push").all<{
     endpoint: string;
     p256dh: string;

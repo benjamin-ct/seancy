@@ -4,6 +4,8 @@
 // silencieusement supprimée (whitelist), tout item structurellement invalide
 // est écarté plutôt que de faire échouer toute la requête.
 
+import { cleanRating } from "../src/core/lib/seriesRatings.ts";
+import type { LibraryItem } from "../src/core/types/library.ts";
 import { isMediaType } from "../src/core/validation/mediaType.ts";
 
 const MAX_STRING_LENGTH = 300;
@@ -13,6 +15,7 @@ const MAX_ITEMS_PER_LIST = 5000; // large marge au-dessus d'un usage réel, évi
 // une large marge sans permettre un payload disproportionné.
 const MAX_WATCHED_EPISODES = 5000;
 const EPISODE_KEY_PATTERN = /^\d{1,4}-\d{1,4}$/;
+const SEASON_KEY_PATTERN = /^\d{1,4}$/;
 // Réalisateur·rices/créateur·rices d'un titre (voir Stats, "réalisateurs
 // récurrents") — un film a rarement plus de 2-3 co-réalisateurs, une série
 // peut avoir plusieurs créateurs ; 10 laisse une large marge.
@@ -50,6 +53,9 @@ export interface CleanLibraryItem {
   rating?: number;
   runtimeMinutes?: number;
   watchedEpisodes: string[];
+  manualRating?: number | null;
+  seasonRatings?: Record<string, number>;
+  episodeRatings?: Record<string, number>;
   directors: CleanDirector[];
 }
 
@@ -111,6 +117,28 @@ function cleanDirector(raw: unknown): CleanDirector | null {
   return { id, name };
 }
 
+// Notes de saison ({ "1": 8 }) ou d'épisode ({ "1-5": 7 }) d'une série : clés au
+// bon format, notes entières de 1 à 10, au plus MAX_WATCHED_EPISODES entrées.
+// `undefined` si rien de valide (champ absent de l'item stocké).
+function cleanRatingMap(raw: unknown, keyPattern: RegExp): Record<string, number> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const out: Record<string, number> = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(raw)) {
+    const rating = cleanRating(value);
+    if (rating === null || !keyPattern.test(key)) {
+      continue;
+    }
+    out[key] = rating;
+    if (++count >= MAX_WATCHED_EPISODES) {
+      break;
+    }
+  }
+  return count ? out : undefined;
+}
+
 // Renvoie l'item nettoyé (sous-ensemble whitelisté, types coercés/validés),
 // ou null si l'item n'est pas exploitable (id/mediaType manquants ou
 // invalides — le reste a des valeurs de repli raisonnables).
@@ -162,6 +190,12 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
         ),
       ].slice(0, MAX_WATCHED_EPISODES)
     : [];
+  // Notes de série (voir src/core/lib/seriesRatings.ts) : `manualRating` garde
+  // `null` (série jamais notée à la main) pour ne pas retomber sur `rating`,
+  // qui est alors une moyenne de saisons.
+  const manualRating = r.manualRating === null ? null : (cleanRating(r.manualRating) ?? undefined);
+  const seasonRatings = cleanRatingMap(r.seasonRatings, SEASON_KEY_PATTERN);
+  const episodeRatings = cleanRatingMap(r.episodeRatings, EPISODE_KEY_PATTERN);
   // Rempli progressivement par le backfill de Stats (voir setDirectors dans
   // LibraryContext) — absent tant que l'item n'a pas encore été "revu".
   const directors = Array.isArray(r.directors)
@@ -184,8 +218,24 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
     rating,
     runtimeMinutes,
     watchedEpisodes,
+    manualRating,
+    seasonRatings,
+    episodeRatings,
     directors,
   };
+}
+
+// Le détail des épisodes vus et des notes d'épisode/saison n'est pas exposé
+// (profil et listes partagés, fil des abonnements) : seuls les titres, affiches
+// et la note de chaque titre (`rating`) le sont.
+export function toPublicItem({
+  watchedEpisodes: _watchedEpisodes,
+  manualRating: _manualRating,
+  seasonRatings: _seasonRatings,
+  episodeRatings: _episodeRatings,
+  ...item
+}: LibraryItem): LibraryItem {
+  return item;
 }
 
 // `watched`/`watchlist` : { "movie:123": {...}, "tv:456": {...} }. Renvoie

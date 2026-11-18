@@ -29,6 +29,8 @@
     "src/core/api/retryAfter.ts",
     "src/core/api/globalProviders.ts",
     "src/core/types/tmdb.ts",
+    "src/core/types/library.ts",
+    "src/core/lib/seriesRatings.ts",
     "src/core/validation/mediaType.ts",
     "src/shared/lib/numericRangeFilter.ts",
     "src/core/botDetection.ts",
@@ -45,6 +47,8 @@
     "worker/release.ts",
     "worker/claude-usage.ts",
     "worker/quota-alerts.ts",
+    "worker/admin-split.ts",
+    "worker/hostnames.ts",
     "worker/access.ts",
     "worker/cloudflare-usage.ts",
     "worker/vapid.ts"

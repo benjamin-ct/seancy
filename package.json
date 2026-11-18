@@ -43,6 +43,8 @@
     "verify:audit": "node scripts/verify-audit.ts",
     "verify:claude-usage": "node scripts/verify-claude-usage.ts",
     "verify:quota-alerts": "node scripts/verify-quota-alerts.ts",
+    "verify:admin-split": "node scripts/verify-admin-split.ts",
+    "verify:series-ratings": "node scripts/verify-series-ratings.ts",
     "vapid:generate": "node scripts/generate-vapid.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
