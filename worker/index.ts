@@ -3059,7 +3059,9 @@ async function routeRequest(
   // anti-robot (le serveur, lui, saute aussi la vérification côté
   // verifyRecaptcha tant que RECAPTCHA_SECRET_KEY n'est pas configurée).
   if (url.pathname === "/api/recaptcha-site-key" && request.method === "GET") {
-    return cachedStaticJson(request, ctx, { siteKey: env.RECAPTCHA_SITE_KEY || null });
+    // Sans cache (ni ici, ni dans le navigateur) : après un changement de clé,
+    // une ancienne clé gardée en cache empêche toute connexion (jeton refusé).
+    return json({ siteKey: env.RECAPTCHA_SITE_KEY || null }, 200, { "cache-control": "no-store" });
   }
 
   // DSN Sentry pour l'init côté client (voir src/core/logger.ts) : servi
