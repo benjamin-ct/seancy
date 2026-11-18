@@ -22,7 +22,7 @@ let scriptLoadPromise: Promise<void> | null = null;
 
 function fetchSiteKey(): Promise<string | null> {
   if (!siteKeyPromise) {
-    siteKeyPromise = fetch("/api/recaptcha-site-key")
+    siteKeyPromise = fetch("/api/recaptcha-site-key", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : { siteKey: null }))
       .then((data: { siteKey?: string | null }) => data.siteKey || null)
       .catch(() => null);
