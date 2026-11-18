@@ -110,6 +110,10 @@ export default function ClaudeUsage() {
                       </div>
                     )}
                     <small>
+                      {/* Claude ne donne le pourcentage qu'à l'approche de la limite */}
+                      {pct === null && l.status === "allowed"
+                        ? "sous le seuil d'alerte (Claude ne donne le pourcentage qu'à l'approche de la limite) · "
+                        : ""}
                       {l.resetsAt ? `remis à zéro ${when(l.resetsAt)} · ` : ""}relevé {ago(l.at)}
                     </small>
                   </div>
