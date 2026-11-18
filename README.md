@@ -158,6 +158,15 @@ En parallèle, le job `apply-d1-migrations` de la CI GitHub Actions (`.github/wo
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`                                | optionnel          | Bouton « Continuer avec Google », voir « Connexion avec Google / Apple » ci-dessus                                                                                                                                                                                                                 |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | optionnel          | Bouton « Continuer avec Apple », idem                                                                                                                                                                                                                                                              |
 
+### Régénérer la paire VAPID
+
+À faire seulement si la clé privée d'origine est perdue. Conséquence : toutes les souscriptions push existantes deviennent invalides, les utilisateurs devront réactiver les notifications (une fois).
+
+1. Sur ta machine : `npm run vapid:generate` (la clé privée n'est affichée que dans ton terminal).
+2. Remplace `VAPID_PUBLIC_KEY` dans `wrangler.jsonc` par la nouvelle clé publique (non sensible, à commiter) et déploie.
+3. Dans le dashboard Cloudflare (Worker `seancy` → Settings → Variables and Secrets), remplace le secret `VAPID_PRIVATE_KEY` par la nouvelle clé privée (43 caractères, sans espace ni retour à la ligne). Fais l'étape 2 et celle-ci dans la foulée : les deux clés vont ensemble.
+4. Envoie une notification de test (`/api/test-notification`, voir `DEBUG_TRIGGER_KEY`) après avoir réactivé les notifications sur ton propre compte.
+
 Pour tester la configuration localement sans rien déployer : `npm run build && npx wrangler deploy --dry-run`.
 
 Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.dev.vars` (jamais commité), puis

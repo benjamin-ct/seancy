@@ -34,6 +34,7 @@ const usage = (m: Partial<Usage["month"]>, rest: Partial<Usage> = {}) =>
       cpuMs: 0,
       rowsRead: 0,
       rowsWritten: 0,
+      perDay: { requests: 0, cpuMs: 0, rowsRead: 0, rowsWritten: 0 },
       ...m,
     },
   }) as Usage;
@@ -48,16 +49,29 @@ check(
   ["cf:D1 · lignes écrites:2026-11-17:warn"]
 );
 {
-  const pace = cloudflareAlerts(usage({ requests: 4_000_000 }), NOW);
+  // 4 M utilisées, 400 000 par jour ces 3 derniers jours : épuisé 15 jours plus tard, avant le 17 déc.
+  const pace = cloudflareAlerts(
+    usage({
+      requests: 4_000_000,
+      perDay: { requests: 400_000, cpuMs: 0, rowsRead: 0, rowsWritten: 0 },
+    }),
+    NOW
+  );
   check(
-    "40 % en un tiers du mois : épuisé avant la remise à zéro, date estimée",
+    "Au rythme des derniers jours : épuisé avant la remise à zéro, date estimée",
     [keys(pace), /épuisé vers le 12 déc\./.test(pace[0]?.text ?? "")],
     [["cf:Requêtes des Workers:2026-11-17:warn"], true]
   );
 }
 check(
-  "Moins de 3 jours écoulés : pas de projection sur un pic",
-  cloudflareAlerts(usage({ requests: 4_000_000 }), Date.parse("2026-11-18T12:00:00Z")),
+  "Gros pic passé puis rythme normal : pas d'alerte (robot bloqué)",
+  cloudflareAlerts(
+    usage({
+      requests: 2_000_000,
+      perDay: { requests: 3_000, cpuMs: 0, rowsRead: 0, rowsWritten: 0 },
+    }),
+    NOW
+  ),
   []
 );
 check(
