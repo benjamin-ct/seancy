@@ -36,16 +36,15 @@ const CLAUDE_NAMES: Record<string, string> = {
 /** Volumes Cloudflare du forfait (période de facturation en cours, neurones du jour). */
 export function cloudflareAlerts(u: Usage, now = Date.now()): QuotaAlert[] {
   const m = u.month;
-  const start = Date.parse(`${m.from}T00:00:00Z`);
   const end = Date.parse(`${m.renews}T00:00:00Z`);
-  const elapsed = Math.max(0, Math.min(1, (now - start) / (end - start)));
   const out: QuotaAlert[] = [];
-  for (const [name, used, included] of [
-    ["Requêtes des Workers", m.requests, PAID.requests.included],
-    ["Temps de calcul", m.cpuMs, PAID.cpuMs.included],
-    ["D1 · lignes lues", m.rowsRead, PAID.rowsRead.included],
-    ["D1 · lignes écrites", m.rowsWritten, PAID.rowsWritten.included],
-    ["D1 · stockage", u.storage, PAID.storage.included],
+  for (const [name, used, included, rate] of [
+    ["Requêtes des Workers", m.requests, PAID.requests.included, m.perDay?.requests ?? 0],
+    ["Temps de calcul", m.cpuMs, PAID.cpuMs.included, m.perDay?.cpuMs ?? 0],
+    ["D1 · lignes lues", m.rowsRead, PAID.rowsRead.included, m.perDay?.rowsRead ?? 0],
+    ["D1 · lignes écrites", m.rowsWritten, PAID.rowsWritten.included, m.perDay?.rowsWritten ?? 0],
+    // Stockage : ne se consomme pas au fil du mois, pas de projection
+    ["D1 · stockage", u.storage, PAID.storage.included, 0],
   ] as const) {
     const share = used / included;
     const key = `cf:${name}:${m.from}`;
@@ -57,19 +56,17 @@ export function cloudflareAlerts(u: Usage, now = Date.now()): QuotaAlert[] {
       });
       continue;
     }
-    // Au rythme de la période (au moins 3 jours écoulés pour ne pas extrapoler un seul pic), sauf le stockage
-    // qui ne se consomme pas au fil du mois
-    const pace =
-      name !== "D1 · stockage" && now - start >= 3 * DAY && elapsed > 0 ? share / elapsed : 0;
-    if (share >= 0.8 || pace >= 1) {
-      const out_at = pace >= 1 ? start + (end - start) * (elapsed / share) : 0;
+    // Au rythme des 3 derniers jours complets (la moyenne de la période garderait un pic passé, comme le robot
+    // bloqué le 18 nov.) : épuisé avant la remise à zéro ?
+    const outAt = rate > 0 ? now + ((included - used) / rate) * DAY : 0;
+    if (share >= 0.8 || (outAt && outAt < end)) {
       out.push({
         key: `${key}:warn`,
         level: "warn",
         text:
           share >= 0.8
             ? `Cloudflare : ${name} à ${pct(share)} de l'inclus, remise à zéro le ${dateFr(end)}`
-            : `Cloudflare : ${name} à ${pct(share)} de l'inclus, épuisé vers le ${dateFr(out_at)} au rythme actuel (remise à zéro le ${dateFr(end)})`,
+            : `Cloudflare : ${name} à ${pct(share)} de l'inclus, épuisé vers le ${dateFr(outAt)} au rythme des derniers jours (remise à zéro le ${dateFr(end)})`,
       });
     }
   }

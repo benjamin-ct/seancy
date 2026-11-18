@@ -81,6 +81,8 @@ export interface Month {
   rowsWritten: number;
   /** Neurones au-delà des 10 000 gratuits de chaque jour. */
   neuronsBilled: number;
+  /** Rythme actuel : moyenne par jour des 3 derniers jours complets de la période (alertes de projection). */
+  perDay: { requests: number; cpuMs: number; rowsRead: number; rowsWritten: number };
   cost: {
     requests: number;
     cpuMs: number;
@@ -184,12 +186,23 @@ export function summarize(
   const dbWritten = new Map<string, number>();
   const { from, renews } = billingPeriod(day);
   const month = { requests: 0, cpuUs: 0, rowsRead: 0, rowsWritten: 0 };
+  // 3 derniers jours complets de la période (le jour en cours n'est pas fini)
+  const last3 = [1, 2, 3]
+    .map((n) =>
+      new Date(Date.parse(`${day}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10)
+    )
+    .filter((d) => d >= from);
+  const recent = { requests: 0, cpuUs: 0, rowsRead: 0, rowsWritten: 0 };
   for (const r of raw.w ?? []) {
     const { date, scriptName, status } = r.dimensions;
     at(date).requests += r.sum.requests;
     if (date >= from) {
       month.requests += r.sum.requests;
       month.cpuUs += r.sum.cpuTimeUs;
+    }
+    if (last3.includes(date)) {
+      recent.requests += r.sum.requests;
+      recent.cpuUs += r.sum.cpuTimeUs;
     }
     if (scriptName === worker) {
       at(date).errors += r.sum.errors;
@@ -219,6 +232,10 @@ export function summarize(
     if (r.dimensions.date >= from) {
       month.rowsRead += r.sum.rowsRead;
       month.rowsWritten += r.sum.rowsWritten;
+    }
+    if (last3.includes(r.dimensions.date)) {
+      recent.rowsRead += r.sum.rowsRead;
+      recent.rowsWritten += r.sum.rowsWritten;
     }
     if (r.dimensions.date === day) {
       rowsRead += r.sum.rowsRead;
@@ -279,6 +296,12 @@ export function summarize(
       rowsRead: month.rowsRead,
       rowsWritten: month.rowsWritten,
       neuronsBilled,
+      perDay: {
+        requests: last3.length ? Math.round(recent.requests / last3.length) : 0,
+        cpuMs: last3.length ? Math.round(recent.cpuUs / 1000 / last3.length) : 0,
+        rowsRead: last3.length ? Math.round(recent.rowsRead / last3.length) : 0,
+        rowsWritten: last3.length ? Math.round(recent.rowsWritten / last3.length) : 0,
+      },
       cost: {
         requests: cents(cost.requests),
         cpuMs: cents(cost.cpuMs),

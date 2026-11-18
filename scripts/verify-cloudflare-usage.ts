@@ -153,6 +153,15 @@ check(
   ]
 );
 check(
+  "Rythme : 3 derniers jours complets de la période, sans le jour en cours",
+  [
+    u.month.perDay.requests,
+    summarize(raw, "2026-11-20").month.perDay.requests,
+    summarize(raw, "2026-11-20").month.perDay.rowsWritten,
+  ],
+  [0, 181, 4]
+);
+check(
   "Mois en cours le jour de l'abonnement : seulement ce jour",
   [u.month.from, u.month.requests, u.month.rowsRead, u.month.rowsWritten, u.month.cost.total],
   ["2026-11-17", 544, 1005, 11, 0]
