@@ -71,8 +71,8 @@ numéros de migrations D1, limite de sessions Claude) et accepter plusieurs PR e
 En plus de `/trello-webhook`, le listener expose `POST /sentry-webhook?secret=<SENTRY_WEBHOOK_SECRET>` :
 une alerte Sentry déclenche une notification Discord immédiate, puis (si le pipeline n'est pas déjà
 occupé) un `claude -p` dans `seancy-repo` qui suit le skill `sentry-triage` (lecture du détail de
-l'issue via l'API Sentry, correctif direct en PR ou création d'une carte Trello "A faire" selon le
-cas). Voir `.claude/skills/sentry-triage/SKILL.md` à la racine du repo pour le détail du
+l'issue via l'API Sentry, correctif direct en PR rattachée à un ticket « À valider » de la page Tickets,
+ou ticket « À faire » quand une décision humaine est nécessaire). Voir `.claude/skills/sentry-triage/SKILL.md` à la racine du repo pour le détail du
 comportement de Claude une fois déclenché.
 
 La notification Discord immédiate (`🚨 Nouvelle alerte Sentry : ...`, envoyée dès réception du
