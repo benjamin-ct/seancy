@@ -557,6 +557,7 @@ export default function EpisodeTracker({
                                 rateEpisode(item, seasonNumber, ep.episode_number, rating)
                               }
                               clearable
+                              hideValue
                             />
                           </div>
                         )}
