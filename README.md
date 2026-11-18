@@ -222,8 +222,26 @@ Tant que les branches `feature/*` ciblent encore `main` (le pipeline Trello → 
 
 ## Espace admin (admin.seancy.com)
 
-Tout ce qui est réservé aux administrateurs est regroupé sur **`admin.seancy.com`** : même Worker et même base que
-le site, mais sa propre mise en page (`src/modules/admin/`) et son propre domaine, jamais indexé.
+Tout ce qui est réservé aux administrateurs est regroupé sur **`admin.seancy.com`** : même base que le site, sa propre
+mise en page (`src/modules/admin/`) et son propre domaine, jamais indexé.
+
+**Worker à part, mis en ligne à chaque fusion dans `develop`** (`wrangler.admin.jsonc`, job `deploy-admin` de la CI,
+`worker/admin-split.ts`) : les retouches de l'admin n'attendent plus une release du site. Même code que le site, le
+Worker `seancy-admin` sert `admin.seancy.com` et traite lui-même l'API de l'admin et celle des tickets ; tout le reste
+(connexion, outils qui lancent les traitements du site, clé publique des notifications) est renvoyé au Worker du site
+par service binding, qui garde les secrets du site. Ce qui demande un secret du site passe par une adresse interne
+(`seancy.internal`, jamais joignable d'Internet) : notifications aux administrateurs, état des réglages du site. Le site,
+lui, renvoie au Worker admin l'API de l'admin et des tickets reçue sur ses adresses de production : le NAS, les
+workflows et les scripts gardent leurs adresses. Les previews de PR et `develop` gardent leur propre admin, sur leur
+base. **Migrations** : appliquées à la base de production dès la fusion dans `develop` (job `deploy-admin`) ; une
+migration ne fait donc qu'ajouter (tables, colonnes, index), jamais supprimer ni renommer ce que la version en ligne
+du site utilise encore.
+
+Mise en place (une fois) : après la première fusion, le Worker `seancy-admin` existe ; lui donner ses secrets
+(Cloudflare → Workers et Pages → `seancy-admin` → Paramètres → Variables et secrets) : `ACCESS_AUD`,
+`ACCESS_TEAM_DOMAIN`, `ADMIN_EMAILS`, `CF_ANALYTICS_TOKEN`, `GITHUB_TICKETS_TOKEN`, et si besoin
+`DISCORD_TICKETS_WEBHOOK_URL`, `SENTRY_DSN` ; puis la release suivante du site active le renvoi de l'API ; enfin,
+déplacer le domaine personnalisé `admin.seancy.com` du Worker `seancy` au Worker `seancy-admin`.
 
 - **Tableau de bord** : la **mise en ligne** (ce qui attend sur `develop`, bouton « Lancer la release » : branche
   `release/<date>` depuis `develop` avec `main` refusionné, PR vers `main` fusionnée par le serveur dès que la CI est
