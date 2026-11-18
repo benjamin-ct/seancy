@@ -135,7 +135,7 @@ async function syncSubscriptionLocale(endpoint: string, locale: string): Promise
 // Clé publique VAPID actuelle du serveur. Elle peut changer (rotation des
 // clés) : les abonnements créés avec l'ancienne deviennent alors inutilisables.
 async function fetchVapidPublicKey(): Promise<Uint8Array> {
-  const keyRes = await fetch("/api/vapid-public-key");
+  const keyRes = await fetch("/api/vapid-public-key", { cache: "no-store" });
   if (!keyRes.ok) {
     throw new Error(i18n.t("notificationSettings.keyFetchError"));
   }

@@ -38,7 +38,7 @@
   },
   "vars": {
     "ADMIN_WORKER": "1",
-    "VAPID_PUBLIC_KEY": "BDqiaLNi0uMdi-hi74JI8hALtzeks3ZiuTIBomUVGm9mtg8CeQEUeXUUr-X6J7NJFvF8li7ovMBQE3Hu1_sa3D8",
+    "VAPID_PUBLIC_KEY": "BNo5rVb2lpqnSDxkL-_YRx_EUeTSf1u3yIRJRzvbgzz0Vp5r3eINGoCANuFGouD-PGctWp3TXKt_3jbtrV_OjhQ",
     "VAPID_SUBJECT": "mailto:creusatbenjamin@gmail.com"
   },
   "d1_databases": [
