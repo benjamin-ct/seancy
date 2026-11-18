@@ -2,6 +2,26 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.1.21 — 2026-11-18
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
+## 0.1.20 — 2026-11-18
+
+### Correctifs
+
+- Correction d'une erreur silencieuse dans le cron de notifications quotidien : un abonnement
+  push expiré n'est plus réutilisé pour les vérifications suivantes de la même exécution une fois
+  supprimé.
+
+## 0.1.19 — 2026-11-18
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
 ## 0.1.18 — 2026-11-18
 
 ### Correctifs
