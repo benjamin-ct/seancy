@@ -146,6 +146,15 @@ export async function finishRelease(
   return { ...base, state: "merged", why: "Fusionnée dans main : mise en ligne en cours" };
 }
 
+/** Fichier dont seul le champ `version` change (package.json, package-lock.json). */
+export function versionOnly(f: { filename: string; patch?: string }): boolean {
+  if (!/^(package|package-lock)\.json$/.test(f.filename) || !f.patch) {
+    return false;
+  }
+  const lines = f.patch.split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+  return lines.length > 0 && lines.every((l) => /^[+-]\s*"version": "[^"]*",?$/.test(l));
+}
+
 export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
   const [cmp, pkg, pr] = await Promise.all([
     d.gh<{
@@ -153,7 +162,7 @@ export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
         commit: { message: string; committer?: { date?: string } };
         parents: unknown[];
       }[];
-      files?: { filename: string; status: string }[];
+      files?: { filename: string; status: string; patch?: string }[];
     }>(`/repos/${d.repo}/compare/main...develop`),
     d
       .gh<{ content?: string }>(`/repos/${d.repo}/contents/package.json?ref=main`)
@@ -168,7 +177,10 @@ export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
   } catch {
     // package.json illisible : version non montrée
   }
-  const own = (cmp.commits ?? []).filter((c) => c.parents.length < 2);
+  // Rien à publier quand develop ne diffère de main que par le numéro de version (resynchronisation de main
+  // dans develop : la version n'est gérée que sur main, develop garde la sienne)
+  const real = (cmp.files ?? []).some((f) => !versionOnly(f));
+  const own = real ? (cmp.commits ?? []).filter((c) => c.parents.length < 2) : [];
   // Fragments du journal ajoutés sur develop depuis la dernière release
   const fragments = (cmp.files ?? [])
     .filter(

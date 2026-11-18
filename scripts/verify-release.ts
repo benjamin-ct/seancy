@@ -4,6 +4,7 @@
 // verify-tickets.ts.
 
 import {
+  versionOnly,
   RELEASE_PREFIX,
   dependencies,
   finishRelease,
@@ -59,6 +60,8 @@ function fakeGitHub(opts: {
   behindBy?: number;
   /** Fragments du journal ajoutés sur develop : nom → contenu. */
   fragments?: Record<string, string>;
+  /** develop ne diffère de main que par le numéro de version (resynchronisation). */
+  versionOnly?: boolean;
 }) {
   const log: string[] = [];
   const meta = new Map<string, string>();
@@ -84,14 +87,29 @@ function fakeGitHub(opts: {
           })),
           { commit: { message: "Merge branch 'main' into release" }, parents: [1, 2] },
         ],
-        files: [
-          ...Object.keys(opts.fragments ?? {}).map((n) => ({
-            filename: `.changeset/${n}`,
-            status: "added",
-          })),
-          { filename: ".changeset/ancien.md", status: "removed" },
-          { filename: "src/a.ts", status: "added" },
-        ],
+        files: opts.versionOnly
+          ? [
+              {
+                filename: "package.json",
+                status: "modified",
+                patch:
+                  '@@ -1,4 +1,4 @@\n {\n   "name": "seancy",\n-  "version": "0.1.18",\n+  "version": "0.1.0",',
+              },
+              {
+                filename: "package-lock.json",
+                status: "modified",
+                patch:
+                  '@@ -3 +3 @@\n-  "version": "0.1.18",\n+  "version": "0.1.0",\n@@ -9 +9 @@\n-      "version": "0.1.18",\n+      "version": "0.1.0",',
+              },
+            ]
+          : [
+              ...Object.keys(opts.fragments ?? {}).map((n) => ({
+                filename: `.changeset/${n}`,
+                status: "added",
+              })),
+              { filename: ".changeset/ancien.md", status: "removed" },
+              { filename: "src/a.ts", status: "added" },
+            ],
       });
     }
     if (m === "GET" && path.includes("/contents/.changeset/")) {
@@ -368,6 +386,27 @@ const main = async () => {
     const s = await releaseState(d);
     check("État sans changement : ni version à venir ni date", [s.next, s.since], ["", 0]);
   }
+  {
+    // main ramené dans develop : seul le commit qui garde la version de develop diffère
+    const { d } = fakeGitHub({
+      commits: ["chore: version de develop gardée lors de la resynchronisation avec main"],
+      versionOnly: true,
+    });
+    const s = await releaseState(d);
+    check(
+      "Seul le numéro de version diffère : rien à publier",
+      [s.pending, s.next, s.since],
+      [[], "", 0]
+    );
+  }
+  check(
+    "Version seule : une autre ligne changée dans package.json compte",
+    versionOnly({
+      filename: "package.json",
+      patch: '-  "version": "0.1.18",\n+  "version": "0.1.0",\n+    "x": "1",',
+    }),
+    false
+  );
 
   // Dépendances : PR de Dependabot vers develop
   const depPr = (n: number, over: Partial<FakePr> = {}): FakePr => ({
