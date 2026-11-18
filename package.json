@@ -2,7 +2,7 @@
   "name": "seancy",
   "private": true,
   "license": "UNLICENSED",
-  "version": "0.1.0",
+  "version": "0.1.18",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -43,6 +43,7 @@
     "verify:audit": "node scripts/verify-audit.ts",
     "verify:claude-usage": "node scripts/verify-claude-usage.ts",
     "verify:quota-alerts": "node scripts/verify-quota-alerts.ts",
+    "vapid:generate": "node scripts/generate-vapid.ts",
     "check:bundle-size": "node scripts/check-bundle-size.ts",
     "check:changeset": "node scripts/check-changeset.ts",
     "check:version-untouched": "node scripts/check-version-untouched.ts",
