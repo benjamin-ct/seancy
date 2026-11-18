@@ -1,6 +1,6 @@
 ---
 name: sentry-triage
-description: Traite une alerte Sentry reçue par le webhook de infra/trello-claude/listener/server.js (endpoint /sentry-webhook). Récupère le détail complet de l'issue via l'API Sentry, évalue sa sévérité et sa pertinence, puis décide d'ignorer, de corriger directement (PR), ou de créer un ticket « À faire » sur la page Tickets si une décision humaine est nécessaire. Utilise ce skill dès qu'un prompt fournit un payload brut de webhook Sentry à traiter — jamais pour un ticket de la page Tickets (voir le skill ticket pour ça).
+description: Traite une alerte Sentry reçue par le webhook de infra/trello-claude/listener/server.js (endpoint /sentry-webhook). Récupère le détail complet de l'issue via l'API Sentry, évalue sa sévérité et sa pertinence, puis décide d'ignorer, de corriger directement (PR), ou de créer un ticket « À faire » sur la page Tickets si une décision humaine est nécessaire (un correctif direct est aussi rattaché à un ticket « À valider »). Utilise ce skill dès qu'un prompt fournit un payload brut de webhook Sentry à traiter — jamais pour un ticket de la page Tickets (voir le skill ticket pour ça).
 ---
 
 # Triage automatique des alertes Sentry
@@ -54,9 +54,17 @@ terminer.
    - **4a. Corriger directement** : suivre le flux de développement du skill `ticket`
      (étapes 2 à 4 : branche, contrôles, changelog, PR en brouillon, CI, revues) — créer une branche
      nommée clairement (`fix/<description-courte>`, base `develop`), corriger, committer, ouvrir une
-     PR en brouillon avec un lien vers l'issue Sentry en description. Pas de ticket dans ce cas (la
-     PR suffit ; un humain la review normalement via GitHub). Commenter sur l'issue Sentry (`POST
-.../issues/{issue_id}/comments/`) avec un lien vers la PR ouverte.
+     PR en brouillon avec un lien vers l'issue Sentry en description. Puis **rattacher la PR à un
+     ticket « À valider »** de la page Tickets, pour qu'elle y soit validée comme les autres (bouton
+     « Valider », file de fusion testée après `develop`) au lieu de rester seulement sur GitHub :
+     `node scripts/tickets.ts add --status todo --labels "Bug,Sentry" --title "…" --detail "…"`
+     (même titre et même description qu'en 4b, en disant que le correctif est déjà fait), puis, avec
+     l'identifiant affiché (`Ticket ajouté : <id>`),
+     `node scripts/tickets.ts answer <id> --pr <adresse de la PR> --text "…"` : compte rendu court en
+     français simple (une phrase de résumé, « Ce qui a changé : », « Pour vérifier : »), qui passe le
+     ticket « À valider ». Clé `SEANCY_TICKETS_KEY` de l'environnement, jamais affichée ; sans elle,
+     garder la PR seule et le dire dans le résumé Discord. Commenter sur l'issue Sentry (`POST
+.../issues/{issue_id}/comments/`) avec un lien vers la PR ouverte et l'identifiant du ticket.
    - **4b. Créer un ticket** sur la page Tickets, dans « À faire » :
      `node scripts/tickets.ts add --status todo --labels "Bug,Sentry" --title "…" --detail "…"`
      (clé `SEANCY_TICKETS_KEY` de l'environnement, jamais affichée), avec un titre clair et une
@@ -68,7 +76,7 @@ terminer.
    - Dans les deux cas 4a/4b, ne jamais résoudre (`status: resolved`) l'issue Sentry tant que le
      correctif n'est pas mergé — un simple commentaire de suivi suffit à ce stade.
 5. **Notifier Discord** (obligatoire, avant de terminer) : résumé de l'alerte traitée (titre,
-   lien Sentry), sévérité estimée, action prise (ignorée / PR ouverte avec lien / ticket créé avec son
+   lien Sentry), sévérité estimée, action prise (ignorée / PR ouverte avec lien et ticket à valider / ticket créé avec son
    identifiant), par l'API REST Discord (`DISCORD_TOKEN` / `DISCORD_CHANNEL_ID`), en vérifiant que
    la requête a réussi.
 
