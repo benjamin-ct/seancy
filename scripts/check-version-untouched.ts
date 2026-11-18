@@ -83,7 +83,16 @@ const isSameRepo =
   process.env.HEAD_REPO === process.env.BASE_REPO;
 const isReleasePr = isSameRepo && process.env.HEAD_REF === "develop" && baseRef === "origin/main";
 
+// Seule autre exception : develop aligné sur la version de main (après avoir ramené main dans develop). Une
+// version que develop garderait différente de main ferait refuser par ce garde-fou chaque release lancée depuis une
+// branche release/… (tableau de bord), qui n'hérite plus de la version de main en fusionnant main.
+const isMainSync = baseRef === "origin/develop" && headVersion === versionAt("origin/main");
+
 if (baseVersion !== headVersion) {
+  if (isMainSync) {
+    console.log(`develop aligné sur la version de main (${headVersion}) : autorisé.`);
+    process.exit(0);
+  }
   if (isReleasePr && compareSemver(headVersion, baseVersion) === -1) {
     console.log(
       `Release develop → main : develop (${headVersion}) en retard sur main (${baseVersion}), ` +
