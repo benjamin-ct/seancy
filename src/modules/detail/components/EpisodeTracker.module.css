@@ -312,6 +312,7 @@
 
 .epRating > div {
   margin-block: 0 4px;
+  row-gap: 4px;
 }
 
 /* Bloc « Votre note · Saison 2 » au-dessus de la liste des épisodes. */
