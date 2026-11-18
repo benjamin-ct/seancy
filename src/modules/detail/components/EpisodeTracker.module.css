@@ -157,8 +157,10 @@
   gap: 4px;
 }
 
+/* `flex-wrap` : place la ligne d'étoiles d'un épisode (.epRating) dessous. */
 .episode {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   min-height: 56px;
@@ -267,6 +269,91 @@
 .upToHere:hover {
   color: var(--fg);
   background: var(--surface-2);
+}
+
+/* Note d'un épisode : pastille « ★ 8 » (ou étoile vide) qui ouvre les
+   étoiles sous la ligne de l'épisode. */
+.epRateBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.epRateBtn:hover,
+.epRateBtn[aria-expanded="true"] {
+  color: var(--fg);
+  background: var(--surface-2);
+}
+
+.epRateBtnOn {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* Étoiles d'un épisode : nouvelle ligne sous l'épisode, alignée sur son titre. */
+.epRating {
+  flex-basis: 100%;
+  padding-left: 96px;
+}
+
+.epRating > div {
+  margin-block: 0 4px;
+}
+
+/* Bloc « Votre note · Saison 2 » au-dessus de la liste des épisodes. */
+.seasonRating {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.seasonRating > div {
+  margin-block: 6px 0;
+}
+
+.seasonRatingHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.seasonRatingHead :global(.eyebrow) {
+  color: var(--muted);
+}
+
+.seasonRatingValue {
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.seasonRatingDash {
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+}
+
+.seasonRatingNote {
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: 12.5px;
 }
 
 .seasonActions {
@@ -398,6 +485,9 @@
   .episode {
     gap: 10px;
     padding-inline: 4px;
+  }
+  .epRating {
+    padding-left: 0;
   }
 
   .seasonActions {

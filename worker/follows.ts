@@ -7,7 +7,7 @@
 // - un abonné au profil privé reste compté et listé chez la personne qu'il
 //   suit, mais anonymisé (ni nom ni lien) : il n'a rien choisi de rendre
 //   public.
-import { decodeHtmlEntities } from "./validate.ts";
+import { decodeHtmlEntities, toPublicItem } from "./validate.ts";
 import type { EpisodeRef, LibraryItem } from "../src/core/types/library.ts";
 import type {
   FeedEntry,
@@ -231,7 +231,7 @@ export async function getFeed(db: D1Database, userId: number): Promise<FeedEntry
       updated_at: number;
     }>();
   return results.map((row) => {
-    const { watchedEpisodes: _watchedEpisodes, ...item } = JSON.parse(row.data) as LibraryItem;
+    const item = toPublicItem(JSON.parse(row.data) as LibraryItem);
     // Un titre "vu" daté dans le passé (voir LibraryContext, toggleWatched) doit
     // apparaître comme tel dans le fil — pas comme "à l'instant" sous prétexte
     // que c'est maintenant qu'il a été coché (cf. ticket "ne pas spammer mes

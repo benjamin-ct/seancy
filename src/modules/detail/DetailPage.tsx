@@ -42,6 +42,7 @@ import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx"
 import { useMembersOnly } from "../../core/context/MembersOnlyContext.tsx";
 import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
 import { STAR_LABEL_KEYS } from "../../shared/lib/ratingTier.ts";
+import { formatRating, seriesRating, wholeRating } from "../../core/lib/seriesRatings.ts";
 import { pop } from "../../shared/lib/motion.ts";
 import { getMediaPreview, type MediaPreview } from "../../shared/lib/mediaPreviewCache.ts";
 import { toMediaItem } from "../../shared/lib/mediaItem.ts";
@@ -158,6 +159,7 @@ export default function DetailPage() {
     markSeriesWatched,
     getRating,
     rateWatched,
+    getShowEntry,
     customLists,
     isInList,
     addToList,
@@ -402,7 +404,19 @@ export default function DetailPage() {
 
   const listCount = customLists.filter((list) => isInList(list.id, mediaType, id)).length;
 
-  const rating = watched ? getRating(mediaType, id) : null;
+  // Série : note effective = moyenne des saisons notées (voir
+  // core/lib/seriesRatings.ts), affichée même pendant le visionnage ; sans
+  // saison notée, note donnée à la main comme pour un film.
+  const showEntry = mediaType === "tv" ? getShowEntry(mediaType, id) : null;
+  const seriesSummary = showEntry ? seriesRating(showEntry) : null;
+  const seriesAverage =
+    seriesSummary && seriesSummary.ratedSeasons > 0 ? seriesSummary.value : null;
+  const rating =
+    seriesAverage != null
+      ? wholeRating(seriesAverage)
+      : watched
+        ? (seriesSummary?.manual ?? getRating(mediaType, id))
+        : null;
 
   // La note est portée par l'entrée « vu » de la bibliothèque : seul un titre
   // déjà vu peut être noté (les étoiles sont inactives sinon).
@@ -858,8 +872,15 @@ export default function DetailPage() {
                 <span className="eyebrow">{t("detailPage.yourRatingHeading")}</span>
                 {rating != null ? (
                   <>
-                    <b className={styles.yourRatingValue}>{rating}/10</b>
-                    <span>{t(STAR_LABEL_KEYS[rating - 1])}</span>
+                    <b className={styles.yourRatingValue}>
+                      {seriesAverage != null ? formatRating(seriesAverage, localeTag) : rating}
+                      /10
+                    </b>
+                    <span>
+                      {seriesSummary && seriesAverage != null
+                        ? t("detailPage.seriesAverage", { count: seriesSummary.ratedSeasons })
+                        : t(STAR_LABEL_KEYS[rating - 1])}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -870,7 +891,15 @@ export default function DetailPage() {
                   </>
                 )}
               </p>
-              <RatingStars value={rating} onRate={rate} clearable hideValue disabled={!watched} />
+              {seriesSummary && seriesAverage != null ? (
+                seriesSummary.manual != null && (
+                  <p className={styles.yourRatingNote}>
+                    {t("detailPage.manualSeriesKept", { rating: seriesSummary.manual })}
+                  </p>
+                )
+              ) : (
+                <RatingStars value={rating} onRate={rate} clearable hideValue disabled={!watched} />
+              )}
             </div>
           </div>
         </div>

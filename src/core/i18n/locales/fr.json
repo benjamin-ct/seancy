@@ -723,7 +723,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "19 octobre 2026",
+    "lastUpdatedValue": "18 novembre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -736,7 +736,7 @@
       },
       "library": {
         "label": "Bibliothèque personnelle",
-        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour toi ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
+        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », les notes que vous leur donnez (pour une série, aussi par saison et par épisode), vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour toi ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
       },
       "preferences": {
         "label": "Préférences",
@@ -894,6 +894,9 @@
     "whereToWatchSource": "{{region}} · via JustWatch",
     "yourRatingHeading": "Votre note",
     "rateAfterWatched": "Marquez-le comme vu pour le noter",
+    "seriesAverage_one": "Moyenne de {{count}} saison notée",
+    "seriesAverage_other": "Moyenne de vos {{count}} saisons notées",
+    "manualSeriesKept": "Votre note de {{rating}}/10 pour la série reviendra si vous retirez les notes de saisons et d'épisodes.",
     "directing": "Réalisation",
     "mainCast": "Casting principal",
     "showFullCast": "Tout le casting ({{count}})",
@@ -1025,7 +1028,15 @@
     "watchedUpToHere": "Vu jusqu'ici",
     "markSeason": "Marquer la saison {{number}} comme vue",
     "unmarkSeason": "Retirer la saison",
-    "watchDateAriaLabel": "Choisir une date de visionnage pour la saison {{number}}"
+    "watchDateAriaLabel": "Choisir une date de visionnage pour la saison {{number}}",
+    "seasonRatingHeading": "Votre note · {{name}}",
+    "seasonAverage_one": "Moyenne de {{count}} épisode noté",
+    "seasonAverage_other": "Moyenne de {{count}} épisodes notés",
+    "manualSeasonKept": "Votre note de {{rating}}/10 pour la saison reviendra si vous retirez les notes d'épisodes.",
+    "seasonRateHint": "Cochez un épisode vu pour noter la saison",
+    "specialsNotInSeries": "Les épisodes spéciaux ne comptent pas dans la note de la série.",
+    "rateEpisode": "Noter {{episode}}",
+    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier"
   },
   "profileShare": {
     "title": "Lien public",

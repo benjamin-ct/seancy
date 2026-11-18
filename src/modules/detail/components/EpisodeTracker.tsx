@@ -7,8 +7,10 @@ import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { useMembersOnly } from "../../../core/context/MembersOnlyContext.tsx";
 import type { EpisodeRef, LibraryItemInput } from "../../../core/types/library.ts";
 import type { Episode, EpisodeAirInfo, Season } from "../../../core/types/tmdb.ts";
-import { Icon } from "../../../shared/components/index.ts";
+import { formatRating, seasonRating } from "../../../core/lib/seriesRatings.ts";
+import { Icon, RatingStars } from "../../../shared/components/index.ts";
 import { pop } from "../../../shared/lib/motion.ts";
+import { STAR_LABEL_KEYS } from "../../../shared/lib/ratingTier.ts";
 import {
   airedEpisodesUpTo,
   isAired,
@@ -61,7 +63,14 @@ export default function EpisodeTracker({
   nextEpisodeToAir,
 }: EpisodeTrackerProps) {
   const { t } = useTranslation();
-  const { getWatchedEpisodes, toggleEpisodeWatched, setEpisodesWatched } = useLibrary();
+  const {
+    getWatchedEpisodes,
+    toggleEpisodeWatched,
+    setEpisodesWatched,
+    getShowEntry,
+    rateEpisode,
+    rateSeason,
+  } = useLibrary();
   const { requireMember } = useMembersOnly();
   const { locale } = useLocale();
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
@@ -69,12 +78,18 @@ export default function EpisodeTracker({
   // n'a pas à faire défiler 190 épisodes pour atteindre la suite de la fiche).
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set());
   const tabsRef = useRef<HTMLDivElement>(null);
+  // Épisode dont les étoiles sont ouvertes (clé "saison-épisode") : une seule
+  // ligne de notation à la fois, pour garder la liste lisible sur mobile.
+  const [ratingOpen, setRatingOpen] = useState<string | null>(null);
   const today = todayIso();
 
   const main = mainSeasons(seasons);
   const specials = seasons.find((s) => s.season_number === 0 && s.episode_count > 0);
   const tabs = specials ? [...main, specials] : main;
   const watchedKeys = getWatchedEpisodes(item.mediaType, item.id);
+  const showEntry = getShowEntry(item.mediaType, item.id);
+  const episodeRatings = showEntry?.episodeRatings ?? {};
+  const localeTag = dateLocaleTag(locale);
   const watchedMain = [...watchedKeys].map(parseKey).filter((ref) => ref.seasonNumber > 0);
   const totalEpisodes = main.reduce((sum, s) => sum + s.episode_count, 0);
   const lastWatched = watchedMain.reduce<EpisodeRef | null>(
@@ -219,6 +234,54 @@ export default function EpisodeTracker({
     shownAired.every((ep) => isWatched(shown.season_number, ep.episode_number));
   const note = next.kind === "upToDate" ? upcomingNote() : null;
   const shownCollapsed = shown != null && collapsed.has(shown.season_number);
+
+  // « Votre note · Saison 2 » : moyenne des épisodes notés (non modifiable ici),
+  // sinon étoiles pour noter la saison à la main dès qu'un épisode est vu.
+  function seasonRatingBlock(season: Season, name: string) {
+    const summary = showEntry
+      ? seasonRating(showEntry, season.season_number)
+      : { value: null, ratedEpisodes: 0, manual: null };
+    const canRate = watchedInSeason(season.season_number) > 0 || summary.manual != null;
+    const value = summary.value;
+    return (
+      <div className={styles.seasonRating}>
+        <p className={styles.seasonRatingHead}>
+          <span className="eyebrow">{t("episodeTracker.seasonRatingHeading", { name })}</span>
+          {value != null ? (
+            <b className={styles.seasonRatingValue}>{formatRating(value, localeTag)}/10</b>
+          ) : (
+            <span className={styles.seasonRatingDash} aria-hidden="true" />
+          )}
+          <span>
+            {summary.ratedEpisodes > 0
+              ? t("episodeTracker.seasonAverage", { count: summary.ratedEpisodes })
+              : summary.manual != null
+                ? t(STAR_LABEL_KEYS[summary.manual - 1])
+                : canRate
+                  ? t("ratingStars.notRatedYet")
+                  : t("episodeTracker.seasonRateHint")}
+          </span>
+        </p>
+        {summary.ratedEpisodes > 0
+          ? summary.manual != null && (
+              <p className={styles.seasonRatingNote}>
+                {t("episodeTracker.manualSeasonKept", { rating: summary.manual })}
+              </p>
+            )
+          : canRate && (
+              <RatingStars
+                value={summary.manual}
+                onRate={(rating) => rateSeason(item, season.season_number, rating)}
+                clearable
+                hideValue
+              />
+            )}
+        {season.season_number === 0 && value != null && (
+          <p className={styles.seasonRatingNote}>{t("episodeTracker.specialsNotInSeries")}</p>
+        )}
+      </div>
+    );
+  }
 
   function toggleCollapsed(seasonNumber: number, fromBottom = false) {
     setCollapsed((prev) => {
@@ -371,6 +434,12 @@ export default function EpisodeTracker({
                 </span>
                 {collapseButton(shown.season_number)}
               </div>
+              {seasonRatingBlock(
+                shown,
+                shown.season_number === 0
+                  ? shown.name || t("episodeTracker.specials")
+                  : t("episodeTracker.seasonNumber", { number: shown.season_number })
+              )}
               {!shownCollapsed && (
                 <ul className={styles.episodeList}>
                   {shownEpisodes.map((ep) => {
@@ -399,6 +468,12 @@ export default function EpisodeTracker({
                       season: seasonNumber,
                       episode: ep.episode_number,
                     });
+                    const epKey = `${seasonNumber}-${ep.episode_number}`;
+                    const epRating = episodeRatings[epKey] ?? null;
+                    // Un épisode se note une fois vu (comme un film) ; une note
+                    // déjà donnée reste visible et modifiable s'il est décoché.
+                    const canRate = watched || epRating != null;
+                    const ratingIsOpen = canRate && ratingOpen === epKey;
                     return (
                       <li
                         key={ep.id ?? ep.episode_number}
@@ -446,6 +521,25 @@ export default function EpisodeTracker({
                               : t("episodeTracker.airsOn", { date })}
                           </span>
                         </span>
+                        {canRate && (
+                          <button
+                            type="button"
+                            className={`${styles.epRateBtn} ${epRating != null ? styles.epRateBtnOn : ""}`}
+                            aria-expanded={ratingIsOpen}
+                            aria-label={
+                              epRating != null
+                                ? t("episodeTracker.episodeRatingLabel", {
+                                    episode: epLabel,
+                                    rating: epRating,
+                                  })
+                                : t("episodeTracker.rateEpisode", { episode: epLabel })
+                            }
+                            onClick={() => setRatingOpen(ratingIsOpen ? null : epKey)}
+                          >
+                            <Icon name="star" size={15} filled={epRating != null} />
+                            {epRating ?? null}
+                          </button>
+                        )}
                         {!watched && !isNext && aired && seasonNumber > 0 && (
                           <button
                             type="button"
@@ -454,6 +548,17 @@ export default function EpisodeTracker({
                           >
                             {t("episodeTracker.watchedUpToHere")}
                           </button>
+                        )}
+                        {ratingIsOpen && (
+                          <div className={styles.epRating}>
+                            <RatingStars
+                              value={epRating}
+                              onRate={(rating) =>
+                                rateEpisode(item, seasonNumber, ep.episode_number, rating)
+                              }
+                              clearable
+                            />
+                          </div>
                         )}
                       </li>
                     );
