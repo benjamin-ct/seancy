@@ -98,6 +98,7 @@ interface SourceConfig {
   vars?: Record<string, unknown>;
   d1_databases?: D1Binding[];
   exports?: Record<string, { type: string }>;
+  services?: unknown[];
   ratelimits?: RateLimit[];
   [key: string]: unknown;
 }
@@ -200,7 +201,9 @@ function writeGeneratedConfig(configPath: string, dbName: string, uuid: string):
   // secrets de preview (ex. clé VAPID publique de prod + clé privée de
   // preview = push cassé) et mêlant le trafic des previews aux statistiques
   // de prod.
-  const { exports: workerExports, vars: _prodVars, ...rest } = rawConfig;
+  // "services" (lien vers le Worker admin de production, voir worker/admin-split.ts) : jamais sur une
+  // preview, qui garde son propre espace admin sur sa base de preview.
+  const { exports: workerExports, vars: _prodVars, services: _adminService, ...rest } = rawConfig;
   const durableObjectClasses = Object.entries(workerExports ?? {})
     .filter(([, entry]) => entry.type === "durable-object")
     .map(([className]) => className);
@@ -256,12 +259,14 @@ function writeDevelopConfig(dbName: string, uuid: string): void {
     );
   }
   const targetDatabase = { ...prodDatabase, database_name: dbName, database_id: uuid };
+  // Sans "services" : develop garde son propre espace admin (voir writeGeneratedConfig ci-dessus)
+  const { services: _adminService, ...developBase } = rawConfig;
   const generatedConfig = {
-    ...rawConfig,
+    ...developBase,
     name: DEVELOP_WORKER_NAME,
     d1_databases: [targetDatabase],
-    vars: { ...rawConfig.vars, CLOUDFLARE_ANALYTICS_TOKEN: "" },
-    ratelimits: rawConfig.ratelimits?.map((rateLimit) => ({
+    vars: { ...developBase.vars, CLOUDFLARE_ANALYTICS_TOKEN: "" },
+    ratelimits: developBase.ratelimits?.map((rateLimit) => ({
       ...rateLimit,
       namespace_id: String(Number(rateLimit.namespace_id) + DEVELOP_RATE_LIMIT_NAMESPACE_OFFSET),
     })),

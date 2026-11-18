@@ -47,6 +47,8 @@
     "worker/release.ts",
     "worker/claude-usage.ts",
     "worker/quota-alerts.ts",
+    "worker/admin-split.ts",
+    "worker/hostnames.ts",
     "worker/access.ts",
     "worker/cloudflare-usage.ts",
     "worker/vapid.ts"
