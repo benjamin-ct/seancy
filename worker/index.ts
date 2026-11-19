@@ -57,7 +57,7 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
-import { handleTickets, pushAdmins } from "./tickets.ts";
+import { handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
 import { accessGate, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
 import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
@@ -3021,6 +3021,12 @@ export default withSentry({
   // invocation plutôt que dans celle de runDailyCheck, pour ne pas partager
   // son budget de sous-requêtes TMDB avec les notifications quotidiennes.
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Worker de l'admin (wrangler.admin.jsonc, toutes les 2 minutes) : file de validation des tickets, relances,
+    // previews… sans attendre le workflow « Tickets (passage) », que GitHub ne lance que toutes les quelques heures
+    if (env.ADMIN_WORKER) {
+      ctx.waitUntil(runTicketsCron(env));
+      return;
+    }
     if (event.cron === SEARCH_INDEX_SYNC_CRON) {
       ctx.waitUntil(syncPopularTitles(env));
       return;

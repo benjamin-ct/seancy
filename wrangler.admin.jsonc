@@ -5,8 +5,8 @@
 // renvoie tout le reste au Worker du site par le service binding SITE (voir
 // worker/admin-split.ts). Base de production partagée avec le site.
 //
-// Pas de tâche planifiée (elles restent sur le site), pas d'adresse
-// workers.dev : il n'est joignable que par son domaine admin.seancy.com
+// Une seule tâche planifiée, celle des tickets (toutes les 2 minutes ; les
+// autres restent sur le site), pas d'adresse workers.dev : il n'est joignable que par son domaine admin.seancy.com
 // (domaine personnalisé, réglé une fois sur le compte) et par le site.
 //
 // Secrets à régler une fois sur ce Worker (Cloudflare → Workers et Pages →
@@ -49,5 +49,7 @@
     }
   ],
   "ai": { "binding": "AI" },
-  "services": [{ "binding": "SITE", "service": "seancy" }]
+  "services": [{ "binding": "SITE", "service": "seancy" }],
+  // Toutes les 2 minutes : file de validation des tickets, relances, previews (runTicketsCron, worker/index.ts)
+  "triggers": { "crons": ["*/2 * * * *"] }
 }
