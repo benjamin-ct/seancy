@@ -326,6 +326,10 @@ const main = async () => {
         "Bouton Réglages plus clair\n\nRendre le bouton Réglages du profil plus explicite.",
         "bouton reglage pas clair"
       ),
+      ideaFrom(
+        "Modifier sa page de profil\n\nPouvoir modifier sa page de profil",
+        "Pouvoir modifier sa page de profil"
+      ),
       ideaFrom("Titre seul", "Ma ligne\nla suite"),
       ideaFrom("", "Ma ligne"),
     ],
@@ -335,6 +339,7 @@ const main = async () => {
         detail:
           "Rendre le bouton Réglages du profil plus explicite.\n\n**Idée d'origine :** bouton reglage pas clair",
       },
+      { title: "Modifier sa page de profil", detail: "Pouvoir modifier sa page de profil" },
       { title: "Ma ligne", detail: "la suite" },
       { title: "Ma ligne", detail: "" },
     ]
