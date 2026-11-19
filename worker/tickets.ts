@@ -187,16 +187,16 @@ function toTicket(row: Row, files: TicketFile[] = []): Ticket {
 async function filesOf(env: Env, ids?: string[]): Promise<Map<string, TicketFile[]>> {
   const q = ids?.length
     ? env.DB.prepare(
-        `SELECT id, ticket_id, name, type, size FROM ticket_files WHERE ticket_id IN (${ids.map(() => "?").join(",")}) ORDER BY created_at`
+        `SELECT id, ticket_id, name, type, size, created_at FROM ticket_files WHERE ticket_id IN (${ids.map(() => "?").join(",")}) ORDER BY created_at`
       ).bind(...ids)
     : env.DB.prepare(
-        "SELECT id, ticket_id, name, type, size FROM ticket_files ORDER BY created_at"
+        "SELECT id, ticket_id, name, type, size, created_at FROM ticket_files ORDER BY created_at"
       );
-  const { results } = await q.all<TicketFile & { ticket_id: string }>();
+  const { results } = await q.all<TicketFile & { ticket_id: string; created_at: number }>();
   const map = new Map<string, TicketFile[]>();
   for (const f of results) {
     const list = map.get(f.ticket_id) ?? [];
-    list.push({ id: f.id, name: f.name, type: f.type, size: f.size });
+    list.push({ id: f.id, name: f.name, type: f.type, size: f.size, at: f.created_at });
     map.set(f.ticket_id, list);
   }
   return map;
