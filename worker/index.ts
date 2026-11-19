@@ -3048,7 +3048,8 @@ async function routeRequest(
     if (!env.VAPID_PUBLIC_KEY) {
       return json({ error: "VAPID_PUBLIC_KEY non configurée." }, 503);
     }
-    return cachedStaticJson(request, ctx, { publicKey: env.VAPID_PUBLIC_KEY });
+    // Sans cache, comme la clé reCAPTCHA : après un changement de clé, les navigateurs se réabonnent tout de suite
+    return json({ publicKey: env.VAPID_PUBLIC_KEY }, 200, { "cache-control": "no-store" });
   }
 
   // Clé "site" reCAPTCHA v3 : faite pour être publique (elle apparaît de

@@ -413,7 +413,9 @@ function PushSetting({ run }: { run: Run }) {
           throw new Error("notifications refusées pour ce site (réglages du navigateur)");
         }
         if (!sub) {
-          const { publicKey } = (await (await fetch("/api/vapid-public-key")).json()) as {
+          const { publicKey } = (await (
+            await fetch("/api/vapid-public-key", { cache: "no-store" })
+          ).json()) as {
             publicKey: string;
           };
           sub = await reg.pushManager.subscribe({
