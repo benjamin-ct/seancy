@@ -29,6 +29,7 @@ import {
   type TrelloCard,
 } from "./trelloLib.ts";
 import { parseBlocks, parseInline, safeHref } from "../src/modules/tickets/markdown.ts";
+import { cleanTitle, firstLine } from "../worker/ticket-title.ts";
 
 let passed = 0;
 let failed = 0;
@@ -301,6 +302,23 @@ function fakeGh(
   return { gh, calls };
 }
 const main = async () => {
+  check(
+    "Titre automatique : réponse du modèle nettoyée, 1re ligne en secours",
+    [
+      cleanTitle("« Clarifier le bouton Réglages du profil ».", "secours"),
+      cleanTitle("Titre : Bouton réglages plus clair\nAutre ligne", "secours"),
+      cleanTitle("   ", "secours"),
+      cleanTitle("x".repeat(200), "secours"),
+      firstLine("\n  Première ligne  \nSuite"),
+    ],
+    [
+      "Clarifier le bouton Réglages du profil",
+      "Bouton réglages plus clair",
+      "secours",
+      "secours",
+      "Première ligne",
+    ]
+  );
   const behind = fakeGh(2, []);
   check(
     "PR en retard : base fusionnée dedans, attente",

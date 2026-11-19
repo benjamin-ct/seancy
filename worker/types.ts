@@ -38,6 +38,8 @@ export interface Env {
   // absent sur les previews de PR (constaté en prod, Sentry SEANCY-LOGS-3K),
   // présent partout ailleurs.
   AI?: Ai;
+  /** Clé de l'API Anthropic (facultative) : titre des tickets laissé vide écrit par Claude Haiku, sinon par Workers AI. */
+  ANTHROPIC_API_KEY?: string;
 
   // Secrets (dashboard Cloudflare, jamais commités).
   TMDB_API_KEY?: string;
