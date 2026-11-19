@@ -115,6 +115,8 @@ export default function App() {
         <Routes>
           <Route path={ADMIN_HOST ? "/*" : "/admin/*"} element={<AdminApp />} />
         </Routes>
+        {/* Admin installé sur le téléphone : tirer vers le bas recharge, comme sur le site */}
+        <PullToRefresh />
       </Suspense>
     );
   }

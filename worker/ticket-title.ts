@@ -1,15 +1,21 @@
 // Textes des tickets écrits par l'IA (comme sur Paddock Live) : titre d'un
-// ticket laissé vide, d'après sa description, et carte d'une idée (titre et
-// description) d'après l'idée tapée telle quelle. Claude Haiku si le secret
+// ticket laissé vide, d'après sa description, carte d'une idée (titre et
+// description) d'après l'idée tapée telle quelle, et ticket réécrit d'après
+// tout ce qu'on y a ajouté (bouton « Réécrire avec l'IA »). Claude Haiku si le secret
 // ANTHROPIC_API_KEY est posé, sinon Workers AI (binding AI, déjà utilisé par
 // les suggestions), sinon le texte tel quel comme avant.
-// cleanTitle et ideaFrom sont vérifiées par scripts/verify-tickets.ts.
+// cleanTitle, ideaFrom et rewriteFrom sont vérifiées par scripts/verify-tickets.ts.
 // Type minimal (pas worker/types.ts) : vérifiable par les scripts, hors du projet TypeScript du Worker
 interface TitleEnv {
   ANTHROPIC_API_KEY?: string;
   AI?: unknown;
 }
 type RunAi = { run(model: string, input: unknown): Promise<unknown> };
+/** Image jointe à la question (Claude seulement) : type (png, jpeg, gif, webp) et contenu en base64. */
+export interface AskImage {
+  type: string;
+  data: string;
+}
 
 const ASK =
   "Écris un titre court (8 mots au plus), en français, sans guillemets ni point final, pour ce ticket de développement de Seancy, un site de suivi de films et de séries. Réponds par le titre seul.\n\n";
@@ -32,8 +38,13 @@ export function cleanTitle(out: string, fallback: string): string {
   return line && line.length <= 120 ? line : fallback;
 }
 
-// Réponse du modèle : Claude Haiku si sa clé est posée, sinon Workers AI ; "" si aucun ne répond
-async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<string> {
+// Réponse du modèle : Claude Haiku si sa clé est posée (avec les images), sinon Workers AI (texte seul) ; "" si aucun ne répond
+export async function ask(
+  env: TitleEnv,
+  prompt: string,
+  maxTokens: number,
+  images: AskImage[] = []
+): Promise<string> {
   const messages = [{ role: "user" as const, content: prompt }];
   if (env.ANTHROPIC_API_KEY) {
     try {
@@ -48,8 +59,22 @@ async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<st
         body: JSON.stringify({
           model: "claude-haiku-5-5",
           max_tokens: maxTokens + 160,
+          temperature: 0,
           thinking: { type: "disabled" },
-          messages,
+          messages: images.length
+            ? [
+                {
+                  role: "user",
+                  content: [
+                    ...images.map((i) => ({
+                      type: "image",
+                      source: { type: "base64", media_type: i.type, data: i.data },
+                    })),
+                    { type: "text", text: prompt },
+                  ],
+                },
+              ]
+            : messages,
         }),
       });
       const data = (await res.json()) as {
@@ -73,6 +98,7 @@ async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<st
       const r = (await (env.AI as RunAi).run(WORKERS_AI_MODEL, {
         messages,
         max_tokens: maxTokens,
+        temperature: 0,
       })) as { response?: string };
       return r.response ?? "";
     } catch (err) {
@@ -141,4 +167,72 @@ export async function ideaCard(
 ): Promise<{ title: string; detail: string }> {
   const text = raw.trim().slice(0, 3000);
   return text ? ideaFrom(await ask(env, IDEA_ASK + text, 300), text) : ideaFallback(raw);
+}
+
+const ORIGIN = "**Idée d'origine :**";
+
+const REWRITE_ASK = [
+  "Voici un ticket de Seancy, un site de suivi de films et de séries, complété au fil du temps (description, ajouts, liens, images jointes). Réécris-le en une carte propre.",
+  "",
+  "Format : sur la 1re ligne, un titre court (8 mots au plus, sans guillemets ni point final) ; puis une ligne vide ; puis la description, claire et complète.",
+  "",
+  "Règles :",
+  "- Garde toutes les informations du ticket, y compris les ajouts et ce que montrent les images (texte affiché, écran, erreur) ; regroupe-les sans rien perdre.",
+  "- Si le ticket signale un problème, décris ce problème tel qu'il est constaté, pas une solution.",
+  "- N'ajoute aucun exemple, détail, cause ou bénéfice qui n'est pas dans le ticket.",
+  "- En français, listes à tirets permises, sans intitulé (« Titre : », « Description : »).",
+  "",
+  "Ticket :",
+  "",
+].join("\n");
+
+/** Description séparée de sa section « Idée d'origine » (gardée telle quelle à la réécriture). */
+export function splitOrigin(detail: string): { body: string; origin: string } {
+  const at = detail.indexOf(ORIGIN);
+  return at < 0
+    ? { body: detail.trim(), origin: "" }
+    : { body: detail.slice(0, at).trim(), origin: detail.slice(at + ORIGIN.length).trim() };
+}
+
+/**
+ * Réponse du modèle → titre et description réécrits ; l'idée d'origine reste en dessous (celle d'avant si le
+ * ticket en avait une, sinon l'ancienne description). null si la réponse n'est pas lisible.
+ */
+export function rewriteFrom(
+  out: string,
+  old: { title: string; detail: string }
+): { title: string; detail: string } | null {
+  const lines = out.trim().split("\n");
+  const title = cleanTitle(lines[0] ?? "", "");
+  const body = lines
+    .slice(1)
+    .join("\n")
+    .replace(/^\s*\**\s*description\s*:\s*/i, "")
+    .trim();
+  if (!title || !body) {
+    return null;
+  }
+  const { body: before, origin } = splitOrigin(old.detail);
+  const keep = origin || before || old.title;
+  return { title, detail: keep ? `${body}\n\n${ORIGIN} ${keep}` : body };
+}
+
+/** Ticket réécrit par l'IA d'après tout ce qu'il contient (texte, titres des liens, images pour Claude). */
+export async function rewriteCard(
+  env: TitleEnv,
+  t: { title: string; detail: string; links: { url: string; title: string }[] },
+  images: AskImage[] = []
+): Promise<{ title: string; detail: string } | null> {
+  const { body, origin } = splitOrigin(t.detail);
+  const text = [
+    `Titre : ${t.title}`,
+    body && `Description :\n${body}`,
+    origin && `Idée d'origine : ${origin}`,
+    t.links.length && `Liens :\n${t.links.map((l) => `- ${l.title || l.url}`).join("\n")}`,
+    images.length && env.ANTHROPIC_API_KEY && `${images.length} image(s) jointe(s) ci-dessus.`,
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 8000);
+  return rewriteFrom(await ask(env, REWRITE_ASK + text, 900, images), t);
 }

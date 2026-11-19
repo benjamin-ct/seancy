@@ -59,7 +59,7 @@ import {
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
-import { accessGate, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
+import { accessGate, adminEmails, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
 import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
@@ -863,6 +863,8 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       shareSlug: user.shareSlug,
       username: user.username,
       avatarVersion: await getAvatarVersion(env.DB, user.id),
+      // Administrateur : bouton « Admin » du site (l'espace admin reste derrière Cloudflare Access)
+      admin: adminEmails(env).includes(user.email.toLowerCase()),
     },
     200,
     { "set-cookie": sessionCookieHeaders(request, sessionToken) }
@@ -880,6 +882,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     shareSlug: user.shareSlug,
     username: user.username,
     avatarVersion: await getAvatarVersion(env.DB, user.id),
+    admin: adminEmails(env).includes(user.email.toLowerCase()),
   });
 }
 

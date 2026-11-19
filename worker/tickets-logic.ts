@@ -40,11 +40,18 @@ export interface TrelloOrigin {
   list: string;
   comments: TrelloComment[];
 }
+/** Administrateur qui s'est ajouté à un ticket qu'il n'a pas créé (filtre par personne, initiales sur la carte). */
+export interface TicketMember {
+  email: string;
+  name: string;
+}
 export interface TicketFile {
   id: string;
   name: string;
   type: string;
   size: number;
+  /** Date d'ajout (ms) : place la pièce jointe dans le fil de la conversation. */
+  at?: number;
 }
 export interface TicketData {
   title: string;
@@ -55,6 +62,10 @@ export interface TicketData {
   effort: Effort;
   /** Hotfix : branche depuis main, PR vers main, puis main refusionné dans develop. */
   urgent: boolean;
+  /** Modèle et effort choisis automatiquement d'après le ticket (worker/ticket-level.ts) à chaque passage. */
+  auto: boolean;
+  /** Dernier choix automatique et sa raison, montrés dans le ticket (« Sonnet · moyen : … »). */
+  autoWhy: string;
   /** Date d'envoi à Claude (ms) ; 0 : pas chez Claude. */
   sent: number;
   /** Envoi annulé (ms) : un lancement de Claude déjà parti ne peut plus répondre ; 0 : rien d'annulé. */
@@ -81,6 +92,8 @@ export interface TicketData {
    * session Claude (sentry-triage…), le créateur de la carte pour un ticket importé de Trello. Jamais modifiable. */
   author: string;
   authorEmail: string;
+  /** Autres administrateurs ajoutés au ticket (« Me rajouter » dans la fiche). */
+  members: TicketMember[];
 }
 export interface Ticket extends TicketData {
   id: string;
@@ -113,6 +126,8 @@ export const EMPTY_DATA: TicketData = {
   model: "opus",
   effort: "high",
   urgent: false,
+  auto: false,
+  autoWhy: "",
   sent: 0,
   cancelled: 0,
   answer: "",
@@ -134,6 +149,7 @@ export const EMPTY_DATA: TicketData = {
   trello: null,
   author: "",
   authorEmail: "",
+  members: [],
 };
 
 const LONG = new Set(["answer", "feedback", "followUp", "notes"]);
@@ -173,6 +189,16 @@ export function cleanData(
   if (has("authorEmail")) {
     out.authorEmail = str(input.authorEmail, 200).trim().toLowerCase();
   }
+  if (has("members")) {
+    const seen = new Set<string>();
+    out.members = (Array.isArray(input.members) ? input.members : [])
+      .map((m) => {
+        const o = (m ?? {}) as Record<string, unknown>;
+        return { email: str(o.email, 200).trim().toLowerCase(), name: str(o.name, 80).trim() };
+      })
+      .filter((m) => m.email.includes("@") && !seen.has(m.email) && !!seen.add(m.email))
+      .slice(0, 20);
+  }
   if (has("issue")) {
     out.issue = /^\d{1,9}$/.test(String(input.issue)) ? String(input.issue) : "";
   }
@@ -188,6 +214,12 @@ export function cleanData(
     out.stage = (STAGES as readonly string[]).includes(String(input.stage))
       ? (input.stage as Stage)
       : "";
+  }
+  if (has("auto")) {
+    out.auto = input.auto === true || input.auto === 1 || input.auto === "1";
+  }
+  if (has("autoWhy")) {
+    out.autoWhy = str(input.autoWhy, 300).trim();
   }
   if (has("urgent")) {
     out.urgent = input.urgent === true || input.urgent === 1 || input.urgent === "1";
@@ -299,10 +331,14 @@ export type Action =
   | { type: "followup" }
   | { type: "autofix"; text: string }
   | { type: "retry"; n: number }
-  | { type: "preview"; url: string };
+  | { type: "preview"; url: string }
+  /** Modèle et effort choisis automatiquement (sans événement d'historique) */
+  | { type: "level"; model: Model; effort: Effort; why: string }
+  /** Administrateur ajouté au ticket ou retiré (sans événement d'historique) */
+  | { type: "member"; email: string; name: string; join: boolean };
 
 /** Champs qu'une modification directe (fiche, glisser-déposer) peut changer. */
-const EDITABLE = ["title", "detail", "labels", "links", "model", "effort", "urgent"];
+const EDITABLE = ["title", "detail", "labels", "links", "model", "effort", "urgent", "auto"];
 
 /**
  * Nouvelle colonne et nouvelles données d'un ticket après une action, avec
@@ -495,6 +531,17 @@ export function applyAction(
     case "preview":
       patch = { preview: a.url };
       break;
+    case "level":
+      patch = { model: a.model, effort: a.effort, autoWhy: a.why };
+      break;
+    case "member": {
+      const email = a.email.trim().toLowerCase();
+      need(!!email, "Compte inconnu");
+      need(email !== d.authorEmail, "Tu as créé ce ticket : il est déjà à ton nom");
+      const others = d.members.filter((m) => m.email !== email);
+      patch = { members: a.join ? [...others, { email, name: a.name }] : others };
+      break;
+    }
   }
   // Événements de l'utilisateur : signés du nom de l'administrateur qui a fait l'action
   for (const e of ev) {
