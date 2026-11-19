@@ -324,7 +324,10 @@ export default function DiscoverPage() {
           setUsingPersonalized(true);
           setResults(items);
           setPage(1);
-          setTotalPages(data.hasMore ? 2 : 1);
+          // Toujours une page de plus : quand le lot personnalisé tient en une
+          // seule page, loadMore() enchaîne sur le flux "Découvrir" classique
+          // au lieu de couper le scroll infini.
+          setTotalPages(2);
           setStatus("success");
         })
         .catch((err) => {
@@ -396,8 +399,10 @@ export default function DiscoverPage() {
           // flux "Découvrir" classique plutôt que de s'arrêter net — mêmes
           // filtres par défaut, même pagination que les autres grilles.
           setUsingPersonalized(false);
+          // Le flux classique repart de la page 1 (doublons écartés ci-dessous) :
+          // nextPage compte les lots personnalisés, pas les pages TMDB.
           return discover(mediaType, {
-            page: nextPage,
+            page: 1,
             genreId: genreIds,
             excludeGenreIds: excludedGenreIds,
             providerIds: activeProviderIds,
@@ -419,7 +424,7 @@ export default function DiscoverPage() {
               ).map((r) => ({ ...r, mediaType }));
               return [...prev, ...fresh];
             });
-            setPage(nextPage);
+            setPage(1);
             setTotalPages(Math.min(discoverData.total_pages || 1, 500));
           });
         })
