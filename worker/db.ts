@@ -988,6 +988,21 @@ export async function getNotInterestedForUser(
   }));
 }
 
+// Ids seuls, pour un type : exclusions de la suite du défilement "Pour toi"
+// (voir TasteContinuation, worker/recommendations.ts), relues à chaque
+// réponse plutôt que figées dans le cache du lot.
+export async function getNotInterestedIdsForUser(
+  db: D1Database,
+  userId: number,
+  mediaType: string
+): Promise<number[]> {
+  const { results } = await db
+    .prepare("SELECT tmdb_id FROM not_interested WHERE user_id = ? AND media_type = ?")
+    .bind(userId, mediaType)
+    .all<{ tmdb_id: number }>();
+  return results.map((row) => row.tmdb_id);
+}
+
 export async function addNotInterested(
   db: D1Database,
   userId: number,
@@ -1010,8 +1025,21 @@ export async function addNotInterested(
 // scope de type ("movie" | "tv" | "all", voir migration 0020) — évite de
 // relire toute la bibliothèque et de rescorer les candidats à chaque
 // ouverture de la page d'accueil.
-export interface RecommendationCacheRow {
+//
+// La colonne `items` contient soit le tableau seul (ancien format), soit
+// `{ items, complete, continuation }` (sans migration) : `complete` dit que
+// le classement a rendu moins de titres que demandé (la fin d'un lot court
+// est servie par le cache), `continuation` les genres de la suite du
+// défilement (voir TasteContinuation, worker/recommendations.ts).
+// `continuation` reste `undefined` pour un lot mis en cache à l'ancien
+// format, `null` quand le profil n'en a pas.
+export interface RecommendationCacheEntry {
   items: unknown[];
+  complete: boolean;
+  continuation: unknown;
+}
+
+export interface RecommendationCacheRow extends RecommendationCacheEntry {
   coldStart: boolean;
   computedAt: number;
 }
@@ -1030,8 +1058,16 @@ export async function getRecommendationCache(
   if (!row) {
     return null;
   }
+  const stored = JSON.parse(row.items) as unknown[] | Partial<RecommendationCacheEntry>;
+  const entry: RecommendationCacheEntry = Array.isArray(stored)
+    ? { items: stored, complete: false, continuation: undefined }
+    : {
+        items: Array.isArray(stored.items) ? stored.items : [],
+        complete: stored.complete === true,
+        continuation: stored.continuation ?? null,
+      };
   return {
-    items: JSON.parse(row.items),
+    ...entry,
     coldStart: row.cold_start === 1,
     computedAt: row.computed_at,
   };
@@ -1041,7 +1077,7 @@ export async function setRecommendationCache(
   db: D1Database,
   userId: number,
   mediaScope: string,
-  items: unknown[],
+  entry: RecommendationCacheEntry,
   coldStart: boolean
 ): Promise<void> {
   await db
@@ -1051,7 +1087,7 @@ export async function setRecommendationCache(
        ON CONFLICT (user_id, media_scope) DO UPDATE SET
          items = excluded.items, cold_start = excluded.cold_start, computed_at = excluded.computed_at`
     )
-    .bind(userId, mediaScope, JSON.stringify(items), coldStart ? 1 : 0, Date.now())
+    .bind(userId, mediaScope, JSON.stringify(entry), coldStart ? 1 : 0, Date.now())
     .run();
 }
 

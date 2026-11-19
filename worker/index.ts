@@ -34,6 +34,7 @@ import {
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
   getNotInterestedForUser,
+  getNotInterestedIdsForUser,
   addNotInterested,
   getRecommendationCache,
   setRecommendationCache,
@@ -62,11 +63,13 @@ import { accessGate, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts
 import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
+  buildTasteContinuation,
   buildTasteProfile,
   getRecommendationCandidates,
   rankRecommendations,
   type RecommendationItem,
   type RecommendationMediaType,
+  type TasteContinuation,
 } from "./recommendations.ts";
 import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
 import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
@@ -2152,17 +2155,39 @@ async function handleGetRecommendations(
   const offsetParam = Number(url.searchParams.get("offset"));
   const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
 
+  // Fin du lot : genres de la suite du défilement (voir TasteContinuation),
+  // avec les titres "pas intéressé" relus à chaque fois (jamais figés dans
+  // le cache du lot). Absent tant que le lot a encore des titres.
+  const withContinuation = async (continuation: TasteContinuation | null) =>
+    continuation && (typeParam === "movie" || typeParam === "tv")
+      ? {
+          ...continuation,
+          excludeIds: await getNotInterestedIdsForUser(env.DB, user.id, typeParam),
+        }
+      : null;
+
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
-  if (cached && isFresh && cached.items.length >= offset + limit) {
+  if (cached && isFresh) {
     const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
-    await refreshMissingThumbhashes(env, pageItems);
-    scheduleMissingThumbhashes(ctx, env, pageItems);
-    return json({
-      items: pageItems,
-      coldStart: cached.coldStart,
-      hasMore: offset + pageItems.length < cached.items.length,
-    });
+    const hasMore = offset + pageItems.length < cached.items.length;
+    // Lot complet (le classement a rendu moins de titres que demandé) : sa
+    // fin est servie par le cache, sans recalcul. Un lot mis en cache avant
+    // la suite du défilement (`continuation` undefined) est recalculé
+    // quand sa fin est atteinte.
+    const covers = cached.items.length >= offset + limit || cached.complete;
+    if (covers && (hasMore || cached.continuation !== undefined)) {
+      await refreshMissingThumbhashes(env, pageItems);
+      scheduleMissingThumbhashes(ctx, env, pageItems);
+      return json({
+        items: pageItems,
+        coldStart: cached.coldStart,
+        hasMore,
+        continuation: hasMore
+          ? null
+          : await withContinuation(cached.continuation as TasteContinuation | null),
+      });
+    }
   }
 
   const [library, excludedGenreIds, notInterested] = await Promise.all([
@@ -2180,16 +2205,25 @@ async function handleGetRecommendations(
     )
   );
   const candidates = candidateLists.flat();
-  const items = rankRecommendations(candidates, profile, {
-    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
-  });
-  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  const rankLimit = Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE);
+  const items = rankRecommendations(candidates, profile, { limit: rankLimit });
+  const continuation =
+    typeParam === "movie" || typeParam === "tv" ? buildTasteContinuation(profile, typeParam) : null;
+  await setRecommendationCache(
+    env.DB,
+    user.id,
+    typeParam,
+    { items, complete: items.length < rankLimit, continuation },
+    profile.isColdStart
+  );
   const pageItems = items.slice(offset, offset + limit);
+  const hasMore = offset + pageItems.length < items.length;
   scheduleMissingThumbhashes(ctx, env, pageItems);
   return json({
     items: pageItems,
     coldStart: profile.isColdStart,
-    hasMore: offset + pageItems.length < items.length,
+    hasMore,
+    continuation: hasMore ? null : await withContinuation(continuation),
   });
 }
 
