@@ -13,7 +13,9 @@ type RunAi = { run(model: string, input: unknown): Promise<unknown> };
 
 const ASK =
   "Écris un titre court (8 mots au plus), en français, sans guillemets ni point final, pour ce ticket de développement de Seancy, un site de suivi de films et de séries. Réponds par le titre seul.\n\n";
-const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+// Mistral (comme Paddock Live) : essayé le 19 nov. sur de vraies idées, plus fidèle que Llama 3.3 (qui inversait
+// un bug en demande et ajoutait des détails)
+const WORKERS_AI_MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
 
 /** 1re ligne non vide de la description, 120 caractères au plus (titre d'avant, et secours). */
 export function firstLine(detail: string): string {
@@ -86,8 +88,20 @@ export async function ticketTitle(env: TitleEnv, detail: string): Promise<string
   return text ? cleanTitle(await ask(env, ASK + text, 40), fallback) : fallback;
 }
 
-const IDEA_ASK =
-  "Voici une idée notée en vrac pour Seancy, un site de suivi de films et de séries. Transforme-la en carte : sur la 1re ligne, un titre court (8 mots au plus, sans guillemets ni point final) ; puis une ligne vide ; puis une description claire en 2 à 4 phrases : ce qu'on veut, pourquoi, et où dans le site si c'est dit. Reste fidèle à l'idée, n'invente ni détail ni solution technique. En français, sans markdown ni intitulé du genre « Titre : ».\n\nIdée :\n";
+const IDEA_ASK = [
+  "Voici une idée notée en vrac pour Seancy, un site de suivi de films et de séries. Transforme-la en carte de ticket.",
+  "",
+  "Format : sur la 1re ligne, un titre court (8 mots au plus, sans guillemets ni point final) ; puis une ligne vide ; puis une description de 1 à 3 phrases.",
+  "",
+  "Règles :",
+  "- Si l'idée signale un problème (quelque chose qui ne marche pas, a disparu ou n'est pas clair), le titre et la description décrivent ce problème tel qu'il est constaté, pas une solution.",
+  "- Si c'est une demande de nouveauté, décris ce que l'utilisateur veut pouvoir faire.",
+  "- Reformule seulement ce qui est écrit : n'ajoute aucun exemple, détail, cause ou bénéfice qui n'y est pas.",
+  "- En français, sans markdown, sans intitulé (« Titre : », « Description : »).",
+  "",
+  "Idée :",
+  "",
+].join("\n");
 
 /** Idée tapée telle quelle (1re ligne : le titre, comme avant), utilisée quand l'IA ne répond pas. */
 export function ideaFallback(raw: string): { title: string; detail: string } {
@@ -108,7 +122,16 @@ export function ideaFrom(out: string, raw: string): { title: string; detail: str
   if (!title || !body) {
     return fallback;
   }
-  return { title, detail: `${body}\n\n**Idée d'origine :** ${raw.trim()}` };
+  // Description qui reprend l'idée mot pour mot : pas de doublon « Idée d'origine »
+  const same = (a: string) =>
+    a
+      .toLowerCase()
+      .replace(/[\s.!]+/g, " ")
+      .trim();
+  return {
+    title,
+    detail: same(body) === same(raw) ? body : `${body}\n\n**Idée d'origine :** ${raw.trim()}`,
+  };
 }
 
 /** Carte d'une idée (titre et description) écrite d'après l'idée tapée telle quelle. */
