@@ -2,4 +2,4 @@
 bump: patch
 ---
 
-Accueil : le défilement infini continue désormais aussi une fois connecté, quand la sélection personnalisée est épuisée.
+Accueil : la sélection « Pour toi » propose plus de titres avant de laisser la place au défilement classique, qui continue sans s'arrêter une fois connecté.

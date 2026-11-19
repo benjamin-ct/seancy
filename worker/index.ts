@@ -2059,7 +2059,10 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 // du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
 // pages suivantes soient servies par le même lot sans recalcul.
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const RECOMMENDATION_CACHE_SIZE = 96;
+const RECOMMENDATION_CACHE_SIZE = 240;
+// Le lot ne peut pas dépasser le pool de candidats : on le relève aussi (le
+// défaut de 200 par type est conservé pour les suggestions IA).
+const RECOMMENDATION_CANDIDATE_POOL = 400;
 
 // Chaque calcul décode/redimensionne une image en WASM dans ce même Worker
 // (~6 ms une fois l'isolate chaud, ~25 ms à froid — voir le commentaire de
@@ -2172,7 +2175,9 @@ async function handleGetRecommendations(
   const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
 
   const candidateLists = await Promise.all(
-    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+    mediaTypes.map((mediaType) =>
+      getRecommendationCandidates(env, mediaType, RECOMMENDATION_CANDIDATE_POOL)
+    )
   );
   const candidates = candidateLists.flat();
   const items = rankRecommendations(candidates, profile, {
