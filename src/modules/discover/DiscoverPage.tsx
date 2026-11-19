@@ -173,6 +173,22 @@ export default function DiscoverPage() {
     sortField === DEFAULT_SORT_FIELD &&
     sortDirection === DEFAULT_SORT_DIRECTION &&
     JSON.stringify(advanced) === JSON.stringify(EMPTY_ADVANCED_FILTERS);
+  const personalizedEligible = isDefaultFilters && authStatus === "authenticated";
+  // Session encore en vérification au chargement (cookie compagnon présent,
+  // voir AuthContext) : sans filtre, la grille garde ses squelettes jusqu'à
+  // la réponse, comme TonightPick, au lieu d'afficher le flux classique puis
+  // de le remplacer par la grille "Pour toi" (clignotement au
+  // rafraîchissement). Avec un filtre, la connexion ne change rien à la
+  // grille : elle n'est pas rechargée.
+  const awaitingAuth = isDefaultFilters && authStatus === "loading";
+  // Clés de contenu pour l'effet de chargement : la synchro du compte
+  // remplace ces listes par une copie souvent identique juste après la
+  // connexion, ce qui rechargeait toute la grille pour rien. Les plateformes
+  // favorites ne comptent qu'avec « Mes plateformes ».
+  const excludedGenresKey = [...excludedGenreIds].sort((a, b) => a - b).join(",");
+  const favoriteProvidersKey = useMyPlatforms
+    ? [...favoriteProviderIds].sort((a, b) => a - b).join(",")
+    : "";
   const [feedMode, setFeedMode] = useState<FeedMode>(restoredResults?.feedMode ?? "classic");
   // Genres préférés du profil (et exclusions) pour la suite du lot "Pour
   // toi", reçus avec sa dernière page.
@@ -322,6 +338,11 @@ export default function DiscoverPage() {
       keepRestoredResultsRef.current = false;
       return;
     }
+    if (awaitingAuth) {
+      setStatus("loading");
+      setLoadMoreError(null);
+      return;
+    }
     let cancelled = false;
     // Filtre changé ou page quittée : la requête en cours est annulée et
     // libère sa place dans la file de tmdbFetch (audit M10).
@@ -403,7 +424,7 @@ export default function DiscoverPage() {
     // (voir isDefaultFilters) : repli immédiat et silencieux sur discover()
     // dans tous les autres cas, y compris un échec ou une liste vide de
     // /api/recommendations (cold start non applicable, erreur réseau...).
-    if (authStatus === "authenticated" && isDefaultFilters) {
+    if (personalizedEligible) {
       getRecommendations(mediaType, PERSONALIZED_PAGE_SIZE, controller.signal, 0)
         .then((data) => {
           if (cancelled) {
@@ -452,13 +473,13 @@ export default function DiscoverPage() {
   }, [
     mediaType,
     genreIds,
-    excludedGenreIds,
+    excludedGenresKey,
     providerIds,
     useMyPlatforms,
-    favoriteProviderIds,
+    favoriteProvidersKey,
     region,
-    authStatus,
-    isDefaultFilters,
+    personalizedEligible,
+    awaitingAuth,
     sortField,
     sortDirection,
     advancedKey,
