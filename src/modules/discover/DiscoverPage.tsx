@@ -179,6 +179,11 @@ export default function DiscoverPage() {
   const [continuation, setContinuation] = useState<TasteContinuation | null>(
     restoredResults?.continuation ?? null
   );
+  // Incrémenté à chaque rechargement de la grille (filtre, connexion
+  // établie...) : une page suivante encore en vol pour l'ancienne grille est
+  // ignorée, au lieu d'être ajoutée à la nouvelle et d'en fausser la
+  // pagination (flux, page courante).
+  const gridGenerationRef = useRef(0);
 
   const advancedKey = JSON.stringify(advanced);
   const advancedError = getAdvancedFiltersRangeError(advanced);
@@ -305,6 +310,7 @@ export default function DiscoverPage() {
   }, [mediaType, region, i18n.language]);
 
   useEffect(() => {
+    gridGenerationRef.current += 1;
     if (advancedError) {
       // Plage min/max incohérente (ex. note min > note max) : on n'appelle
       // pas l'API, qui retomberait silencieusement sur 0 résultat.
@@ -467,6 +473,8 @@ export default function DiscoverPage() {
     }
     const nextPage = page + 1;
     setLoadingMore(true);
+    const generation = gridGenerationRef.current;
+    const isStale = () => generation !== gridGenerationRef.current;
     // TMDB peut renvoyer un même titre sur deux pages consécutives, et chaque
     // flux qui prend le relais repart de sa page 1 : on déduplique pour
     // éviter les doublons à l'écran.
@@ -484,6 +492,9 @@ export default function DiscoverPage() {
         undefined,
         (nextPage - 1) * PERSONALIZED_PAGE_SIZE
       ).then((data) => {
+        if (isStale()) {
+          return;
+        }
         appendFresh((isShown) =>
           filterExcluded(data.items, mediaType).filter((item) => !isShown(item.id))
         );
@@ -500,6 +511,9 @@ export default function DiscoverPage() {
     } else if (feedMode === "taste" && continuation) {
       const cont = continuation;
       request = fetchTastePage(cont, nextPage).then((data) => {
+        if (isStale()) {
+          return;
+        }
         appendFresh((isShown) =>
           toTasteItems(
             filterExcluded(data.results, mediaType),
@@ -523,6 +537,9 @@ export default function DiscoverPage() {
         includeRegionReleaseDate: true,
         ...toDiscoverParams(advanced),
       }).then((data) => {
+        if (isStale()) {
+          return;
+        }
         appendFresh((isShown) =>
           keepTheatricalOnly(
             filterExcluded(data.results, mediaType).filter((item) => !isShown(item.id)),
@@ -536,7 +553,9 @@ export default function DiscoverPage() {
         setTotalPages(Math.min(data.total_pages || 1, 500));
       });
     }
-    request.catch((err) => setLoadMoreError(err)).finally(() => setLoadingMore(false));
+    request
+      .catch((err) => !isStale() && setLoadMoreError(err))
+      .finally(() => setLoadingMore(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     loadingMore,
