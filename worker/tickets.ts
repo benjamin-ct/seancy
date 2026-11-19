@@ -18,7 +18,16 @@ import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./c
 import { cloudflareUsage } from "./cloudflare-usage.ts";
 import { claudeAlerts, cloudflareAlerts, newAlerts } from "./quota-alerts.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
-import { ideaCard, ticketTitle } from "./ticket-title.ts";
+import { ask, ideaCard, ticketTitle } from "./ticket-title.ts";
+import {
+  FACTS_ASK,
+  LEVELS,
+  finalLevel,
+  levelFrom,
+  levelOf,
+  levelText,
+  parseFacts,
+} from "./ticket-level.ts";
 import {
   ciState,
   dependencies,
@@ -427,7 +436,41 @@ async function cancelRuns(env: Env, numbers: string[]): Promise<void> {
   }
 }
 
+/**
+ * Modèle et effort choisis automatiquement (ticket en « Auto ») d'après sa description : l'IA décrit le
+ * ticket, la grille de worker/ticket-level.ts décide. Enregistrés dans le ticket avec leur raison ; si
+ * l'IA ne répond pas, le ticket garde ses réglages. retouch : passage suivant (retouche, relance,
+ * correction automatique, réouverture), jamais en dessous du précédent.
+ */
+async function withLevel(env: Env, t: Ticket, retouch = false): Promise<Ticket> {
+  if (!t.auto) {
+    return t;
+  }
+  try {
+    const facts = parseFacts(
+      await ask(env, `${FACTS_ASK}${t.title}\n${t.detail.slice(0, 3000)}`, 200)
+    );
+    if (!facts) {
+      return t;
+    }
+    const base = levelOf(facts);
+    const { level, extra } = finalLevel(base.level, {
+      urgent: t.urgent,
+      retouch,
+      previous: levelFrom(t.model, t.effort),
+      retouches: t.history.filter((e) => e.kind === "message" && e.who === "moi").length,
+      autofix: t.autofix,
+    });
+    const why = levelText(level, [base.why, extra].filter(Boolean).join(" ; "));
+    return await act(env, t.id, { type: "level", ...LEVELS[level], why });
+  } catch (err) {
+    console.error("Choix automatique du modèle :", err);
+    return t;
+  }
+}
+
 async function openIssue(env: Env, t: Ticket, reopen = false): Promise<void> {
+  t = await withLevel(env, t, reopen);
   await closeTicketIssues(env, t.id);
   await gh(env)(`/repos/${repoOf(env)}/issues`, {
     method: "POST",
@@ -439,6 +482,7 @@ async function openIssue(env: Env, t: Ticket, reopen = false): Promise<void> {
 async function dispatch(env: Env, t: Ticket, why: string): Promise<void> {
   const n = prNumber(t.pr);
   if (n) {
+    t = await withLevel(env, t, true);
     await gh(env)(`/repos/${repoOf(env)}/issues/${n}/comments`, {
       method: "POST",
       body: { body: prComment(t.id, t, why) },
@@ -970,6 +1014,12 @@ export async function handleTickets(
           await act(env, id, { type: "unsend" }, now, access.name).catch(() => {});
           throw err;
         }
+      } else if (status === "todo" && data.auto) {
+        // Choix automatique visible avant l'envoi (refait à l'envoi)
+        const t = await loadTicket(env, id);
+        if (t) {
+          await withLevel(env, t);
+        }
       }
       return json({ ok: true, ticket: await loadTicket(env, id) });
     }
@@ -1116,10 +1166,13 @@ export async function handleTickets(
     }
     if (!sub && m === "PATCH") {
       adminOnly();
-      return json({
-        ok: true,
-        ticket: await act(env, id, { type: "edit", fields: await body(request) }, now, access.name),
-      });
+      const fields = await body(request);
+      let t = await act(env, id, { type: "edit", fields }, now, access.name);
+      // Ticket en « Auto » pas encore chez Claude : choix refait quand ce qui le décide change
+      if (t.auto && !t.sent && ["title", "detail", "urgent", "auto"].some((k) => k in fields)) {
+        t = await withLevel(env, t);
+      }
+      return json({ ok: true, ticket: t });
     }
     if (!sub && m === "DELETE") {
       adminOnly();

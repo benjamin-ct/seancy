@@ -236,7 +236,7 @@ export default function TicketSheet({
   };
   const send = () =>
     ask(
-      `Envoyer « ${t.title} » à Claude (${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
+      `Envoyer « ${t.title} » à Claude (${t.auto ? "choix automatique, revu à l'envoi : " : ""}${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
       "Envoyer",
       () => go(() => ticketAction(t.id, "send"), "Envoyé à Claude")
     );
@@ -426,15 +426,36 @@ export default function TicketSheet({
   const settings = t.status !== "done" && (
     <section className={styles.sec}>
       <h3>{editable ? "Réglages" : "Réglages · prochain passage de Claude"}</h3>
+      <label className={styles.check}>
+        <input
+          type="checkbox"
+          checked={t.auto}
+          disabled={busy}
+          onChange={(e) =>
+            go(
+              () => editTicket(t.id, { auto: e.target.checked }),
+              e.target.checked ? "Choix automatique" : "Choix à la main"
+            )
+          }
+        />
+        <span>
+          <b>Automatique</b>{" "}
+          <span className={styles.muted}>
+            {t.auto && t.autoWhy
+              ? t.autoWhy
+              : "modèle et effort choisis d'après le ticket, à chaque passage de Claude"}
+          </span>
+        </span>
+      </label>
       <div className={styles.settings}>
         <label>
           Modèle
           <select
             value={t.model}
-            disabled={busy}
+            disabled={busy || t.auto}
             onChange={(e) =>
               go(
-                () => editTicket(t.id, { model: e.target.value as Ticket["model"] }),
+                () => editTicket(t.id, { model: e.target.value as Ticket["model"], auto: false }),
                 "Modèle enregistré"
               )
             }
@@ -447,9 +468,12 @@ export default function TicketSheet({
           Effort
           <select
             value={t.effort}
-            disabled={busy}
+            disabled={busy || t.auto}
             onChange={(e) =>
-              go(() => editTicket(t.id, { effort: e.target.value as Effort }), "Effort enregistré")
+              go(
+                () => editTicket(t.id, { effort: e.target.value as Effort, auto: false }),
+                "Effort enregistré"
+              )
             }
           >
             {(["low", "medium", "high", "xhigh", "max"] as const).map((v) => (

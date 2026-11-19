@@ -33,7 +33,7 @@ export function cleanTitle(out: string, fallback: string): string {
 }
 
 // Réponse du modèle : Claude Haiku si sa clé est posée, sinon Workers AI ; "" si aucun ne répond
-async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<string> {
+export async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<string> {
   const messages = [{ role: "user" as const, content: prompt }];
   if (env.ANTHROPIC_API_KEY) {
     try {
@@ -48,6 +48,7 @@ async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<st
         body: JSON.stringify({
           model: "claude-haiku-5-5",
           max_tokens: maxTokens + 160,
+          temperature: 0,
           thinking: { type: "disabled" },
           messages,
         }),
@@ -73,6 +74,7 @@ async function ask(env: TitleEnv, prompt: string, maxTokens: number): Promise<st
       const r = (await (env.AI as RunAi).run(WORKERS_AI_MODEL, {
         messages,
         max_tokens: maxTokens,
+        temperature: 0,
       })) as { response?: string };
       return r.response ?? "";
     } catch (err) {

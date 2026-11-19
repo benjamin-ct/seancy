@@ -116,7 +116,9 @@ function Mini({
     );
   }
   if (t.status !== "done" && t.status !== "idea") {
-    labs.push({ text: `${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}` });
+    labs.push({
+      text: `${t.auto ? "Auto · " : ""}${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}`,
+    });
   }
   const cur = stepOf(t);
   const bar = t.status === "work" && !(live && (t.stage === "fail" || t.stage === "quota"));
@@ -206,7 +208,7 @@ function NewTicket({
 }) {
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
-  const [model, setModel] = useState<"opus" | "sonnet">("opus");
+  const [model, setModel] = useState<"auto" | "opus" | "sonnet">("auto");
   const [effort, setEffort] = useState<Effort>("high");
   const [urgent, setUrgent] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -221,8 +223,10 @@ function NewTicket({
         const { ticket } = await createTicket({
           title: title.trim(),
           detail,
-          model,
+          // Automatique : modèle et effort choisis par le serveur d'après le ticket (worker/ticket-level.ts)
+          model: model === "auto" ? "opus" : model,
           effort,
+          auto: model === "auto",
           urgent,
           status: "todo",
         });
@@ -278,6 +282,20 @@ function NewTicket({
           <input
             type="radio"
             name="model"
+            checked={model === "auto"}
+            onChange={() => setModel("auto")}
+          />
+          <span>
+            <b>Automatique</b>{" "}
+            <span className={styles.muted}>
+              modèle et effort choisis d'après le ticket (conseillé)
+            </span>
+          </span>
+        </label>
+        <label className={styles.check}>
+          <input
+            type="radio"
+            name="model"
             checked={model === "opus"}
             onChange={() => setModel("opus")}
           />
@@ -297,7 +315,7 @@ function NewTicket({
             <span className={styles.muted}>petit ticket, plus rapide et plus économe</span>
           </span>
         </label>
-        <label>
+        <label hidden={model === "auto"}>
           Effort
           <select value={effort} onChange={(e) => setEffort(e.target.value as Effort)}>
             <option value="medium">Moyen : rapide</option>
@@ -913,7 +931,7 @@ export default function TicketsPage() {
         );
       } else if (to === "work" && (t.status === "idea" || t.status === "todo")) {
         ask(
-          `Envoyer « ${t.title} » à Claude (${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
+          `Envoyer « ${t.title} » à Claude (${t.auto ? "choix automatique, revu à l'envoi : " : ""}${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
           "Envoyer",
           () => run(() => ticketAction(t.id, "send"), "Envoyé à Claude")
         );
