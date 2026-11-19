@@ -529,7 +529,7 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
 
 const IMAGE_TYPES = "image/*,video/mp4,video/quicktime,video/webm";
 
-/** Noter une idée (colonne Idées) : texte (1re ligne = titre), images collées ou choisies (bouton Photo, téléphone). */
+/** Noter une idée (colonne Idées) : texte en vrac (carte écrite par l'IA), images collées ou choisies (bouton Photo, téléphone). */
 function IdeaCompose({ run }: { run: Run }) {
   const [idea, setIdea] = useState("");
   // Fichiers et leur aperçu en data: (la CSP du site refuse les images blob:)
@@ -554,17 +554,17 @@ function IdeaCompose({ run }: { run: Run }) {
       className={styles.compose}
       onSubmit={(e) => {
         e.preventDefault();
-        const [first, ...rest] = idea.split("\n");
         if (!ready) {
           return;
         }
         void run(
           async () => {
-            const { ticket } = await createTicket({
-              status: "idea",
-              title: first.trim() || "Idée en image",
-              detail: rest.join("\n").trim(),
-            });
+            // Texte tapé en vrac : carte (titre et description) écrite par l'IA côté serveur
+            const { ticket } = await createTicket(
+              idea.trim()
+                ? { status: "idea", detail: idea.trim(), write: true }
+                : { status: "idea", title: "Idée en image", detail: "" }
+            );
             for (const f of files) {
               await uploadFile(ticket.id, f.file);
             }
@@ -578,8 +578,8 @@ function IdeaCompose({ run }: { run: Run }) {
       <TextBox
         rows={2}
         value={idea}
-        placeholder="Une idée (1re ligne : le titre), ou colle une image"
-        aria-label="Nouvelle idée : la première ligne sert de titre ; une image collée y est jointe"
+        placeholder="Une idée, en vrac : l'IA en fait la carte. Ou colle une image"
+        aria-label="Nouvelle idée, en vrac : l'IA en écrit le titre et la description ; une image collée y est jointe"
         onChange={setIdea}
         onPaste={(e) => {
           if (add([...e.clipboardData.files])) {

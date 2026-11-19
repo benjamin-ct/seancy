@@ -18,7 +18,7 @@ import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./c
 import { cloudflareUsage } from "./cloudflare-usage.ts";
 import { claudeAlerts, cloudflareAlerts, newAlerts } from "./quota-alerts.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
-import { ticketTitle } from "./ticket-title.ts";
+import { ideaCard, ticketTitle } from "./ticket-title.ts";
 import {
   ciState,
   dependencies,
@@ -939,6 +939,10 @@ export async function handleTickets(
       );
       data.author = access.admin ? access.name : "Claude";
       data.authorEmail = access.admin ? access.email : "";
+      // Idée tapée en vrac (colonne Idées) : carte écrite par l'IA, titre et description (worker/ticket-title.ts)
+      if (b.status === "idea" && b.write === true && data.detail.trim()) {
+        Object.assign(data, await ideaCard(env, data.detail));
+      }
       if (!data.title) {
         // Titre laissé vide : écrit par l'IA d'après la description (worker/ticket-title.ts)
         data.title = await ticketTitle(env, data.detail);

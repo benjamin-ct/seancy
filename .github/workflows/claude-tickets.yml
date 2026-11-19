@@ -73,6 +73,7 @@ jobs:
             echo base=develop >> "$GITHUB_OUTPUT"; echo prefix=ticket/ >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v7
+        id: checkout
         with:
           fetch-depth: 0
           token: ${{ secrets.TICKETS_GITHUB_TOKEN }}
@@ -179,7 +180,15 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           EXEC: ${{ steps.claude.outputs.execution_file }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
         run: |
+          # Code non récupéré (jeton GitHub refusé) : scripts/tickets.ts absent, l'arrêt est noté directement par l'API
+          if [ "$CHECKOUT" = failure ]; then
+            jq -n --arg run "$RUN" '{stage: "fail", text: "Le code n'"'"'a pas pu être récupéré : jeton GitHub refusé (secret TICKETS_GITHUB_TOKEN du dépôt, à remettre), puis relance le ticket", run: $run, issue: ""}' |
+              curl -sS --fail-with-body -X POST -H "x-tickets-key: $SEANCY_TICKETS_KEY" -H "content-type: application/json" --data @- \
+                "https://seancy.creusatbenjamin.workers.dev/api/tickets/$ID/progress"
+            exit 0
+          fi
           quota=$(node -e '
             const fs = require("fs"), f = process.env.EXEC;
             let list = [];

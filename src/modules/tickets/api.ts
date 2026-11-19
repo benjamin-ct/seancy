@@ -143,8 +143,10 @@ export const saveLabel = (change: {
   from?: string;
   remove?: boolean;
 }) => post<{ labels: LabelDef[] }>("/labels", change);
-export const createTicket = (data: Partial<Ticket> & { send?: boolean; before?: string }) =>
-  post<{ ticket: Ticket }>("", data);
+// write : idée tapée en vrac, titre et description écrits par l'IA côté serveur
+export const createTicket = (
+  data: Partial<Ticket> & { send?: boolean; before?: string; write?: boolean }
+) => post<{ ticket: Ticket }>("", data);
 export const editTicket = (id: string, fields: Partial<Ticket>) =>
   post<{ ticket: Ticket }>(`/${id}`, fields, "PATCH");
 export const deleteTicket = (id: string) => request<{ ok: true }>(`/${id}`, { method: "DELETE" });
