@@ -140,8 +140,8 @@ jobs:
             let list = [];
             try { const raw = fs.readFileSync(process.env.EXEC, "utf8"); try { list = [].concat(JSON.parse(raw)); } catch { list = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } }); } } catch {}
             const den = list.filter((m) => m?.type === "result").flatMap((m) => m.permission_denials || []);
-            // Dépôt public : le résumé ne montre que l'outil et le nom de la commande, jamais ses arguments
-            // (ils peuvent contenir le texte d'un ticket ou d'un compte rendu)
+            // Dépôt public : le résumé ne montre que l’outil et le nom de la commande, jamais ses arguments
+            // (ils peuvent contenir le texte d’un ticket ou d’un compte rendu)
             const lines = [...new Set(den.map((d) => `- ${d.tool_name}: ${String(d.tool_input?.command ?? "").trim().split(/\s+/).slice(0, 2).join(" ")}`))];
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Commandes refusées à Claude (${den.length})\n${lines.join("\n") || "Aucune"}\n`);
             console.log(lines.join("\n") || "Aucune commande refusée");'
