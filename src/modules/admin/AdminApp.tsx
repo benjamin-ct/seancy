@@ -235,6 +235,11 @@ export default function AdminApp() {
         )}
         <div className={styles.side}>
           {me?.admin && <span className={styles.who}>{me.name}</span>}
+          {/* Ordinateur : actualiser la page (téléphone : tirer vers le bas, PullToRefresh) */}
+          <button type="button" className={styles.refresh} onClick={() => window.location.reload()}>
+            <Icon name="refresh" size={16} />
+            Actualiser
+          </button>
           <a href={siteUrl} className={styles.siteLink}>
             Voir le site
           </a>
