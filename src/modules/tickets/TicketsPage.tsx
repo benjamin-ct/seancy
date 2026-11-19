@@ -75,6 +75,10 @@ interface Drag {
   offY: number;
 }
 
+// Étiquette « Bloqué — action requise » (Trello) ou équivalente : montrée en « ! » rouge sur la carte
+const isBlocked = (label: string) => /^bloqu/i.test(label.trim());
+const BLOCKED_TEXT = "En attente d'une réponse ou d'une action de notre part";
+
 function Mini({
   t,
   onOpen,
@@ -116,8 +120,12 @@ function Mini({
     );
   }
   if (t.status !== "done" && t.status !== "idea") {
-    labs.push({ text: `${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}` });
+    labs.push({
+      text: `${t.auto ? "Auto · " : ""}${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}`,
+    });
   }
+  const blocked = t.labels.some(isBlocked);
+  const shown = t.labels.filter((l) => !isBlocked(l));
   const cur = stepOf(t);
   const bar = t.status === "work" && !(live && (t.stage === "fail" || t.stage === "quota"));
   const prNo = prNumber(t.pr);
@@ -149,9 +157,20 @@ function Mini({
           draggable={false}
         />
       )}
-      {labs.length + t.labels.length > 0 && (
+      {labs.length + shown.length + (blocked ? 1 : 0) > 0 && (
         <span className={styles.labels}>
-          {t.labels.map((l) => (
+          {/* Étiquette « Bloqué… » : un « ! » rouge, en attente d'une réponse ou d'une action de notre part */}
+          {blocked && (
+            <span
+              className={styles.blocked}
+              role="img"
+              aria-label={BLOCKED_TEXT}
+              title={BLOCKED_TEXT}
+            >
+              !
+            </span>
+          )}
+          {shown.map((l) => (
             <Label key={l} name={l} />
           ))}
           {labs.map((l) => (
@@ -181,13 +200,21 @@ function Mini({
         )}
         {prNo && <span>#{prNo}</span>}
         {date && <small>{date}</small>}
-        {t.author && (
-          <span
-            className={styles.who}
-            title={`Ticket de ${t.author}`}
-            aria-label={`Ticket de ${t.author}`}
-          >
-            {t.author.slice(0, 1).toUpperCase()}
+        {(t.author || t.members.length > 0) && (
+          <span className={styles.whos}>
+            {[
+              ...(t.author ? [{ name: t.author, what: "Ticket de" }] : []),
+              ...t.members.map((p) => ({ name: p.name || p.email, what: "Avec" })),
+            ].map((p) => (
+              <span
+                key={`${p.what}${p.name}`}
+                className={styles.who}
+                title={`${p.what} ${p.name}`}
+                aria-label={`${p.what} ${p.name}`}
+              >
+                {p.name.slice(0, 1).toUpperCase()}
+              </span>
+            ))}
           </span>
         )}
       </span>
@@ -206,7 +233,7 @@ function NewTicket({
 }) {
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
-  const [model, setModel] = useState<"opus" | "sonnet">("opus");
+  const [model, setModel] = useState<"auto" | "opus" | "sonnet">("auto");
   const [effort, setEffort] = useState<Effort>("high");
   const [urgent, setUrgent] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -221,8 +248,10 @@ function NewTicket({
         const { ticket } = await createTicket({
           title: title.trim(),
           detail,
-          model,
+          // Automatique : modèle et effort choisis par le serveur d'après le ticket (worker/ticket-level.ts)
+          model: model === "auto" ? "opus" : model,
           effort,
+          auto: model === "auto",
           urgent,
           status: "todo",
         });
@@ -260,7 +289,7 @@ function NewTicket({
         single
         value={title}
         maxLength={200}
-        placeholder="Titre (facultatif : sinon la 1re ligne de la description)"
+        placeholder="Titre (facultatif : sinon écrit d'après la description)"
         aria-label="Titre"
         onChange={setTitle}
       />
@@ -274,6 +303,20 @@ function NewTicket({
       />
       <fieldset className={styles.models}>
         <legend>Modèle</legend>
+        <label className={styles.check}>
+          <input
+            type="radio"
+            name="model"
+            checked={model === "auto"}
+            onChange={() => setModel("auto")}
+          />
+          <span>
+            <b>Automatique</b>{" "}
+            <span className={styles.muted}>
+              modèle et effort choisis d'après le ticket (conseillé)
+            </span>
+          </span>
+        </label>
         <label className={styles.check}>
           <input
             type="radio"
@@ -297,7 +340,7 @@ function NewTicket({
             <span className={styles.muted}>petit ticket, plus rapide et plus économe</span>
           </span>
         </label>
-        <label>
+        <label hidden={model === "auto"}>
           Effort
           <select value={effort} onChange={(e) => setEffort(e.target.value as Effort)}>
             <option value="medium">Moyen : rapide</option>
@@ -463,6 +506,8 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
       <p className={styles.muted}>
         Ticket prêt à valider, arrêté, en pause, validé ou validation impossible : une notification
         qui ouvre le ticket, et le nombre de tickets qui attendent sur l'icône de l'appli installée.
+        Seulement pour tes tickets et ceux où tu t'es rajouté ; tout le monde la reçoit pour un
+        ticket sans personne aux notifications activées, et pour les releases.
       </p>
       <PushSetting run={run} />
       <ul className={styles.config}>
@@ -529,7 +574,7 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
 
 const IMAGE_TYPES = "image/*,video/mp4,video/quicktime,video/webm";
 
-/** Noter une idée (colonne Idées) : texte (1re ligne = titre), images collées ou choisies (bouton Photo, téléphone). */
+/** Noter une idée (colonne Idées) : texte en vrac (carte écrite par l'IA), images collées ou choisies (bouton Photo, téléphone). */
 function IdeaCompose({ run }: { run: Run }) {
   const [idea, setIdea] = useState("");
   // Fichiers et leur aperçu en data: (la CSP du site refuse les images blob:)
@@ -554,17 +599,17 @@ function IdeaCompose({ run }: { run: Run }) {
       className={styles.compose}
       onSubmit={(e) => {
         e.preventDefault();
-        const [first, ...rest] = idea.split("\n");
         if (!ready) {
           return;
         }
         void run(
           async () => {
-            const { ticket } = await createTicket({
-              status: "idea",
-              title: first.trim() || "Idée en image",
-              detail: rest.join("\n").trim(),
-            });
+            // Texte tapé en vrac : carte (titre et description) écrite par l'IA côté serveur
+            const { ticket } = await createTicket(
+              idea.trim()
+                ? { status: "idea", detail: idea.trim(), write: true }
+                : { status: "idea", title: "Idée en image", detail: "" }
+            );
             for (const f of files) {
               await uploadFile(ticket.id, f.file);
             }
@@ -578,8 +623,8 @@ function IdeaCompose({ run }: { run: Run }) {
       <TextBox
         rows={2}
         value={idea}
-        placeholder="Une idée (1re ligne : le titre), ou colle une image"
-        aria-label="Nouvelle idée : la première ligne sert de titre ; une image collée y est jointe"
+        placeholder="Une idée, en vrac : l'IA en fait la carte. Ou colle une image"
+        aria-label="Nouvelle idée, en vrac : l'IA en écrit le titre et la description ; une image collée y est jointe"
         onChange={setIdea}
         onPaste={(e) => {
           if (add([...e.clipboardData.files])) {
@@ -665,8 +710,8 @@ export default function TicketsPage() {
   // Téléphone : champ de recherche montré par la loupe de l'en-tête
   const [searching, setSearching] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  // « Les miens » : tickets créés par le compte connecté (les deux administrateurs partagent le tableau)
-  const [mine, setMine] = useState(false);
+  // Tickets d'une personne (adresse de l'auteur) ; « » : tous (les administrateurs partagent le tableau)
+  const [who, setWho] = useState("");
   // Fiche ouverte : son adresse est /tickets/<id> (lien à partager, bouton Retour qui la ferme) ;
   // mode : zone de réponse ouverte d'office (retouche, réouverture)
   const { ticketId = "" } = useParams();
@@ -850,11 +895,32 @@ export default function TicketsPage() {
   const cols = useMemo(
     () =>
       columns(
-        (tickets ?? []).filter((t) => !mine || t.authorEmail === (email ?? "").toLowerCase()),
+        (tickets ?? []).filter(
+          (t) => !who || t.authorEmail === who || t.members.some((p) => p.email === who)
+        ),
         query
       ),
-    [tickets, query, mine, email]
+    [tickets, query, who]
   );
+  // Auteurs et membres des tickets, le compte connecté d'abord ; nom de la page Tickets plutôt que celui de Trello
+  const people = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const t of tickets ?? []) {
+      if (t.authorEmail && (!names.has(t.authorEmail) || !t.trello)) {
+        names.set(t.authorEmail, t.author || t.authorEmail);
+      }
+    }
+    // Ajoutés à un ticket sans en avoir créé : ils ont aussi leur bouton
+    for (const t of tickets ?? []) {
+      for (const p of t.members) {
+        if (!names.has(p.email)) {
+          names.set(p.email, p.name || p.email);
+        }
+      }
+    }
+    const me = (email ?? "").toLowerCase();
+    return [...names].sort(([a], [b]) => Number(b === me) - Number(a === me) || a.localeCompare(b));
+  }, [tickets, email]);
   // Étiquettes définies (dans leur ordre), puis celles des tickets qui n'ont pas encore de couleur
   const labelsInfo = useMemo(() => {
     const names = labelDefs.map((d) => d.name);
@@ -913,7 +979,7 @@ export default function TicketsPage() {
         );
       } else if (to === "work" && (t.status === "idea" || t.status === "todo")) {
         ask(
-          `Envoyer « ${t.title} » à Claude (${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
+          `Envoyer « ${t.title} » à Claude (${t.auto ? "choix automatique, revu à l'envoi : " : ""}${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
           "Envoyer",
           () => run(() => ticketAction(t.id, "send"), "Envoyé à Claude")
         );
@@ -1163,21 +1229,24 @@ export default function TicketsPage() {
               <button
                 type="button"
                 className={styles.seg}
-                aria-pressed={!mine}
-                onClick={() => setMine(false)}
+                aria-pressed={!who}
+                onClick={() => setWho("")}
               >
                 Tous
               </button>
-              <button
-                type="button"
-                className={styles.seg}
-                aria-pressed={mine}
-                onClick={() => setMine(true)}
-              >
-                Les miens
-              </button>
+              {people.map(([address, name]) => (
+                <button
+                  key={address}
+                  type="button"
+                  className={styles.seg}
+                  aria-pressed={who === address}
+                  onClick={() => setWho(address)}
+                >
+                  {name}
+                </button>
+              ))}
             </div>
-            {/* Téléphone : zoom au bout de « Tous / Les miens », plus en bas de l'écran */}
+            {/* Téléphone : zoom au bout du choix des personnes, plus en bas de l'écran */}
             {tickets && zoomButton(`${styles.zoom} ${styles.zoomInline}`)}
             <button
               type="button"
@@ -1204,7 +1273,11 @@ export default function TicketsPage() {
         {!tickets ? (
           <p className={styles.muted}>Chargement…</p>
         ) : (
-          <div className={`${styles.board} ${small ? styles.boardSmall : ""}`} ref={boardRef}>
+          <div
+            className={`${styles.board} ${small ? styles.boardSmall : ""}`}
+            ref={boardRef}
+            data-no-pull
+          >
             {COLUMNS.map((c) => {
               const list = cols[c.key];
               const off = dragged && !canMove(dragged, c.key);

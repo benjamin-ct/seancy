@@ -1,4 +1,5 @@
 import { NavLink, Link, matchPath, useLocation, useNavigate } from "react-router-dom";
+import { ADMIN_ORIGIN } from "../../../core/lib/adminHost.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { searchMultiRanked, posterUrl } from "../../../core/api/tmdb.ts";
@@ -178,7 +179,7 @@ export default function NavBar() {
   const { pathname } = useLocation();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, admin } = useAuth();
   const { region } = useRegion();
   // Photo de profil à la place de la silhouette générique, quand elle est
   // disponible (sinon on garde l'icône : repli géré au rendu, pas ici).
@@ -445,6 +446,16 @@ export default function NavBar() {
           {/* Profil réservé aux membres connectés (voir ProfilePage) : un
               visiteur anonyme n'y a aucun accès visible, seulement
               « Connexion ». La déconnexion se fait depuis Profil › Compte. */}
+          {/* Administrateur : lien vers l'espace admin (téléphone : dans Profil › Compte) */}
+          {authenticated && admin && (
+            <a
+              href={ADMIN_ORIGIN}
+              className={`${styles.adminBtn} ${styles.desktopOnly}`}
+              title={t("navBar.adminTitle")}
+            >
+              {t("navBar.admin")}
+            </a>
+          )}
           {authenticated ? (
             <NavLink
               to="/profil"

@@ -31,6 +31,10 @@ export interface Ticket {
   model: Model;
   effort: Effort;
   urgent: boolean;
+  /** Modèle et effort choisis automatiquement d'après le ticket, à chaque passage de Claude. */
+  auto: boolean;
+  /** Dernier choix automatique et sa raison (« Sonnet · moyen : … »). */
+  autoWhy: string;
   sent: number;
   answer: string;
   pr: string;
@@ -57,6 +61,8 @@ export interface Ticket {
   /** Qui a créé le ticket (nom affiché) ; « Claude » pour un ticket créé par une session Claude. */
   author: string;
   authorEmail: string;
+  /** Autres administrateurs ajoutés au ticket (« Me rajouter » dans la fiche). */
+  members: { email: string; name: string }[];
   createdAt: number;
 }
 /** Étiquette partagée : nom et couleur Trello (« green », « red_dark »… ; vide = sans couleur). */
@@ -143,10 +149,17 @@ export const saveLabel = (change: {
   from?: string;
   remove?: boolean;
 }) => post<{ labels: LabelDef[] }>("/labels", change);
-export const createTicket = (data: Partial<Ticket> & { send?: boolean; before?: string }) =>
-  post<{ ticket: Ticket }>("", data);
+// write : idée tapée en vrac, titre et description écrits par l'IA côté serveur
+export const createTicket = (
+  data: Partial<Ticket> & { send?: boolean; before?: string; write?: boolean }
+) => post<{ ticket: Ticket }>("", data);
 export const editTicket = (id: string, fields: Partial<Ticket>) =>
   post<{ ticket: Ticket }>(`/${id}`, fields, "PATCH");
+/** Titre et description réécrits par l'IA d'après tout le ticket (ajouts, liens, images). */
+export const rewriteTicket = (id: string) => post<{ ticket: Ticket }>(`/${id}/rewrite`, {});
+/** Le compte connecté ajouté au ticket (join) ou retiré. */
+export const joinTicket = (id: string, join: boolean) =>
+  post<{ ticket: Ticket }>(`/${id}/members`, { join });
 export const deleteTicket = (id: string) => request<{ ok: true }>(`/${id}`, { method: "DELETE" });
 export const moveTicket = (id: string, to: TicketStatus | undefined, before: string) =>
   post<{ ticket: Ticket }>(`/${id}/move`, { to, before });

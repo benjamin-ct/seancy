@@ -297,6 +297,26 @@
   background: var(--accent-strong);
 }
 
+/* Lien vers l'espace admin (administrateurs seulement) */
+.adminBtn {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.adminBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
 .desktopOnly {
   display: flex;
 }

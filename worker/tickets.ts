@@ -18,6 +18,16 @@ import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./c
 import { cloudflareUsage } from "./cloudflare-usage.ts";
 import { claudeAlerts, cloudflareAlerts, newAlerts } from "./quota-alerts.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
+import { ask, ideaCard, rewriteCard, ticketTitle, type AskImage } from "./ticket-title.ts";
+import {
+  FACTS_ASK,
+  LEVELS,
+  finalLevel,
+  levelFrom,
+  levelOf,
+  levelText,
+  parseFacts,
+} from "./ticket-level.ts";
 import {
   ciState,
   dependencies,
@@ -341,11 +351,19 @@ export async function pushAdmins(
     });
     return;
   }
-  const { results } = await env.DB.prepare("SELECT endpoint, p256dh, auth FROM ticket_push").all<{
-    endpoint: string;
-    p256dh: string;
-    auth: string;
-  }>();
+  const { results: all } = await env.DB.prepare(
+    "SELECT endpoint, p256dh, auth, email FROM ticket_push"
+  ).all<{ endpoint: string; p256dh: string; auth: string; email: string }>();
+  // Notification d'un ticket : à son auteur et à ses membres (« Me rajouter ») ; à tous les
+  // administrateurs si aucun d'eux n'a activé les notifications (ticket de Claude, import Trello…)
+  // et pour ce qui ne concerne pas un ticket (release, quota)
+  const row = id ? await loadRow(env, id) : null;
+  const d = row ? parseData(row.data) : null;
+  const people = new Set(
+    d ? [d.authorEmail, ...d.members.map((m) => m.email)].filter(Boolean) : []
+  );
+  const mine = all.filter((s) => people.has((s.email || "").toLowerCase()));
+  const results = mine.length ? mine : all;
   if (!results.length) {
     return;
   }
@@ -426,7 +444,41 @@ async function cancelRuns(env: Env, numbers: string[]): Promise<void> {
   }
 }
 
+/**
+ * Modèle et effort choisis automatiquement (ticket en « Auto ») d'après sa description : l'IA décrit le
+ * ticket, la grille de worker/ticket-level.ts décide. Enregistrés dans le ticket avec leur raison ; si
+ * l'IA ne répond pas, le ticket garde ses réglages. retouch : passage suivant (retouche, relance,
+ * correction automatique, réouverture), jamais en dessous du précédent.
+ */
+async function withLevel(env: Env, t: Ticket, retouch = false): Promise<Ticket> {
+  if (!t.auto) {
+    return t;
+  }
+  try {
+    const facts = parseFacts(
+      await ask(env, `${FACTS_ASK}${t.title}\n${t.detail.slice(0, 3000)}`, 200)
+    );
+    if (!facts) {
+      return t;
+    }
+    const base = levelOf(facts);
+    const { level, extra } = finalLevel(base.level, {
+      urgent: t.urgent,
+      retouch,
+      previous: levelFrom(t.model, t.effort),
+      retouches: t.history.filter((e) => e.kind === "message" && e.who === "moi").length,
+      autofix: t.autofix,
+    });
+    const why = levelText(level, [base.why, extra].filter(Boolean).join(" ; "));
+    return await act(env, t.id, { type: "level", ...LEVELS[level], why });
+  } catch (err) {
+    console.error("Choix automatique du modèle :", err);
+    return t;
+  }
+}
+
 async function openIssue(env: Env, t: Ticket, reopen = false): Promise<void> {
+  t = await withLevel(env, t, reopen);
   await closeTicketIssues(env, t.id);
   await gh(env)(`/repos/${repoOf(env)}/issues`, {
     method: "POST",
@@ -438,6 +490,7 @@ async function openIssue(env: Env, t: Ticket, reopen = false): Promise<void> {
 async function dispatch(env: Env, t: Ticket, why: string): Promise<void> {
   const n = prNumber(t.pr);
   if (n) {
+    t = await withLevel(env, t, true);
     await gh(env)(`/repos/${repoOf(env)}/issues/${n}/comments`, {
       method: "POST",
       body: { body: prComment(t.id, t, why) },
@@ -845,6 +898,27 @@ async function putFile(env: Env, request: Request, id: string, url: URL): Promis
   return json({ ok: true, file: { id: fid, name, type, size: bytes.length } });
 }
 
+// Images d'un ticket pour la réécriture par Claude : 3 au plus, 3 Mo en tout (types que Claude lit)
+const AI_IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+async function imagesOf(env: Env, id: string): Promise<AskImage[]> {
+  const rows = await env.DB.prepare(
+    `SELECT type, data FROM ticket_files WHERE ticket_id = ? AND type IN (${AI_IMAGES.map(() => "?").join(",")}) AND size <= 1600000 ORDER BY created_at DESC LIMIT 3`
+  )
+    .bind(id, ...AI_IMAGES)
+    .all<{ type: string; data: ArrayBuffer | number[] }>();
+  let total = 0;
+  const out: AskImage[] = [];
+  for (const r of rows.results ?? []) {
+    const bytes = r.data instanceof ArrayBuffer ? new Uint8Array(r.data) : new Uint8Array(r.data);
+    total += bytes.length;
+    if (total > 3_000_000) {
+      break;
+    }
+    out.push({ type: r.type, data: Buffer.from(bytes).toString("base64") });
+  }
+  return out.reverse();
+}
+
 async function getFile(env: Env, fid: string): Promise<Response> {
   const f = await env.DB.prepare("SELECT name, type, data FROM ticket_files WHERE id = ?")
     .bind(fid)
@@ -938,9 +1012,13 @@ export async function handleTickets(
       );
       data.author = access.admin ? access.name : "Claude";
       data.authorEmail = access.admin ? access.email : "";
+      // Idée tapée en vrac (colonne Idées) : carte écrite par l'IA, titre et description (worker/ticket-title.ts)
+      if (b.status === "idea" && b.write === true && data.detail.trim()) {
+        Object.assign(data, await ideaCard(env, data.detail));
+      }
       if (!data.title) {
-        const first = data.detail.split("\n").find((l) => l.trim()) ?? "";
-        data.title = first.trim().slice(0, 120);
+        // Titre laissé vide : écrit par l'IA d'après la description (worker/ticket-title.ts)
+        data.title = await ticketTitle(env, data.detail);
       }
       if (!data.title) {
         throw new TicketError("Écris un titre ou une description");
@@ -964,6 +1042,12 @@ export async function handleTickets(
         } catch (err) {
           await act(env, id, { type: "unsend" }, now, access.name).catch(() => {});
           throw err;
+        }
+      } else if (status === "todo" && data.auto) {
+        // Choix automatique visible avant l'envoi (refait à l'envoi)
+        const t = await loadTicket(env, id);
+        if (t) {
+          await withLevel(env, t);
         }
       }
       return json({ ok: true, ticket: await loadTicket(env, id) });
@@ -1111,10 +1195,41 @@ export async function handleTickets(
     }
     if (!sub && m === "PATCH") {
       adminOnly();
-      return json({
-        ok: true,
-        ticket: await act(env, id, { type: "edit", fields: await body(request) }, now, access.name),
-      });
+      const fields = await body(request);
+      let t = await act(env, id, { type: "edit", fields }, now, access.name);
+      // Ticket en « Auto » pas encore chez Claude : choix refait quand ce qui le décide change
+      if (t.auto && !t.sent && ["title", "detail", "urgent", "auto"].some((k) => k in fields)) {
+        t = await withLevel(env, t);
+      }
+      return json({ ok: true, ticket: t });
+    }
+    if (sub === "rewrite" && m === "POST") {
+      adminOnly();
+      const t = await loadTicket(env, id);
+      if (!t) {
+        throw new TicketError("Ticket introuvable", 404);
+      }
+      const card =
+        env.ANTHROPIC_API_KEY || env.AI ? await rewriteCard(env, t, await imagesOf(env, id)) : null;
+      if (!card) {
+        throw new TicketError("L'IA n'a pas répondu : réessaie dans un moment", 503);
+      }
+      let next = await act(env, id, { type: "edit", fields: card }, now, access.name);
+      if (next.auto && !next.sent) {
+        next = await withLevel(env, next);
+      }
+      return json({ ok: true, ticket: next });
+    }
+    if (sub === "members" && m === "POST") {
+      adminOnly();
+      const b = await body(request);
+      const t = await act(
+        env,
+        id,
+        { type: "member", email: access.email, name: access.name, join: b.join !== false },
+        now
+      );
+      return json({ ok: true, ticket: t });
     }
     if (!sub && m === "DELETE") {
       adminOnly();

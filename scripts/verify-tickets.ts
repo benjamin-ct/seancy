@@ -29,6 +29,14 @@ import {
   type TrelloCard,
 } from "./trelloLib.ts";
 import { parseBlocks, parseInline, safeHref } from "../src/modules/tickets/markdown.ts";
+import {
+  cleanTitle,
+  firstLine,
+  ideaFrom,
+  rewriteFrom,
+  splitOrigin,
+} from "../worker/ticket-title.ts";
+import { finalLevel, levelFrom, levelOf, parseFacts, type Facts } from "../worker/ticket-level.ts";
 
 let passed = 0;
 let failed = 0;
@@ -301,6 +309,106 @@ function fakeGh(
   return { gh, calls };
 }
 const main = async () => {
+  const facts = (f: Partial<Facts>): Facts => ({
+    nature: "bug",
+    ampleur: "petite",
+    zones: 1,
+    serveur: false,
+    donnees: false,
+    securite: false,
+    cause_inconnue: false,
+    incertain: false,
+    ...f,
+  });
+  check(
+    "Choix automatique : grille (petit style, bug localisé, fonction moyenne, refonte avec serveur et sécurité)",
+    [
+      levelOf(facts({ nature: "texte_ou_style" })).level,
+      levelOf(facts({ ampleur: "moyenne" })).level,
+      levelOf(facts({ nature: "nouveaute", ampleur: "moyenne", zones: 3, serveur: true })).level,
+      levelOf(
+        facts({
+          nature: "amelioration",
+          ampleur: "grande",
+          zones: 5,
+          serveur: true,
+          securite: true,
+        })
+      ).level,
+      levelOf(facts({ nature: "bug", ampleur: "petite", cause_inconnue: true, zones: 3 })).level,
+    ],
+    [0, 1, 2, 3, 1]
+  );
+  check(
+    "Choix automatique : raison lisible",
+    levelOf(facts({ nature: "nouveaute", ampleur: "moyenne", zones: 3, serveur: true })).why,
+    "nouvelle fonction d'ampleur moyenne, 3 parties à modifier, serveur"
+  );
+  const ctx = { urgent: false, retouch: false, previous: 0 as const, retouches: 0, autofix: 0 };
+  check(
+    "Choix automatique : urgence au moins Opus · élevé, retouche jamais en dessous du passage précédent, un cran de plus après deux retouches",
+    [
+      finalLevel(0, { ...ctx, urgent: true }).level,
+      finalLevel(0, { ...ctx, retouch: true, previous: 2 }).level,
+      finalLevel(1, { ...ctx, retouch: true, previous: 1, retouches: 2 }).level,
+      finalLevel(3, { ...ctx, retouch: true, previous: 3, autofix: 1 }).level,
+      finalLevel(1, { ...ctx, previous: 3 }).level,
+      levelFrom("sonnet", "medium"),
+      levelFrom("opus", "max"),
+    ],
+    [2, 2, 2, 3, 1, 0, 3]
+  );
+  check(
+    "Choix automatique : réponse de l'IA lue (JSON entouré de texte, zones bornées), illisible : null",
+    [
+      parseFacts('Voici : {"nature":"bug","ampleur":"moyenne","zones":9,"serveur":true}')?.zones,
+      parseFacts('{"nature":"autre","ampleur":"petite"}'),
+      parseFacts("pas de JSON"),
+    ],
+    [6, null, null]
+  );
+  check(
+    "Titre automatique : réponse du modèle nettoyée, 1re ligne en secours",
+    [
+      cleanTitle("« Clarifier le bouton Réglages du profil ».", "secours"),
+      cleanTitle("Titre : Bouton réglages plus clair\nAutre ligne", "secours"),
+      cleanTitle("   ", "secours"),
+      cleanTitle("x".repeat(200), "secours"),
+      firstLine("\n  Première ligne  \nSuite"),
+    ],
+    [
+      "Clarifier le bouton Réglages du profil",
+      "Bouton réglages plus clair",
+      "secours",
+      "secours",
+      "Première ligne",
+    ]
+  );
+  check(
+    "Carte d'idée : titre et description de l'IA, idée d'origine gardée ; sinon l'idée telle quelle",
+    [
+      ideaFrom(
+        "Bouton Réglages plus clair\n\nRendre le bouton Réglages du profil plus explicite.",
+        "bouton reglage pas clair"
+      ),
+      ideaFrom(
+        "Modifier sa page de profil\n\nPouvoir modifier sa page de profil",
+        "Pouvoir modifier sa page de profil"
+      ),
+      ideaFrom("Titre seul", "Ma ligne\nla suite"),
+      ideaFrom("", "Ma ligne"),
+    ],
+    [
+      {
+        title: "Bouton Réglages plus clair",
+        detail:
+          "Rendre le bouton Réglages du profil plus explicite.\n\n**Idée d'origine :** bouton reglage pas clair",
+      },
+      { title: "Modifier sa page de profil", detail: "Pouvoir modifier sa page de profil" },
+      { title: "Ma ligne", detail: "la suite" },
+      { title: "Ma ligne", detail: "" },
+    ]
+  );
   const behind = fakeGh(2, []);
   check(
     "PR en retard : base fusionnée dedans, attente",
@@ -614,6 +722,74 @@ const main = async () => {
       { k: "hr" },
     ]
   );
+
+  // Membres d'un ticket (« Me rajouter ») et réécriture par l'IA
+  {
+    const base = {
+      status: "todo" as TicketStatus,
+      data: { ...EMPTY_DATA, title: "T", authorEmail: "a@x.fr" },
+    };
+    const joined = applyAction(
+      base,
+      { type: "member", email: "B@x.fr", name: "Bea", join: true },
+      1
+    );
+    check("Membre : ajouté (adresse en minuscules)", joined.data.members, [
+      { email: "b@x.fr", name: "Bea" },
+    ]);
+    check(
+      "Membre : pas de doublon",
+      applyAction(joined, { type: "member", email: "b@x.fr", name: "Bea", join: true }, 2).data
+        .members.length,
+      1
+    );
+    check(
+      "Membre : retiré",
+      applyAction(joined, { type: "member", email: "b@x.fr", name: "", join: false }, 3).data
+        .members,
+      []
+    );
+    let refused = false;
+    try {
+      applyAction(base, { type: "member", email: "a@x.fr", name: "A", join: true }, 4);
+    } catch {
+      refused = true;
+    }
+    check("Membre : l'auteur ne s'ajoute pas", refused, true);
+    check("Membre : pas d'historique", joined.data.history, []);
+    check(
+      "Membres : nettoyés (adresse invalide retirée)",
+      cleanData({ members: [{ email: "x" }, { email: "c@x.fr", name: "C" }] }).members,
+      [{ email: "c@x.fr", name: "C" }]
+    );
+    check("Membres : ancien ticket sans le champ", cleanData({ title: "x" }).members, []);
+    check(
+      "Réécriture : idée d'origine séparée",
+      splitOrigin("Texte\n\n**Idée d'origine :** brut"),
+      { body: "Texte", origin: "brut" }
+    );
+    check(
+      "Réécriture : l'idée d'origine d'avant est gardée",
+      rewriteFrom("Nouveau titre\n\nNouvelle description.", {
+        title: "T",
+        detail: "Texte + ajout\n\n**Idée d'origine :** brut",
+      }),
+      { title: "Nouveau titre", detail: "Nouvelle description.\n\n**Idée d'origine :** brut" }
+    );
+    check(
+      "Réécriture : sans idée d'origine, l'ancienne description le devient",
+      rewriteFrom("Titre : Nouveau\n\nDescription : Propre.", {
+        title: "T",
+        detail: "vieux texte",
+      }),
+      { title: "Nouveau", detail: "Propre.\n\n**Idée d'origine :** vieux texte" }
+    );
+    check(
+      "Réécriture : réponse illisible",
+      rewriteFrom("Juste un titre", { title: "T", detail: "" }),
+      null
+    );
+  }
 
   console.log(`\n${passed} OK, ${failed} en échec`);
   process.exit(failed ? 1 : 0);

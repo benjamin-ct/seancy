@@ -1,6 +1,8 @@
 name: Tickets (passage)
 
-# Fait avancer les tickets envoyés à Claude toutes les 10 minutes : fusion des
+# Secours de la tâche planifiée du Worker de l'admin (toutes les 2 minutes,
+# wrangler.admin.jsonc), GitHub ne lançant ce workflow que toutes les quelques
+# heures. Fait avancer les tickets envoyés à Claude toutes les 10 minutes : fusion des
 # tickets validés en file (une fois la PR à jour et la CI verte), relance des
 # tickets en pause faute de quota Claude, preview notée dans les tickets à
 # valider (POST /api/tickets/tick, worker/tickets.ts). Remplace une tâche
