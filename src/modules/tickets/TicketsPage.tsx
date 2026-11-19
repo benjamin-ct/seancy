@@ -260,7 +260,7 @@ function NewTicket({
         single
         value={title}
         maxLength={200}
-        placeholder="Titre (facultatif : sinon la 1re ligne de la description)"
+        placeholder="Titre (facultatif : sinon écrit d'après la description)"
         aria-label="Titre"
         onChange={setTitle}
       />
