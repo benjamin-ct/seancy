@@ -220,23 +220,6 @@
     white-space: nowrap;
   }
 
-  /* Réglages : le libellé reste visible sur mobile, une icône d'engrenage
-     seule n'était pas assez claire. */
-  .settingsAction {
-    width: auto;
-    padding: 0 14px;
-    gap: 7px;
-    font-size: 14px;
-  }
-
-  .settingsAction .actionLabel {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip: auto;
-  }
-
   /* Partager : sur mobile, depuis l'onglet Compte (feuille de partage). */
   .shareAction {
     display: none;

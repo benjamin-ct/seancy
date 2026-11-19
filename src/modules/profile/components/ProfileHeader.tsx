@@ -133,7 +133,7 @@ export default function ProfileHeader() {
         )}
         <Link
           to="/reglages"
-          className={`${styles.action} ${styles.settingsAction}`}
+          className={styles.action}
           aria-label={t("settings.title")}
           title={t("settings.title")}
         >
