@@ -1236,7 +1236,11 @@ export default function TicketsPage() {
         {!tickets ? (
           <p className={styles.muted}>Chargement…</p>
         ) : (
-          <div className={`${styles.board} ${small ? styles.boardSmall : ""}`} ref={boardRef}>
+          <div
+            className={`${styles.board} ${small ? styles.boardSmall : ""}`}
+            ref={boardRef}
+            data-no-pull
+          >
             {COLUMNS.map((c) => {
               const list = cols[c.key];
               const off = dragged && !canMove(dragged, c.key);
