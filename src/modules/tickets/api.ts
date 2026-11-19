@@ -19,6 +19,8 @@ export interface TicketFile {
   name: string;
   type: string;
   size: number;
+  /** Date d'ajout (ms) : place la pièce jointe dans le fil de la conversation. */
+  at?: number;
 }
 export interface Ticket {
   id: string;

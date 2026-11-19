@@ -610,6 +610,27 @@ export default function TicketSheet({
     </section>
   );
 
+  // Aperçu d'une pièce jointe : image ou vidéo ouverte dans la visionneuse, autre fichier dans un onglet
+  const fileView = (f: (typeof t.files)[number]) =>
+    viewable(f) ? (
+      <button
+        type="button"
+        className={styles.thumb}
+        aria-label={`Voir ${f.name}`}
+        onClick={() => setViewing(media.indexOf(f))}
+      >
+        {/^image\//.test(f.type) ? (
+          <img src={fileUrl(f)} alt="" loading="lazy" />
+        ) : (
+          <span>▶ {f.name}</span>
+        )}
+      </button>
+    ) : (
+      <a href={fileUrl(f)} target="_blank" rel="noopener noreferrer">
+        <span>{f.name}</span>
+      </a>
+    );
+
   const attachments = (
     <section className={styles.sec}>
       <h3>
@@ -620,24 +641,7 @@ export default function TicketSheet({
         <div className={styles.files}>
           {t.files.map((f) => (
             <span key={f.id} className={styles.file}>
-              {viewable(f) ? (
-                <button
-                  type="button"
-                  className={styles.thumb}
-                  aria-label={`Voir ${f.name}`}
-                  onClick={() => setViewing(media.indexOf(f))}
-                >
-                  {/^image\//.test(f.type) ? (
-                    <img src={fileUrl(f)} alt="" loading="lazy" />
-                  ) : (
-                    <span>▶ {f.name}</span>
-                  )}
-                </button>
-              ) : (
-                <a href={fileUrl(f)} target="_blank" rel="noopener noreferrer">
-                  <span>{f.name}</span>
-                </a>
-              )}
+              {fileView(f)}
               {editable && (
                 <button
                   type="button"
@@ -827,6 +831,37 @@ export default function TicketSheet({
             {c.author || "Trello"} <small>{when(c.at)} · sur Trello</small>
           </b>
           <Markdown text={c.text} />
+        </li>
+      ),
+    });
+  }
+  // Pièces jointes dans le fil, à leur date d'ajout ; celles ajoutées ensemble (2 minutes) dans une seule bulle
+  const added: (typeof t.files)[] = [];
+  for (const f of [...t.files].filter((x) => x.at).sort((a, b) => (a.at ?? 0) - (b.at ?? 0))) {
+    const last = added[added.length - 1];
+    if (last && (f.at ?? 0) - (last[last.length - 1].at ?? 0) < 120_000) {
+      last.push(f);
+    } else {
+      added.push([f]);
+    }
+  }
+  for (const group of added) {
+    const at = group[0].at ?? 0;
+    activity.push({
+      at,
+      node: (
+        <li key={`f${group[0].id}`} className={`${styles.bubble} ${styles.me}`}>
+          <b>
+            {group.length > 1 ? `${group.length} pièces jointes` : "Pièce jointe"}{" "}
+            <small>{when(at)}</small>
+          </b>
+          <div className={styles.files}>
+            {group.map((f) => (
+              <span key={f.id} className={styles.file}>
+                {fileView(f)}
+              </span>
+            ))}
+          </div>
         </li>
       ),
     });
