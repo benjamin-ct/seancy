@@ -351,11 +351,19 @@ export async function pushAdmins(
     });
     return;
   }
-  const { results } = await env.DB.prepare("SELECT endpoint, p256dh, auth FROM ticket_push").all<{
-    endpoint: string;
-    p256dh: string;
-    auth: string;
-  }>();
+  const { results: all } = await env.DB.prepare(
+    "SELECT endpoint, p256dh, auth, email FROM ticket_push"
+  ).all<{ endpoint: string; p256dh: string; auth: string; email: string }>();
+  // Notification d'un ticket : à son auteur et à ses membres (« Me rajouter ») ; à tous les
+  // administrateurs si aucun d'eux n'a activé les notifications (ticket de Claude, import Trello…)
+  // et pour ce qui ne concerne pas un ticket (release, quota)
+  const row = id ? await loadRow(env, id) : null;
+  const d = row ? parseData(row.data) : null;
+  const people = new Set(
+    d ? [d.authorEmail, ...d.members.map((m) => m.email)].filter(Boolean) : []
+  );
+  const mine = all.filter((s) => people.has((s.email || "").toLowerCase()));
+  const results = mine.length ? mine : all;
   if (!results.length) {
     return;
   }
