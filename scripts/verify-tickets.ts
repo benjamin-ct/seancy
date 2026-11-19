@@ -29,7 +29,13 @@ import {
   type TrelloCard,
 } from "./trelloLib.ts";
 import { parseBlocks, parseInline, safeHref } from "../src/modules/tickets/markdown.ts";
-import { cleanTitle, firstLine, ideaFrom } from "../worker/ticket-title.ts";
+import {
+  cleanTitle,
+  firstLine,
+  ideaFrom,
+  rewriteFrom,
+  splitOrigin,
+} from "../worker/ticket-title.ts";
 import { finalLevel, levelFrom, levelOf, parseFacts, type Facts } from "../worker/ticket-level.ts";
 
 let passed = 0;
@@ -716,6 +722,74 @@ const main = async () => {
       { k: "hr" },
     ]
   );
+
+  // Membres d'un ticket (« Me rajouter ») et réécriture par l'IA
+  {
+    const base = {
+      status: "todo" as TicketStatus,
+      data: { ...EMPTY_DATA, title: "T", authorEmail: "a@x.fr" },
+    };
+    const joined = applyAction(
+      base,
+      { type: "member", email: "B@x.fr", name: "Bea", join: true },
+      1
+    );
+    check("Membre : ajouté (adresse en minuscules)", joined.data.members, [
+      { email: "b@x.fr", name: "Bea" },
+    ]);
+    check(
+      "Membre : pas de doublon",
+      applyAction(joined, { type: "member", email: "b@x.fr", name: "Bea", join: true }, 2).data
+        .members.length,
+      1
+    );
+    check(
+      "Membre : retiré",
+      applyAction(joined, { type: "member", email: "b@x.fr", name: "", join: false }, 3).data
+        .members,
+      []
+    );
+    let refused = false;
+    try {
+      applyAction(base, { type: "member", email: "a@x.fr", name: "A", join: true }, 4);
+    } catch {
+      refused = true;
+    }
+    check("Membre : l'auteur ne s'ajoute pas", refused, true);
+    check("Membre : pas d'historique", joined.data.history, []);
+    check(
+      "Membres : nettoyés (adresse invalide retirée)",
+      cleanData({ members: [{ email: "x" }, { email: "c@x.fr", name: "C" }] }).members,
+      [{ email: "c@x.fr", name: "C" }]
+    );
+    check("Membres : ancien ticket sans le champ", cleanData({ title: "x" }).members, []);
+    check(
+      "Réécriture : idée d'origine séparée",
+      splitOrigin("Texte\n\n**Idée d'origine :** brut"),
+      { body: "Texte", origin: "brut" }
+    );
+    check(
+      "Réécriture : l'idée d'origine d'avant est gardée",
+      rewriteFrom("Nouveau titre\n\nNouvelle description.", {
+        title: "T",
+        detail: "Texte + ajout\n\n**Idée d'origine :** brut",
+      }),
+      { title: "Nouveau titre", detail: "Nouvelle description.\n\n**Idée d'origine :** brut" }
+    );
+    check(
+      "Réécriture : sans idée d'origine, l'ancienne description le devient",
+      rewriteFrom("Titre : Nouveau\n\nDescription : Propre.", {
+        title: "T",
+        detail: "vieux texte",
+      }),
+      { title: "Nouveau", detail: "Propre.\n\n**Idée d'origine :** vieux texte" }
+    );
+    check(
+      "Réécriture : réponse illisible",
+      rewriteFrom("Juste un titre", { title: "T", detail: "" }),
+      null
+    );
+  }
 
   console.log(`\n${passed} OK, ${failed} en échec`);
   process.exit(failed ? 1 : 0);

@@ -381,6 +381,20 @@
   background: var(--accent);
   color: var(--on-accent);
 }
+/* « ! » rouge : ticket en attente d'une réponse ou d'une action de notre part */
+.blocked {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
 .labBad {
   background: var(--accent-soft);
   color: var(--accent-ink);
@@ -416,12 +430,17 @@
   font-size: 11px;
   font-weight: 700;
 }
-/* Poussée à droite, sauf derrière la date (déjà poussée) */
-.meta > .who {
+/* Auteur puis membres du ticket, poussés à droite, sauf derrière la date (déjà poussée) */
+.whos {
+  display: inline-flex;
   margin-left: auto;
 }
-.meta small + .who {
+.meta small + .whos {
   margin-left: 0;
+}
+.whos .who + .who {
+  margin-left: -6px;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 .bar {
   display: grid;

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ClipboardEvent, type ReactNode } from "react";
+import { useAuth } from "../../core/context/AuthContext.tsx";
 import { adminPrefix } from "../../core/lib/adminHost.ts";
 import Icon from "../../shared/components/Icon/Icon.tsx";
 import {
@@ -6,7 +7,9 @@ import {
   deleteTicket,
   editTicket,
   fileUrl,
+  joinTicket,
   moveTicket,
+  rewriteTicket,
   ticketAction,
   uploadFile,
   type Effort,
@@ -179,6 +182,9 @@ export default function TicketSheet({
   onClose,
 }: SheetProps) {
   const editable = t.status === "idea" || t.status === "todo";
+  const me = (useAuth().email ?? "").toLowerCase();
+  const mine = !!me && t.authorEmail === me;
+  const member = t.members.some((p) => p.email === me);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(t.title);
   const [detail, setDetail] = useState(t.detail);
@@ -312,6 +318,7 @@ export default function TicketSheet({
     t.author
       ? `${t.status === "idea" ? "notée" : "créé"} par ${t.author}${t.createdAt ? ` le ${day(t.createdAt)}` : ""}`
       : "",
+    t.members.length ? `avec ${t.members.map((p) => p.name || p.email).join(", ")}` : "",
     t.status === "done" ? `fait le ${day(t.doneAt)}` : "",
   ].filter(Boolean);
 
@@ -350,6 +357,39 @@ export default function TicketSheet({
       {editable && !editing && (
         <button type="button" className={styles.btn} onClick={() => setEditing(true)}>
           Modifier
+        </button>
+      )}
+      {editable && !editing && (
+        <button
+          type="button"
+          className={styles.btn}
+          disabled={busy}
+          title="Réécrire le titre et la description d'après tout le ticket : ajouts, liens et images"
+          onClick={() =>
+            ask(
+              "Réécrire le titre et la description avec l'IA, d'après tout ce qu'il y a dans le ticket (ajouts, liens, images) ? L'idée d'origine reste en dessous.",
+              "Réécrire",
+              () => go(() => rewriteTicket(t.id), "Ticket réécrit par l'IA")
+            )
+          }
+        >
+          Réécrire avec l'IA
+        </button>
+      )}
+      {me && !mine && (
+        <button
+          type="button"
+          className={styles.btn}
+          disabled={busy}
+          aria-pressed={member}
+          onClick={() =>
+            go(
+              () => joinTicket(t.id, !member),
+              member ? "Tu n'es plus sur ce ticket" : "Tu es ajouté au ticket"
+            )
+          }
+        >
+          {member ? "Me retirer" : "Me rajouter"}
         </button>
       )}
       {t.status === "work" && (

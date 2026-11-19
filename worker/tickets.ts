@@ -18,7 +18,7 @@ import { cleanRun, mergeLimits, summarize, type Limit, type RunUsage } from "./c
 import { cloudflareUsage } from "./cloudflare-usage.ts";
 import { claudeAlerts, cloudflareAlerts, newAlerts } from "./quota-alerts.ts";
 import { ExpiredSubscriptionError, sendPush } from "./push.ts";
-import { ask, ideaCard, ticketTitle } from "./ticket-title.ts";
+import { ask, ideaCard, rewriteCard, ticketTitle, type AskImage } from "./ticket-title.ts";
 import {
   FACTS_ASK,
   LEVELS,
@@ -890,6 +890,27 @@ async function putFile(env: Env, request: Request, id: string, url: URL): Promis
   return json({ ok: true, file: { id: fid, name, type, size: bytes.length } });
 }
 
+// Images d'un ticket pour la réécriture par Claude : 3 au plus, 3 Mo en tout (types que Claude lit)
+const AI_IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+async function imagesOf(env: Env, id: string): Promise<AskImage[]> {
+  const rows = await env.DB.prepare(
+    `SELECT type, data FROM ticket_files WHERE ticket_id = ? AND type IN (${AI_IMAGES.map(() => "?").join(",")}) AND size <= 1600000 ORDER BY created_at DESC LIMIT 3`
+  )
+    .bind(id, ...AI_IMAGES)
+    .all<{ type: string; data: ArrayBuffer | number[] }>();
+  let total = 0;
+  const out: AskImage[] = [];
+  for (const r of rows.results ?? []) {
+    const bytes = r.data instanceof ArrayBuffer ? new Uint8Array(r.data) : new Uint8Array(r.data);
+    total += bytes.length;
+    if (total > 3_000_000) {
+      break;
+    }
+    out.push({ type: r.type, data: Buffer.from(bytes).toString("base64") });
+  }
+  return out.reverse();
+}
+
 async function getFile(env: Env, fid: string): Promise<Response> {
   const f = await env.DB.prepare("SELECT name, type, data FROM ticket_files WHERE id = ?")
     .bind(fid)
@@ -1172,6 +1193,34 @@ export async function handleTickets(
       if (t.auto && !t.sent && ["title", "detail", "urgent", "auto"].some((k) => k in fields)) {
         t = await withLevel(env, t);
       }
+      return json({ ok: true, ticket: t });
+    }
+    if (sub === "rewrite" && m === "POST") {
+      adminOnly();
+      const t = await loadTicket(env, id);
+      if (!t) {
+        throw new TicketError("Ticket introuvable", 404);
+      }
+      const card =
+        env.ANTHROPIC_API_KEY || env.AI ? await rewriteCard(env, t, await imagesOf(env, id)) : null;
+      if (!card) {
+        throw new TicketError("L'IA n'a pas répondu : réessaie dans un moment", 503);
+      }
+      let next = await act(env, id, { type: "edit", fields: card }, now, access.name);
+      if (next.auto && !next.sent) {
+        next = await withLevel(env, next);
+      }
+      return json({ ok: true, ticket: next });
+    }
+    if (sub === "members" && m === "POST") {
+      adminOnly();
+      const b = await body(request);
+      const t = await act(
+        env,
+        id,
+        { type: "member", email: access.email, name: access.name, join: b.join !== false },
+        now
+      );
       return json({ ok: true, ticket: t });
     }
     if (!sub && m === "DELETE") {

@@ -225,6 +225,9 @@
     "saving": "Enregistrement…",
     "save": "Enregistrer",
     "logout": "Se déconnecter",
+    "admin": "Espace admin",
+    "adminHint": "Tableau de bord, tickets et outils de Seancy (réservé aux administrateurs).",
+    "adminOpen": "Ouvrir l'espace admin",
     "saved": "Enregistré",
     "emailChange": {
       "edit": "Modifier",
@@ -362,6 +365,8 @@
     "searchAriaLabel": "Rechercher",
     "profileAriaLabel": "Profil",
     "profileTitle": "Profil",
+    "admin": "Admin",
+    "adminTitle": "Espace admin",
     "login": "Connexion",
     "tabBarAriaLabel": "Onglets"
   },

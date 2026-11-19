@@ -225,6 +225,9 @@
     "saving": "Saving…",
     "save": "Save",
     "logout": "Sign out",
+    "admin": "Admin area",
+    "adminHint": "Seancy dashboard, tickets and tools (administrators only).",
+    "adminOpen": "Open the admin area",
     "saved": "Saved",
     "emailChange": {
       "edit": "Change",
@@ -362,6 +365,8 @@
     "searchAriaLabel": "Search",
     "profileAriaLabel": "Profile",
     "profileTitle": "Profile",
+    "admin": "Admin",
+    "adminTitle": "Admin area",
     "login": "Sign in",
     "tabBarAriaLabel": "Tabs"
   },

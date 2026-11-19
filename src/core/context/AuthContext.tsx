@@ -53,6 +53,8 @@ interface AuthContextValue {
   // Version (date de mise à jour) de la photo de profil personnelle, `null`
   // sans photo : l'avatar retombe alors sur Gravatar, puis sur l'initiale.
   avatarVersion: number | null;
+  // Compte administrateur de Seancy (secret ADMIN_EMAILS) : bouton « Admin » de la barre et du profil
+  admin: boolean;
   requestLink: (email: string) => Promise<RequestLinkResult>;
   verify: (token: string) => Promise<VerifyResult>;
   verifyCode: (email: string, code: string) => Promise<VerifyResult>;
@@ -122,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
+  const [admin, setAdmin] = useState(false);
 
   // `verify()` (consommation du jeton sur /auth/verify) et `refresh()` (la
   // vérification passive "suis-je déjà connecté" au montage) peuvent
@@ -148,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(null);
       setUsername(null);
       setAvatarVersion(null);
+      setAdmin(false);
       setStatus("anonymous");
       return Promise.resolve();
     }
@@ -162,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           shareSlug: string | null;
           username: string | null;
           avatarVersion: number | null;
+          admin?: boolean;
         }>;
       })
       .then((data) => {
@@ -170,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(data.shareSlug ?? null);
         setUsername(data.username ?? null);
         setAvatarVersion(data.avatarVersion ?? null);
+        setAdmin(data.admin === true);
         setStatus("authenticated");
         pinnedRef.current = true;
       })
@@ -182,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(null);
         setUsername(null);
         setAvatarVersion(null);
+        setAdmin(false);
         setStatus("anonymous");
       });
   }, []);
@@ -261,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(data.shareSlug ?? null);
       setUsername(data.username ?? null);
       setAvatarVersion(data.avatarVersion ?? null);
+      setAdmin(data.admin === true);
       setStatus("authenticated");
       return data;
     },
@@ -453,6 +461,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      admin,
       requestLink,
       verify,
       verifyCode,
@@ -475,6 +484,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      admin,
       requestLink,
       verify,
       verifyCode,
