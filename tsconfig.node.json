@@ -50,6 +50,7 @@
     "worker/admin-split.ts",
     "worker/hostnames.ts",
     "worker/ticket-title.ts",
+    "worker/ticket-level.ts",
     "worker/access.ts",
     "worker/cloudflare-usage.ts",
     "worker/vapid.ts"

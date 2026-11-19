@@ -55,6 +55,10 @@ export interface TicketData {
   effort: Effort;
   /** Hotfix : branche depuis main, PR vers main, puis main refusionné dans develop. */
   urgent: boolean;
+  /** Modèle et effort choisis automatiquement d'après le ticket (worker/ticket-level.ts) à chaque passage. */
+  auto: boolean;
+  /** Dernier choix automatique et sa raison, montrés dans le ticket (« Sonnet · moyen : … »). */
+  autoWhy: string;
   /** Date d'envoi à Claude (ms) ; 0 : pas chez Claude. */
   sent: number;
   /** Envoi annulé (ms) : un lancement de Claude déjà parti ne peut plus répondre ; 0 : rien d'annulé. */
@@ -113,6 +117,8 @@ export const EMPTY_DATA: TicketData = {
   model: "opus",
   effort: "high",
   urgent: false,
+  auto: false,
+  autoWhy: "",
   sent: 0,
   cancelled: 0,
   answer: "",
@@ -188,6 +194,12 @@ export function cleanData(
     out.stage = (STAGES as readonly string[]).includes(String(input.stage))
       ? (input.stage as Stage)
       : "";
+  }
+  if (has("auto")) {
+    out.auto = input.auto === true || input.auto === 1 || input.auto === "1";
+  }
+  if (has("autoWhy")) {
+    out.autoWhy = str(input.autoWhy, 300).trim();
   }
   if (has("urgent")) {
     out.urgent = input.urgent === true || input.urgent === 1 || input.urgent === "1";
@@ -299,10 +311,12 @@ export type Action =
   | { type: "followup" }
   | { type: "autofix"; text: string }
   | { type: "retry"; n: number }
-  | { type: "preview"; url: string };
+  | { type: "preview"; url: string }
+  /** Modèle et effort choisis automatiquement (sans événement d'historique) */
+  | { type: "level"; model: Model; effort: Effort; why: string };
 
 /** Champs qu'une modification directe (fiche, glisser-déposer) peut changer. */
-const EDITABLE = ["title", "detail", "labels", "links", "model", "effort", "urgent"];
+const EDITABLE = ["title", "detail", "labels", "links", "model", "effort", "urgent", "auto"];
 
 /**
  * Nouvelle colonne et nouvelles données d'un ticket après une action, avec
@@ -494,6 +508,9 @@ export function applyAction(
       break;
     case "preview":
       patch = { preview: a.url };
+      break;
+    case "level":
+      patch = { model: a.model, effort: a.effort, autoWhy: a.why };
       break;
   }
   // Événements de l'utilisateur : signés du nom de l'administrateur qui a fait l'action

@@ -30,6 +30,7 @@ import {
 } from "./trelloLib.ts";
 import { parseBlocks, parseInline, safeHref } from "../src/modules/tickets/markdown.ts";
 import { cleanTitle, firstLine, ideaFrom } from "../worker/ticket-title.ts";
+import { finalLevel, levelFrom, levelOf, parseFacts, type Facts } from "../worker/ticket-level.ts";
 
 let passed = 0;
 let failed = 0;
@@ -302,6 +303,64 @@ function fakeGh(
   return { gh, calls };
 }
 const main = async () => {
+  const facts = (f: Partial<Facts>): Facts => ({
+    nature: "bug",
+    ampleur: "petite",
+    zones: 1,
+    serveur: false,
+    donnees: false,
+    securite: false,
+    cause_inconnue: false,
+    incertain: false,
+    ...f,
+  });
+  check(
+    "Choix automatique : grille (petit style, bug localisé, fonction moyenne, refonte avec serveur et sécurité)",
+    [
+      levelOf(facts({ nature: "texte_ou_style" })).level,
+      levelOf(facts({ ampleur: "moyenne" })).level,
+      levelOf(facts({ nature: "nouveaute", ampleur: "moyenne", zones: 3, serveur: true })).level,
+      levelOf(
+        facts({
+          nature: "amelioration",
+          ampleur: "grande",
+          zones: 5,
+          serveur: true,
+          securite: true,
+        })
+      ).level,
+      levelOf(facts({ nature: "bug", ampleur: "petite", cause_inconnue: true, zones: 3 })).level,
+    ],
+    [0, 1, 2, 3, 1]
+  );
+  check(
+    "Choix automatique : raison lisible",
+    levelOf(facts({ nature: "nouveaute", ampleur: "moyenne", zones: 3, serveur: true })).why,
+    "nouvelle fonction d'ampleur moyenne, 3 parties à modifier, serveur"
+  );
+  const ctx = { urgent: false, retouch: false, previous: 0 as const, retouches: 0, autofix: 0 };
+  check(
+    "Choix automatique : urgence au moins Opus · élevé, retouche jamais en dessous du passage précédent, un cran de plus après deux retouches",
+    [
+      finalLevel(0, { ...ctx, urgent: true }).level,
+      finalLevel(0, { ...ctx, retouch: true, previous: 2 }).level,
+      finalLevel(1, { ...ctx, retouch: true, previous: 1, retouches: 2 }).level,
+      finalLevel(3, { ...ctx, retouch: true, previous: 3, autofix: 1 }).level,
+      finalLevel(1, { ...ctx, previous: 3 }).level,
+      levelFrom("sonnet", "medium"),
+      levelFrom("opus", "max"),
+    ],
+    [2, 2, 2, 3, 1, 0, 3]
+  );
+  check(
+    "Choix automatique : réponse de l'IA lue (JSON entouré de texte, zones bornées), illisible : null",
+    [
+      parseFacts('Voici : {"nature":"bug","ampleur":"moyenne","zones":9,"serveur":true}')?.zones,
+      parseFacts('{"nature":"autre","ampleur":"petite"}'),
+      parseFacts("pas de JSON"),
+    ],
+    [6, null, null]
+  );
   check(
     "Titre automatique : réponse du modèle nettoyée, 1re ligne en secours",
     [

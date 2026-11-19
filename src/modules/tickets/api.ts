@@ -31,6 +31,10 @@ export interface Ticket {
   model: Model;
   effort: Effort;
   urgent: boolean;
+  /** Modèle et effort choisis automatiquement d'après le ticket, à chaque passage de Claude. */
+  auto: boolean;
+  /** Dernier choix automatique et sa raison (« Sonnet · moyen : … »). */
+  autoWhy: string;
   sent: number;
   answer: string;
   pr: string;
