@@ -61,6 +61,8 @@ export interface Ticket {
   /** Qui a créé le ticket (nom affiché) ; « Claude » pour un ticket créé par une session Claude. */
   author: string;
   authorEmail: string;
+  /** Autres administrateurs ajoutés au ticket (« Me rajouter » dans la fiche). */
+  members: { email: string; name: string }[];
   createdAt: number;
 }
 /** Étiquette partagée : nom et couleur Trello (« green », « red_dark »… ; vide = sans couleur). */
@@ -153,6 +155,11 @@ export const createTicket = (
 ) => post<{ ticket: Ticket }>("", data);
 export const editTicket = (id: string, fields: Partial<Ticket>) =>
   post<{ ticket: Ticket }>(`/${id}`, fields, "PATCH");
+/** Titre et description réécrits par l'IA d'après tout le ticket (ajouts, liens, images). */
+export const rewriteTicket = (id: string) => post<{ ticket: Ticket }>(`/${id}/rewrite`, {});
+/** Le compte connecté ajouté au ticket (join) ou retiré. */
+export const joinTicket = (id: string, join: boolean) =>
+  post<{ ticket: Ticket }>(`/${id}/members`, { join });
 export const deleteTicket = (id: string) => request<{ ok: true }>(`/${id}`, { method: "DELETE" });
 export const moveTicket = (id: string, to: TicketStatus | undefined, before: string) =>
   post<{ ticket: Ticket }>(`/${id}/move`, { to, before });

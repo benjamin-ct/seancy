@@ -75,6 +75,10 @@ interface Drag {
   offY: number;
 }
 
+// Étiquette « Bloqué — action requise » (Trello) ou équivalente : montrée en « ! » rouge sur la carte
+const isBlocked = (label: string) => /^bloqu/i.test(label.trim());
+const BLOCKED_TEXT = "En attente d'une réponse ou d'une action de notre part";
+
 function Mini({
   t,
   onOpen,
@@ -120,6 +124,8 @@ function Mini({
       text: `${t.auto ? "Auto · " : ""}${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}`,
     });
   }
+  const blocked = t.labels.some(isBlocked);
+  const shown = t.labels.filter((l) => !isBlocked(l));
   const cur = stepOf(t);
   const bar = t.status === "work" && !(live && (t.stage === "fail" || t.stage === "quota"));
   const prNo = prNumber(t.pr);
@@ -151,9 +157,20 @@ function Mini({
           draggable={false}
         />
       )}
-      {labs.length + t.labels.length > 0 && (
+      {labs.length + shown.length + (blocked ? 1 : 0) > 0 && (
         <span className={styles.labels}>
-          {t.labels.map((l) => (
+          {/* Étiquette « Bloqué… » : un « ! » rouge, en attente d'une réponse ou d'une action de notre part */}
+          {blocked && (
+            <span
+              className={styles.blocked}
+              role="img"
+              aria-label={BLOCKED_TEXT}
+              title={BLOCKED_TEXT}
+            >
+              !
+            </span>
+          )}
+          {shown.map((l) => (
             <Label key={l} name={l} />
           ))}
           {labs.map((l) => (
@@ -183,13 +200,21 @@ function Mini({
         )}
         {prNo && <span>#{prNo}</span>}
         {date && <small>{date}</small>}
-        {t.author && (
-          <span
-            className={styles.who}
-            title={`Ticket de ${t.author}`}
-            aria-label={`Ticket de ${t.author}`}
-          >
-            {t.author.slice(0, 1).toUpperCase()}
+        {(t.author || t.members.length > 0) && (
+          <span className={styles.whos}>
+            {[
+              ...(t.author ? [{ name: t.author, what: "Ticket de" }] : []),
+              ...t.members.map((p) => ({ name: p.name || p.email, what: "Avec" })),
+            ].map((p) => (
+              <span
+                key={`${p.what}${p.name}`}
+                className={styles.who}
+                title={`${p.what} ${p.name}`}
+                aria-label={`${p.what} ${p.name}`}
+              >
+                {p.name.slice(0, 1).toUpperCase()}
+              </span>
+            ))}
           </span>
         )}
       </span>
@@ -868,17 +893,27 @@ export default function TicketsPage() {
   const cols = useMemo(
     () =>
       columns(
-        (tickets ?? []).filter((t) => !who || t.authorEmail === who),
+        (tickets ?? []).filter(
+          (t) => !who || t.authorEmail === who || t.members.some((p) => p.email === who)
+        ),
         query
       ),
     [tickets, query, who]
   );
-  // Auteurs des tickets, le compte connecté d'abord ; nom de la page Tickets plutôt que celui de Trello
+  // Auteurs et membres des tickets, le compte connecté d'abord ; nom de la page Tickets plutôt que celui de Trello
   const people = useMemo(() => {
     const names = new Map<string, string>();
     for (const t of tickets ?? []) {
       if (t.authorEmail && (!names.has(t.authorEmail) || !t.trello)) {
         names.set(t.authorEmail, t.author || t.authorEmail);
+      }
+    }
+    // Ajoutés à un ticket sans en avoir créé : ils ont aussi leur bouton
+    for (const t of tickets ?? []) {
+      for (const p of t.members) {
+        if (!names.has(p.email)) {
+          names.set(p.email, p.name || p.email);
+        }
       }
     }
     const me = (email ?? "").toLowerCase();

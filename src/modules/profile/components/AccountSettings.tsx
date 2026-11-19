@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { ADMIN_ORIGIN } from "../../../core/lib/adminHost.ts";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../core/context/AuthContext.tsx";
 import {
@@ -135,6 +136,7 @@ export default function AccountSettings() {
     checkUsername,
     logout,
     logoutAll,
+    admin,
   } = useAuth();
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
@@ -386,6 +388,14 @@ export default function AccountSettings() {
       </SettingsRow>
 
       <SignInMethods />
+
+      {admin && (
+        <SettingsRow label={t("accountCard.admin")} description={t("accountCard.adminHint")}>
+          <a className={styles.secondaryBtn} href={ADMIN_ORIGIN}>
+            {t("accountCard.adminOpen")}
+          </a>
+        </SettingsRow>
+      )}
 
       <SettingsRow label={t("accountCard.session")} description={t("accountCard.sessionHint")}>
         <button type="button" className={styles.secondaryBtn} onClick={logout}>
