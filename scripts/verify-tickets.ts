@@ -29,7 +29,7 @@ import {
   type TrelloCard,
 } from "./trelloLib.ts";
 import { parseBlocks, parseInline, safeHref } from "../src/modules/tickets/markdown.ts";
-import { cleanTitle, firstLine } from "../worker/ticket-title.ts";
+import { cleanTitle, firstLine, ideaFrom } from "../worker/ticket-title.ts";
 
 let passed = 0;
 let failed = 0;
@@ -317,6 +317,26 @@ const main = async () => {
       "secours",
       "secours",
       "Première ligne",
+    ]
+  );
+  check(
+    "Carte d'idée : titre et description de l'IA, idée d'origine gardée ; sinon l'idée telle quelle",
+    [
+      ideaFrom(
+        "Bouton Réglages plus clair\n\nRendre le bouton Réglages du profil plus explicite.",
+        "bouton reglage pas clair"
+      ),
+      ideaFrom("Titre seul", "Ma ligne\nla suite"),
+      ideaFrom("", "Ma ligne"),
+    ],
+    [
+      {
+        title: "Bouton Réglages plus clair",
+        detail:
+          "Rendre le bouton Réglages du profil plus explicite.\n\n**Idée d'origine :** bouton reglage pas clair",
+      },
+      { title: "Ma ligne", detail: "la suite" },
+      { title: "Ma ligne", detail: "" },
     ]
   );
   const behind = fakeGh(2, []);
