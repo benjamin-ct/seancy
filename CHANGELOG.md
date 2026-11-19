@@ -2,6 +2,23 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.2.4 — 2026-11-19
+
+### Correctifs
+
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- L'icône Réglages est maintenant un vrai engrenage (elle ressemblait à un soleil).
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
 ## 0.2.3 — 2026-11-19
 
 ### Correctifs
