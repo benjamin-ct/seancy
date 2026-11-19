@@ -506,6 +506,8 @@ function Settings({ config, run }: { config: TicketsConfig | null; run: Run }) {
       <p className={styles.muted}>
         Ticket prêt à valider, arrêté, en pause, validé ou validation impossible : une notification
         qui ouvre le ticket, et le nombre de tickets qui attendent sur l'icône de l'appli installée.
+        Seulement pour tes tickets et ceux où tu t'es rajouté ; tout le monde la reçoit pour un
+        ticket sans personne aux notifications activées, et pour les releases.
       </p>
       <PushSetting run={run} />
       <ul className={styles.config}>
