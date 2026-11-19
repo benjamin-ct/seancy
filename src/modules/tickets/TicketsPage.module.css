@@ -1014,6 +1014,8 @@
 .segs {
   display: inline-flex;
   gap: 4px;
+  max-width: 100%;
+  overflow-x: auto; /* choix des personnes : défile de côté s'il y en a beaucoup */
   padding: 3px;
   border-radius: 999px;
   background: var(--surface);

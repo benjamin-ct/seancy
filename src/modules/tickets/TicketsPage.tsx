@@ -683,8 +683,8 @@ export default function TicketsPage() {
   // Téléphone : champ de recherche montré par la loupe de l'en-tête
   const [searching, setSearching] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  // « Les miens » : tickets créés par le compte connecté (les deux administrateurs partagent le tableau)
-  const [mine, setMine] = useState(false);
+  // Tickets d'une personne (adresse de l'auteur) ; « » : tous (les administrateurs partagent le tableau)
+  const [who, setWho] = useState("");
   // Fiche ouverte : son adresse est /tickets/<id> (lien à partager, bouton Retour qui la ferme) ;
   // mode : zone de réponse ouverte d'office (retouche, réouverture)
   const { ticketId = "" } = useParams();
@@ -868,11 +868,22 @@ export default function TicketsPage() {
   const cols = useMemo(
     () =>
       columns(
-        (tickets ?? []).filter((t) => !mine || t.authorEmail === (email ?? "").toLowerCase()),
+        (tickets ?? []).filter((t) => !who || t.authorEmail === who),
         query
       ),
-    [tickets, query, mine, email]
+    [tickets, query, who]
   );
+  // Auteurs des tickets, le compte connecté d'abord ; nom de la page Tickets plutôt que celui de Trello
+  const people = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const t of tickets ?? []) {
+      if (t.authorEmail && (!names.has(t.authorEmail) || !t.trello)) {
+        names.set(t.authorEmail, t.author || t.authorEmail);
+      }
+    }
+    const me = (email ?? "").toLowerCase();
+    return [...names].sort(([a], [b]) => Number(b === me) - Number(a === me) || a.localeCompare(b));
+  }, [tickets, email]);
   // Étiquettes définies (dans leur ordre), puis celles des tickets qui n'ont pas encore de couleur
   const labelsInfo = useMemo(() => {
     const names = labelDefs.map((d) => d.name);
@@ -1181,21 +1192,24 @@ export default function TicketsPage() {
               <button
                 type="button"
                 className={styles.seg}
-                aria-pressed={!mine}
-                onClick={() => setMine(false)}
+                aria-pressed={!who}
+                onClick={() => setWho("")}
               >
                 Tous
               </button>
-              <button
-                type="button"
-                className={styles.seg}
-                aria-pressed={mine}
-                onClick={() => setMine(true)}
-              >
-                Les miens
-              </button>
+              {people.map(([address, name]) => (
+                <button
+                  key={address}
+                  type="button"
+                  className={styles.seg}
+                  aria-pressed={who === address}
+                  onClick={() => setWho(address)}
+                >
+                  {name}
+                </button>
+              ))}
             </div>
-            {/* Téléphone : zoom au bout de « Tous / Les miens », plus en bas de l'écran */}
+            {/* Téléphone : zoom au bout du choix des personnes, plus en bas de l'écran */}
             {tickets && zoomButton(`${styles.zoom} ${styles.zoomInline}`)}
             <button
               type="button"
