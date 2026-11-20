@@ -25,6 +25,16 @@ export interface RecommendationMediaItem extends MediaItem {
   reason: RecommendationReason;
 }
 
+// Suite du défilement une fois le lot épuisé : genres préférés du profil
+// (OU), genres, décennies et titres écartés (voir buildTasteContinuation,
+// worker/recommendations.ts, et src/modules/discover/tasteFeed.ts).
+export interface TasteContinuation {
+  genreIds: number[];
+  excludeGenreIds: number[];
+  excludeDecades: number[];
+  excludeIds: number[];
+}
+
 function toMediaItem(item: RecommendationApiItem): RecommendationMediaItem {
   return {
     id: item.id,
@@ -52,7 +62,12 @@ export async function getRecommendations(
   limit = 20,
   signal?: AbortSignal,
   offset = 0
-): Promise<{ items: RecommendationMediaItem[]; coldStart: boolean; hasMore: boolean }> {
+): Promise<{
+  items: RecommendationMediaItem[];
+  coldStart: boolean;
+  hasMore: boolean;
+  continuation: TasteContinuation | null;
+}> {
   const params = new URLSearchParams({ type, limit: String(limit), offset: String(offset) });
   const res = await fetch(`/api/recommendations?${params}`, { signal });
   if (res.status === 401) {
@@ -65,8 +80,14 @@ export async function getRecommendations(
     items: RecommendationApiItem[];
     coldStart: boolean;
     hasMore: boolean;
+    continuation?: TasteContinuation | null;
   };
-  return { items: data.items.map(toMediaItem), coldStart: data.coldStart, hasMore: data.hasMore };
+  return {
+    items: data.items.map(toMediaItem),
+    coldStart: data.coldStart,
+    hasMore: data.hasMore,
+    continuation: data.continuation ?? null,
+  };
 }
 
 export async function postNotInterested(item: MediaItem): Promise<void> {
