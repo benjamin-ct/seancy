@@ -22,13 +22,21 @@ function isStandalone(): boolean {
   );
 }
 
-// Un geste qui démarre dans un conteneur défilant déjà descendu (panneau de
-// réglages, liste déroulante…) doit d'abord faire remonter ce conteneur, pas
-// recharger l'app.
-function isInsideScrolledContainer(target: EventTarget | null): boolean {
+// Un geste qui démarre dans un conteneur qui défile lui-même (colonne du
+// tableau des tickets, panneau de réglages, liste déroulante…) fait défiler ce
+// conteneur, jamais recharger l'app ; de même dans une zone marquée
+// data-no-pull (tableau des tickets, où l'on glisse les colonnes et les cartes).
+function isInsideScrollable(target: EventTarget | null): boolean {
   let node = target instanceof Element ? target : null;
   while (node && node !== document.body) {
+    if (node instanceof HTMLElement && node.dataset.noPull !== undefined) {
+      return true;
+    }
     if (node.scrollTop > 0) {
+      return true;
+    }
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
       return true;
     }
     node = node.parentElement;
@@ -51,6 +59,7 @@ export default function PullToRefresh() {
       return;
     }
     let startY: number | null = null;
+    let startX = 0;
 
     const update = (value: number) => {
       pullRef.current = value;
@@ -59,11 +68,10 @@ export default function PullToRefresh() {
 
     const onTouchStart = (event: TouchEvent) => {
       startY =
-        event.touches.length === 1 &&
-        window.scrollY <= 0 &&
-        !isInsideScrolledContainer(event.target)
+        event.touches.length === 1 && window.scrollY <= 0 && !isInsideScrollable(event.target)
           ? event.touches[0].clientY
           : null;
+      startX = event.touches[0]?.clientX ?? 0;
     };
 
     const onTouchMove = (event: TouchEvent) => {
@@ -76,6 +84,12 @@ export default function PullToRefresh() {
         return;
       }
       const delta = event.touches[0].clientY - startY;
+      // Glissement surtout de côté (colonnes, carrousels) : ce n'est pas un tirer-pour-recharger
+      if (Math.abs(event.touches[0].clientX - startX) > Math.abs(delta)) {
+        startY = null;
+        update(0);
+        return;
+      }
       update(delta > 0 ? Math.min(delta * RESISTANCE, MAX_PULL_PX) : 0);
     };
 

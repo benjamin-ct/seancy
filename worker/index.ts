@@ -34,6 +34,7 @@ import {
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
   getNotInterestedForUser,
+  getNotInterestedIdsForUser,
   addNotInterested,
   getRecommendationCache,
   setRecommendationCache,
@@ -58,15 +59,17 @@ import {
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
 import { handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
-import { accessGate, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
+import { accessGate, adminEmails, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
 import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
+  buildTasteContinuation,
   buildTasteProfile,
   getRecommendationCandidates,
   rankRecommendations,
   type RecommendationItem,
   type RecommendationMediaType,
+  type TasteContinuation,
 } from "./recommendations.ts";
 import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
 import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
@@ -860,6 +863,8 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       shareSlug: user.shareSlug,
       username: user.username,
       avatarVersion: await getAvatarVersion(env.DB, user.id),
+      // Administrateur : bouton « Admin » du site (l'espace admin reste derrière Cloudflare Access)
+      admin: adminEmails(env).includes(user.email.toLowerCase()),
     },
     200,
     { "set-cookie": sessionCookieHeaders(request, sessionToken) }
@@ -877,6 +882,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     shareSlug: user.shareSlug,
     username: user.username,
     avatarVersion: await getAvatarVersion(env.DB, user.id),
+    admin: adminEmails(env).includes(user.email.toLowerCase()),
   });
 }
 
@@ -2059,7 +2065,10 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 // du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
 // pages suivantes soient servies par le même lot sans recalcul.
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const RECOMMENDATION_CACHE_SIZE = 96;
+const RECOMMENDATION_CACHE_SIZE = 240;
+// Le lot ne peut pas dépasser le pool de candidats : on le relève aussi (le
+// défaut de 200 par type est conservé pour les suggestions IA).
+const RECOMMENDATION_CANDIDATE_POOL = 400;
 
 // Chaque calcul décode/redimensionne une image en WASM dans ce même Worker
 // (~6 ms une fois l'isolate chaud, ~25 ms à froid — voir le commentaire de
@@ -2149,17 +2158,39 @@ async function handleGetRecommendations(
   const offsetParam = Number(url.searchParams.get("offset"));
   const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
 
+  // Fin du lot : genres de la suite du défilement (voir TasteContinuation),
+  // avec les titres "pas intéressé" relus à chaque fois (jamais figés dans
+  // le cache du lot). Absent tant que le lot a encore des titres.
+  const withContinuation = async (continuation: TasteContinuation | null) =>
+    continuation && (typeParam === "movie" || typeParam === "tv")
+      ? {
+          ...continuation,
+          excludeIds: await getNotInterestedIdsForUser(env.DB, user.id, typeParam),
+        }
+      : null;
+
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
-  if (cached && isFresh && cached.items.length >= offset + limit) {
+  if (cached && isFresh) {
     const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
-    await refreshMissingThumbhashes(env, pageItems);
-    scheduleMissingThumbhashes(ctx, env, pageItems);
-    return json({
-      items: pageItems,
-      coldStart: cached.coldStart,
-      hasMore: offset + pageItems.length < cached.items.length,
-    });
+    const hasMore = offset + pageItems.length < cached.items.length;
+    // Lot complet (le classement a rendu moins de titres que demandé) : sa
+    // fin est servie par le cache, sans recalcul. Un lot mis en cache avant
+    // la suite du défilement (`continuation` undefined) est recalculé
+    // quand sa fin est atteinte.
+    const covers = cached.items.length >= offset + limit || cached.complete;
+    if (covers && (hasMore || cached.continuation !== undefined)) {
+      await refreshMissingThumbhashes(env, pageItems);
+      scheduleMissingThumbhashes(ctx, env, pageItems);
+      return json({
+        items: pageItems,
+        coldStart: cached.coldStart,
+        hasMore,
+        continuation: hasMore
+          ? null
+          : await withContinuation(cached.continuation as TasteContinuation | null),
+      });
+    }
   }
 
   const [library, excludedGenreIds, notInterested] = await Promise.all([
@@ -2172,19 +2203,30 @@ async function handleGetRecommendations(
   const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
 
   const candidateLists = await Promise.all(
-    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+    mediaTypes.map((mediaType) =>
+      getRecommendationCandidates(env, mediaType, RECOMMENDATION_CANDIDATE_POOL)
+    )
   );
   const candidates = candidateLists.flat();
-  const items = rankRecommendations(candidates, profile, {
-    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
-  });
-  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  const rankLimit = Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE);
+  const items = rankRecommendations(candidates, profile, { limit: rankLimit });
+  const continuation =
+    typeParam === "movie" || typeParam === "tv" ? buildTasteContinuation(profile, typeParam) : null;
+  await setRecommendationCache(
+    env.DB,
+    user.id,
+    typeParam,
+    { items, complete: items.length < rankLimit, continuation },
+    profile.isColdStart
+  );
   const pageItems = items.slice(offset, offset + limit);
+  const hasMore = offset + pageItems.length < items.length;
   scheduleMissingThumbhashes(ctx, env, pageItems);
   return json({
     items: pageItems,
     coldStart: profile.isColdStart,
-    hasMore: offset + pageItems.length < items.length,
+    hasMore,
+    continuation: hasMore ? null : await withContinuation(continuation),
   });
 }
 

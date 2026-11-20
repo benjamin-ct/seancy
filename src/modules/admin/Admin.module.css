@@ -115,6 +115,26 @@
 .siteLink {
   color: var(--accent-ink);
 }
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.refresh:hover {
+  background: var(--surface-2, var(--surface));
+}
+.refresh:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
 .main {
   flex: 1;
   outline: none;

@@ -40,11 +40,18 @@ export interface TrelloOrigin {
   list: string;
   comments: TrelloComment[];
 }
+/** Administrateur qui s'est ajouté à un ticket qu'il n'a pas créé (filtre par personne, initiales sur la carte). */
+export interface TicketMember {
+  email: string;
+  name: string;
+}
 export interface TicketFile {
   id: string;
   name: string;
   type: string;
   size: number;
+  /** Date d'ajout (ms) : place la pièce jointe dans le fil de la conversation. */
+  at?: number;
 }
 export interface TicketData {
   title: string;
@@ -85,6 +92,8 @@ export interface TicketData {
    * session Claude (sentry-triage…), le créateur de la carte pour un ticket importé de Trello. Jamais modifiable. */
   author: string;
   authorEmail: string;
+  /** Autres administrateurs ajoutés au ticket (« Me rajouter » dans la fiche). */
+  members: TicketMember[];
 }
 export interface Ticket extends TicketData {
   id: string;
@@ -140,6 +149,7 @@ export const EMPTY_DATA: TicketData = {
   trello: null,
   author: "",
   authorEmail: "",
+  members: [],
 };
 
 const LONG = new Set(["answer", "feedback", "followUp", "notes"]);
@@ -178,6 +188,16 @@ export function cleanData(
   }
   if (has("authorEmail")) {
     out.authorEmail = str(input.authorEmail, 200).trim().toLowerCase();
+  }
+  if (has("members")) {
+    const seen = new Set<string>();
+    out.members = (Array.isArray(input.members) ? input.members : [])
+      .map((m) => {
+        const o = (m ?? {}) as Record<string, unknown>;
+        return { email: str(o.email, 200).trim().toLowerCase(), name: str(o.name, 80).trim() };
+      })
+      .filter((m) => m.email.includes("@") && !seen.has(m.email) && !!seen.add(m.email))
+      .slice(0, 20);
   }
   if (has("issue")) {
     out.issue = /^\d{1,9}$/.test(String(input.issue)) ? String(input.issue) : "";
@@ -269,7 +289,7 @@ function cleanHistory(h: unknown): HistoryEvent[] {
         kind: str(o.kind, 20),
       };
       if (o.text) {
-        ev.text = str(o.text, 3000);
+        ev.text = str(o.text, 8000);
       }
       if (o.pr) {
         ev.pr = str(o.pr, 400);
@@ -313,7 +333,9 @@ export type Action =
   | { type: "retry"; n: number }
   | { type: "preview"; url: string }
   /** Modèle et effort choisis automatiquement (sans événement d'historique) */
-  | { type: "level"; model: Model; effort: Effort; why: string };
+  | { type: "level"; model: Model; effort: Effort; why: string }
+  /** Administrateur ajouté au ticket ou retiré (sans événement d'historique) */
+  | { type: "member"; email: string; name: string; join: boolean };
 
 /** Champs qu'une modification directe (fiche, glisser-déposer) peut changer. */
 const EDITABLE = ["title", "detail", "labels", "links", "model", "effort", "urgent", "auto"];
@@ -512,6 +534,14 @@ export function applyAction(
     case "level":
       patch = { model: a.model, effort: a.effort, autoWhy: a.why };
       break;
+    case "member": {
+      const email = a.email.trim().toLowerCase();
+      need(!!email, "Compte inconnu");
+      need(email !== d.authorEmail, "Tu as créé ce ticket : il est déjà à ton nom");
+      const others = d.members.filter((m) => m.email !== email);
+      patch = { members: a.join ? [...others, { email, name: a.name }] : others };
+      break;
+    }
   }
   // Événements de l'utilisateur : signés du nom de l'administrateur qui a fait l'action
   for (const e of ev) {
