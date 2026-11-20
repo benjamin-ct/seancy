@@ -44,7 +44,7 @@
   // "keep_vars" et disparaître à chaque déploiement (voir TMDB_API_KEY et
   // VAPID_PRIVATE_KEY, elles, en Secret dans le dashboard, qui survivent).
   "vars": {
-    "VAPID_PUBLIC_KEY": "BDqiaLNi0uMdi-hi74JI8hALtzeks3ZiuTIBomUVGm9mtg8CeQEUeXUUr-X6J7NJFvF8li7ovMBQE3Hu1_sa3D8",
+    "VAPID_PUBLIC_KEY": "BNo5rVb2lpqnSDxkL-_YRx_EUeTSf1u3yIRJRzvbgzz0Vp5r3eINGoCANuFGouD-PGctWp3TXKt_3jbtrV_OjhQ",
     "VAPID_SUBJECT": "mailto:creusatbenjamin@gmail.com",
     // Token du beacon Cloudflare Web Analytics (public par nature). Renseigné
     // depuis le dashboard Cloudflare (Analytics & Logs → Web Analytics →
@@ -57,7 +57,7 @@
     // client saute la vérification anti-robot sans rien casser. Vide-la
     // avec ta clé depuis google.com/recaptcha/admin (voir README), et
     // ajoute RECAPTCHA_SECRET_KEY en Secret côté dashboard Cloudflare.
-    "RECAPTCHA_SITE_KEY": "6Ldgj4ctAAAAACH345AamgXKs4vXMlF1D1p1HHxz"
+    "RECAPTCHA_SITE_KEY": "6LeKNCcuAAAAAG-aoAslJE1UzqbCPmjuUKCmaLUq"
   },
   "d1_databases": [
     {
@@ -71,6 +71,9 @@
   // gratuit pour démarrer : ~10 000 neurones/jour partagés par tout le compte,
   // remis à zéro à 00:00 UTC ; au-delà, repli sur l'algo non-IA.
   "ai": { "binding": "AI" },
+  // Espace admin sur son propre Worker (wrangler.admin.jsonc, worker/admin-split.ts) : l'API de l'admin
+  // et des tickets reçue sur les adresses de production lui est renvoyée
+  "services": [{ "binding": "ADMIN", "service": "seancy-admin" }],
   // Binding natif « Rate Limiting » de Workers (audit F4) : compteur partagé
   // entre isolats/colos, sans écriture D1 — contrairement à
   // `checkRateLimitInMemory` (worker/rate-limit-memory.ts), qui compte par
@@ -126,7 +129,9 @@
   // les notifications push (voir worker/scheduled.ts) ; 7h30 UTC resynchronise
   // l'index local des titres populaires utilisé par la recherche (voir
   // worker/search-index.ts). Décalé de 30 min pour ne pas partager son
-  // budget de sous-requêtes TMDB avec le premier.
+  // budget de sous-requêtes TMDB avec le premier. Pas de troisième tâche : le forfait
+  // gratuit en compte 5 pour tout le compte (prod + develop + autres Workers) ;
+  // la file des tickets avance autrement (voir worker/tickets.ts, maybeTick).
   "triggers": {
     "crons": ["0 7 * * *", "30 7 * * *"]
   }

@@ -67,7 +67,8 @@ jobs:
         run: npm ci
 
       - name: Audit dépendances (vulnérabilités connues)
-        run: npm audit --audit-level=high
+        # Exceptions datées pour un avis sans version corrigée : scripts/audit.ts
+        run: node scripts/audit.ts high
 
       - name: Formatage (Prettier, bloquant)
         run: npm run format:check
@@ -107,6 +108,15 @@ jobs:
           npm run verify:changeset-parsing
           npm run verify:changelog-release
           npm run verify:changelog-parser
+          npm run verify:tickets
+          npm run verify:access
+          npm run verify:cloudflare-usage
+          npm run verify:vapid
+          npm run verify:release
+          npm run verify:audit
+          npm run verify:claude-usage
+          npm run verify:quota-alerts
+          npm run verify:admin-split
 
       - name: Build
         run: npm run build
@@ -183,7 +193,7 @@ jobs:
       # juste avant une release possible, on veut voir les vulnérabilités
       # modérées aussi, pas seulement les plus critiques.
       - name: Audit dépendances (plus restrictif, pré-release)
-        run: npm audit --audit-level=moderate
+        run: node scripts/audit.ts moderate
       - run: node scripts/check-pii-fixtures.ts
 
   deploy-preview:
@@ -191,7 +201,12 @@ jobs:
     needs:
       - verify
       - secrets-scan
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    # Pas sur les PR de Dependabot : GitHub ne leur donne que les secrets
+    # « Dependabot » (pas de CLOUDFLARE_API_TOKEN), le job échouait donc
+    # toujours. Volontairement pas de jeton Cloudflare de ce côté : le code
+    # d'une dépendance mise à jour tournerait avec. Une mise à jour de
+    # dépendance se vérifie par le job verify (lint, types, tests, build).
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -299,7 +314,7 @@ jobs:
     # Ni verify/secrets-scan ni deploy-preview n'ont besoin d'avoir réussi
     # pour nettoyer : indépendant du sort de la PR (mergée ou simplement
     # fermée), on veut toujours libérer la base D1 si elle a été créée.
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -494,3 +509,45 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --config wrangler.develop.generated.jsonc
+
+  # Espace admin (admin.seancy.com) sur son propre Worker `seancy-admin`
+  # (wrangler.admin.jsonc, worker/admin-split.ts) : mis en ligne à chaque
+  # fusion dans develop, sans attendre une release du site. Même base que la
+  # prod : les migrations de develop y sont donc appliquées dès maintenant
+  # (elles le seraient de toute façon à la release). Règle : une migration ne
+  # fait qu'ajouter (tables, colonnes, index), jamais supprimer ni renommer ce
+  # que la version en ligne du site utilise encore.
+  deploy-admin:
+    name: Deploy admin Worker
+    needs:
+      - verify
+      - secrets-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-admin
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Apply pending migrations (production database)
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply seancy-notifications --remote --config wrangler.admin.jsonc
+
+      - name: Deploy admin Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.admin.jsonc

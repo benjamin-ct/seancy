@@ -65,10 +65,18 @@ export const SECURITY_HEADERS: Record<string, string> = {
 // Cloudflare les sert en `max-age=0, must-revalidate` : chaque visite
 // revalidait chaque fichier (un aller-retour par fichier, coûteux sur une
 // connexion lente) au lieu de les lire directement dans le cache du
-// navigateur. index.html, sw.js et les fichiers de public/ (noms fixes)
-// restent revalidés.
+// navigateur. index.html et les fichiers de public/ (noms fixes) restent
+// revalidés ; sw.js n'est jamais gardé (ci-dessous).
 const HASHED_ASSETS_HEADERS: Record<string, string> = {
   "cache-control": "public, max-age=31536000, immutable",
+};
+
+// Service worker (nom fixe) : jamais gardé en cache. Cloudflare met en cache les
+// fichiers .js par défaut, même hors /assets : le 19 nov., un ancien sw.js servi
+// par le cache de la zone a laissé l'admin sur une ancienne version, même dans
+// un navigateur qui ne l'avait jamais ouvert.
+const SERVICE_WORKER_HEADERS: Record<string, string> = {
+  "cache-control": "no-store",
 };
 
 function renderHeaderBlock(pattern: string, headers: Record<string, string>): string[] {
@@ -90,6 +98,7 @@ export function renderHeadersFile(): string {
   const lines = [
     ...renderHeaderBlock("/*", SECURITY_HEADERS),
     ...renderHeaderBlock("/assets/*", HASHED_ASSETS_HEADERS),
+    ...renderHeaderBlock("/sw.js", SERVICE_WORKER_HEADERS),
   ];
   return lines.join("\n") + "\n";
 }

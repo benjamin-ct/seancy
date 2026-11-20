@@ -10,26 +10,14 @@ import type { Env } from "./types.ts";
 // (domaine de preview réglé sur le Worker, voir .github/workflows/ci.yml, job
 // deploy-preview) — tout le reste (dev local compris) est traité comme
 // non-prod.
-export const PRODUCTION_HOSTNAME = "seancy.com";
-// Autres adresses du Worker `seancy` qui ne doivent jamais servir le site :
-// tout y part en 301 vers PRODUCTION_HOSTNAME, /api compris (voir index.ts ;
-// les pages, servies en assets sans passer par le Worker, sont redirigées
-// côté client par src/core/lib/legacyOriginRedirect.ts). Pour www, il suffit
-// d'ajouter www.seancy.com en domaine personnalisé du Worker.
-export const REDIRECTED_TO_PRODUCTION_HOSTNAMES: readonly string[] = [
-  "www.seancy.com",
-  "seancy.creusatbenjamin.workers.dev",
-];
-
-export function isProductionHostname(hostname: string): boolean {
-  return hostname === PRODUCTION_HOSTNAME;
-}
-
-// Hostname de l'environnement `develop` persistant (voir ticket Trello
-// "Avenir du développement", PR #282) : même mécanisme de nommage que les
-// previews de PR (slug de branche + nom du Worker), nom de branche "develop"
-// donnant ce slug stable.
-export const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+export {
+  ADMIN_HOSTNAME,
+  PREPROD_HOSTNAME,
+  PRODUCTION_HOSTNAME,
+  REDIRECTED_TO_PRODUCTION_HOSTNAMES,
+  isProductionHostname,
+} from "./hostnames.ts";
+import { PREPROD_HOSTNAME, isProductionHostname } from "./hostnames.ts";
 
 // Sans environment explicite, le SDK Sentry retombe sur "production" par
 // défaut — les erreurs des previews de PR et de `develop` remontaient donc

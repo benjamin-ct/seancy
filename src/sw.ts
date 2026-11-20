@@ -23,6 +23,10 @@ interface PushNotificationPayload {
   title?: string;
   body?: string;
   url?: string;
+  icon?: string;
+  tag?: string;
+  /** Pastille de l'icône (notifications des tickets de l'espace admin) */
+  count?: number;
 }
 
 precacheAndRoute(self.__WB_MANIFEST);
@@ -107,12 +111,20 @@ self.addEventListener("push", (event: PushEvent) => {
   const title = data.title || "Seancy";
   const options: NotificationOptions = {
     body: data.body || "",
-    icon: "/icon-192.png",
+    icon: data.icon || "/icon-192.png",
     badge: "/icon-192.png",
     data: { url: data.url || "/" },
+    ...(data.tag ? { tag: data.tag } : {}),
   };
+  const nav = self.navigator as WorkerNavigator & {
+    setAppBadge?: (n?: number) => Promise<void>;
+  };
+  const badge =
+    typeof data.count === "number" && nav.setAppBadge
+      ? nav.setAppBadge(data.count).catch(() => {})
+      : Promise.resolve();
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(Promise.all([self.registration.showNotification(title, options), badge]));
 });
 
 self.addEventListener("notificationclick", (event: NotificationEvent) => {

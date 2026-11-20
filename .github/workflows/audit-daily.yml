@@ -1,0 +1,30 @@
+name: Audit des dépendances (quotidien)
+
+# Même audit que la CI (scripts/audit.ts, niveau « moderate » comme avant une
+# release), mais chaque jour, même sans PR : un avis ignoré par une exception
+# datée (picomatch, sans correctif le 17 nov. 2026) fait échouer ce passage dès
+# qu'un correctif simple existe (`npm audit fix`) ou que la date est passée ;
+# GitHub prévient alors le propriétaire du dépôt par e-mail.
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Audit (exceptions datées, levées dès qu'un correctif existe)
+        run: node scripts/audit.ts moderate

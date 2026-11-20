@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "./AuthContext.tsx";
 import { useMembersOnly } from "./MembersOnlyContext.tsx";
 import { getDetails } from "../api/tmdb.ts";
+import { withSeriesRating } from "../lib/seriesRatings.ts";
 import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncEvent } from "../sync/liveSync.ts";
 import {
@@ -94,6 +95,19 @@ interface LibraryContextValue {
   rateWatched: (mediaType: MediaType, id: number | string, rating: number | null) => void;
   getReview: (mediaType: MediaType, id: number | string) => string | null;
   reviewWatched: (mediaType: MediaType, id: number | string, reviewText: string | null) => void;
+  /** Entrée de bibliothèque d'une série (vue ou en cours), pour lire ses notes
+   * d'épisode/saison (voir core/lib/seriesRatings.ts). */
+  getShowEntry: (mediaType: MediaType, id: number | string) => LibraryItem | null;
+  /** Note d'un épisode (`null` la retire) ; la note de la saison et de la série
+   * suivent (moyennes). */
+  rateEpisode: (
+    item: LibraryItemInput,
+    season: number,
+    episode: number,
+    rating: number | null
+  ) => void;
+  /** Note donnée à la main à une saison (`null` la retire). */
+  rateSeason: (item: LibraryItemInput, season: number, rating: number | null) => void;
   setRuntime: (mediaType: MediaType, id: number | string, runtimeMinutes: number) => void;
   setDirectors: (mediaType: MediaType, id: number | string, directors: DirectorRef[]) => void;
   getWatchedEpisodes: (mediaType: MediaType, id: number | string) => Set<string>;
@@ -832,7 +846,16 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         if (!prev.watched[key]) {
           return prev;
         }
-        const updated: LibraryItem = { ...prev.watched[key], rating, updatedAt: Date.now() };
+        // Série : la note donnée ici est la note manuelle, la note effective
+        // (`rating`) reste la moyenne des saisons s'il y en a une.
+        const updated: LibraryItem =
+          mediaType === "tv"
+            ? withSeriesRating({
+                ...prev.watched[key],
+                manualRating: rating,
+                updatedAt: Date.now(),
+              })
+            : { ...prev.watched[key], rating, updatedAt: Date.now() };
         pendingOpsRef.current.set(key, {
           action: "upsert",
           mediaType,
@@ -878,6 +901,65 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       });
     },
     []
+  );
+
+  const getShowEntry = useCallback(
+    (mediaType: MediaType, id: number | string) => findShowEntry(state, mediaType, id),
+    [state]
+  );
+
+  // Notes d'épisode (clé "saison-épisode") ou de saison (clé = numéro), portées
+  // par l'entrée de la série comme `watchedEpisodes` (vue ou en cours, voir
+  // findShowEntry) ; `rating` est recalculé à chaque fois (seriesRatings.ts).
+  const rateSeriesPart = useCallback(
+    (
+      item: LibraryItemInput,
+      field: "episodeRatings" | "seasonRatings",
+      partKey: string,
+      rating: number | null
+    ) => {
+      const key = makeKey(item.mediaType, item.id);
+      setState((prev) => {
+        const listName: "watched" | "watchlist" = prev.watched[key] ? "watched" : "watchlist";
+        const existing: LibraryItem = prev[listName][key] || {
+          ...item,
+          addedAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        const ratings = { ...existing[field] };
+        if (rating == null) {
+          delete ratings[partKey];
+        } else {
+          ratings[partKey] = rating;
+        }
+        const updated = withSeriesRating<LibraryItem>({
+          ...existing,
+          [field]: ratings,
+          updatedAt: Date.now(),
+        });
+        pendingOpsRef.current.set(key, {
+          action: "upsert",
+          mediaType: item.mediaType,
+          id: item.id,
+          status: listName,
+          item: updated,
+        });
+        return { ...prev, [listName]: { ...prev[listName], [key]: updated } };
+      });
+    },
+    []
+  );
+
+  const rateEpisode = useCallback(
+    (item: LibraryItemInput, season: number, episode: number, rating: number | null) =>
+      rateSeriesPart(item, "episodeRatings", makeEpisodeKey(season, episode), rating),
+    [rateSeriesPart]
+  );
+
+  const rateSeason = useCallback(
+    (item: LibraryItemInput, season: number, rating: number | null) =>
+      rateSeriesPart(item, "seasonRatings", String(season), rating),
+    [rateSeriesPart]
   );
 
   // Complète après coup la durée d'un titre déjà marqué vu (cf. Stats), pour
@@ -1284,6 +1366,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       rateWatched: gated(rateWatched, undefined),
       getReview,
       reviewWatched: gated(reviewWatched, undefined),
+      getShowEntry,
+      rateEpisode: gated(rateEpisode, undefined),
+      rateSeason: gated(rateSeason, undefined),
       setRuntime,
       setDirectors,
       getWatchedEpisodes,
@@ -1313,6 +1398,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     rateWatched,
     getReview,
     reviewWatched,
+    getShowEntry,
+    rateEpisode,
+    rateSeason,
     setRuntime,
     setDirectors,
     getWatchedEpisodes,

@@ -27,6 +27,13 @@ interface SiteVerifyResponse {
   score?: number;
   action?: string;
   "error-codes"?: string[];
+  hostname?: string;
+}
+
+/** Refus gardé dans les journaux du Worker (raison, codes de Google, score, adresse) : le client ne voit qu'un message générique. */
+function refuse(result: RecaptchaResult, hostname?: string): RecaptchaResult {
+  console.warn("reCAPTCHA refusé", JSON.stringify({ ...result, hostname }));
+  return result;
 }
 
 export async function verifyRecaptcha(
@@ -38,7 +45,7 @@ export async function verifyRecaptcha(
     return { ok: true, skipped: true };
   }
   if (!token) {
-    return { ok: false, reason: "missing_token" };
+    return refuse({ ok: false, reason: "missing_token" });
   }
 
   const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
@@ -47,18 +54,18 @@ export async function verifyRecaptcha(
     body: new URLSearchParams({ secret: env.RECAPTCHA_SECRET_KEY, response: token }),
   });
   if (!res.ok) {
-    return { ok: false, reason: "verify_request_failed" };
+    return refuse({ ok: false, reason: "verify_request_failed" });
   }
 
   const data = (await res.json()) as SiteVerifyResponse;
   if (!data.success) {
-    return { ok: false, reason: "rejected", errors: data["error-codes"] };
+    return refuse({ ok: false, reason: "rejected", errors: data["error-codes"] }, data.hostname);
   }
   if (expectedAction && data.action !== expectedAction) {
-    return { ok: false, reason: "action_mismatch" };
+    return refuse({ ok: false, reason: "action_mismatch" }, data.hostname);
   }
   if (typeof data.score === "number" && data.score < MIN_SCORE) {
-    return { ok: false, reason: "low_score", score: data.score };
+    return refuse({ ok: false, reason: "low_score", score: data.score }, data.hostname);
   }
 
   return { ok: true, skipped: false, score: data.score };

@@ -19,6 +19,7 @@ import { MembersOnlyDialog } from "./modules/auth/index.ts";
 import { fadeIn } from "./shared/lib/motion.ts";
 import { hideInitialLoader } from "./core/initialLoader.ts";
 import ErrorBoundary from "./shared/components/ErrorBoundary/ErrorBoundary.tsx";
+import { ADMIN_ORIGIN, isAdminHost, isPublicHost } from "./core/lib/adminHost.ts";
 
 const NewReleases = lazy(() => import("./modules/new-releases/index.ts"));
 const ComingSoon = lazy(() => import("./modules/coming-soon/index.ts"));
@@ -45,6 +46,20 @@ const PrivacyPolicyPage = lazy(() =>
 const ChangelogPage = lazy(() =>
   import("./modules/changelog/index.ts").then((m) => ({ default: m.ChangelogPage }))
 );
+// Espace admin (tableau de bord, tickets envoyés à Claude, outils) : sur son
+// domaine (admin.seancy.com), ou sous /admin ailleurs que sur le site public.
+const AdminApp = lazy(() => import("./modules/admin/index.ts"));
+const ADMIN_HOST = isAdminHost();
+
+// Ancienne adresse de la page Tickets, et /admin sur le site public : vers
+// l'espace admin (son domaine en prod, /admin sur les previews et en local).
+function ToAdmin({ path = "" }: { path?: string }) {
+  if (isPublicHost()) {
+    window.location.replace(`${ADMIN_ORIGIN}${path}`);
+    return null;
+  }
+  return <Navigate to={`/admin${path}`} replace />;
+}
 const NotFound = lazy(() => import("./modules/not-found/index.ts"));
 
 // Pendant le téléchargement d'une page : rien les 300 premières ms (cas
@@ -93,6 +108,19 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Espace admin : sa propre mise en page, sans la barre ni le pied du site
+  if (ADMIN_HOST || (!isPublicHost() && /^\/admin(\/|$)/.test(pathname))) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path={ADMIN_HOST ? "/*" : "/admin/*"} element={<AdminApp />} />
+        </Routes>
+        {/* Admin installé sur le téléphone : tirer vers le bas recharge, comme sur le site */}
+        <PullToRefresh />
+      </Suspense>
+    );
+  }
+
   return (
     <>
       <ScrollToTop />
@@ -132,6 +160,8 @@ export default function App() {
               <Route path="/conditions-utilisation" element={<TermsPage />} />
               <Route path="/confidentialite" element={<PrivacyPolicyPage />} />
               <Route path="/changelog" element={<ChangelogPage />} />
+              <Route path="/tickets" element={<ToAdmin path="/tickets" />} />
+              <Route path="/admin/*" element={<ToAdmin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -21,6 +21,8 @@ Les données (catalogue, affiches, plateformes de streaming) viennent de [TMDB](
 - [Notifications push (optionnel)](#notifications-push-optionnel)
 - [Déploiement (Cloudflare Workers)](#déploiement-cloudflare-workers)
 - [Observabilité](#observabilité)
+- [Espace admin (admin.seancy.com)](#espace-admin-adminseancycom)
+- [Tickets (Claude)](#tickets-claude)
 - [Sécurité](#sécurité)
 - [Hooks Git locaux (Husky)](#hooks-git-locaux-husky)
 - [Fonctionnalités en stub](#fonctionnalités-en-stub)
@@ -156,6 +158,15 @@ En parallèle, le job `apply-d1-migrations` de la CI GitHub Actions (`.github/wo
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`                                | optionnel          | Bouton « Continuer avec Google », voir « Connexion avec Google / Apple » ci-dessus                                                                                                                                                                                                                 |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | optionnel          | Bouton « Continuer avec Apple », idem                                                                                                                                                                                                                                                              |
 
+### Régénérer la paire VAPID
+
+À faire seulement si la clé privée d'origine est perdue. Conséquence : toutes les souscriptions push existantes deviennent invalides, les utilisateurs devront réactiver les notifications (une fois).
+
+1. Sur ta machine : `npm run vapid:generate` (la clé privée n'est affichée que dans ton terminal).
+2. Remplace `VAPID_PUBLIC_KEY` dans `wrangler.jsonc` par la nouvelle clé publique (non sensible, à commiter) et déploie.
+3. Dans le dashboard Cloudflare (Worker `seancy` → Settings → Variables and Secrets), remplace le secret `VAPID_PRIVATE_KEY` par la nouvelle clé privée (43 caractères, sans espace ni retour à la ligne). Fais l'étape 2 et celle-ci dans la foulée : les deux clés vont ensemble.
+4. Envoie une notification de test (`/api/test-notification`, voir `DEBUG_TRIGGER_KEY`) après avoir réactivé les notifications sur ton propre compte.
+
 Pour tester la configuration localement sans rien déployer : `npm run build && npx wrangler deploy --dry-run`.
 
 Pour du développement local avec un Worker complet (D1 + secrets) : crée un `.dev.vars` (jamais commité), puis
@@ -208,6 +219,152 @@ Tant que les branches `feature/*` ciblent encore `main` (le pipeline Trello → 
 - **Dashboard unique** : [Grafana Cloud](https://grafana.com) (gratuit), avec les datasources Sentry et Cloudflare
   Analytics branchées sur un board réunissant les trois sections ci-dessus — configuration faite une fois depuis
   l'interface Grafana, en dehors de ce repo.
+
+## Espace admin (admin.seancy.com)
+
+Tout ce qui est réservé aux administrateurs est regroupé sur **`admin.seancy.com`** : même base que le site, sa propre
+mise en page (`src/modules/admin/`) et son propre domaine, jamais indexé.
+
+**Worker à part, mis en ligne à chaque fusion dans `develop`** (`wrangler.admin.jsonc`, job `deploy-admin` de la CI,
+`worker/admin-split.ts`) : les retouches de l'admin n'attendent plus une release du site. Même code que le site, le
+Worker `seancy-admin` sert `admin.seancy.com` et traite lui-même l'API de l'admin et celle des tickets ; tout le reste
+(connexion, outils qui lancent les traitements du site, clé publique des notifications) est renvoyé au Worker du site
+par service binding, qui garde les secrets du site. Ce qui demande un secret du site passe par une adresse interne
+(`seancy.internal`, jamais joignable d'Internet) : notifications aux administrateurs, état des réglages du site. Le site,
+lui, renvoie au Worker admin l'API de l'admin et des tickets reçue sur ses adresses de production : le NAS, les
+workflows et les scripts gardent leurs adresses. Les previews de PR et `develop` gardent leur propre admin, sur leur
+base. **Migrations** : appliquées à la base de production dès la fusion dans `develop` (job `deploy-admin`) ; une
+migration ne fait donc qu'ajouter (tables, colonnes, index), jamais supprimer ni renommer ce que la version en ligne
+du site utilise encore.
+
+Mise en place (une fois) : après la première fusion, le Worker `seancy-admin` existe ; lui donner ses secrets
+(Cloudflare → Workers et Pages → `seancy-admin` → Paramètres → Variables et secrets) : `ACCESS_AUD`,
+`ACCESS_TEAM_DOMAIN`, `ADMIN_EMAILS`, `CF_ANALYTICS_TOKEN`, `GITHUB_TICKETS_TOKEN`, et si besoin
+`DISCORD_TICKETS_WEBHOOK_URL`, `SENTRY_DSN` ; puis la release suivante du site active le renvoi de l'API ; enfin,
+déplacer le domaine personnalisé `admin.seancy.com` du Worker `seancy` au Worker `seancy-admin`.
+
+- **Tableau de bord** : la **mise en ligne** (ce qui attend sur `develop`, bouton « Lancer la release » : branche
+  `release/<date>` depuis `develop` avec `main` refusionné, PR vers `main` fusionnée par le serveur dès que la CI est
+  passée, notification ; plus besoin d'un ticket pour demander une release : `worker/release.ts` ; la carte montre la
+  prochaine version et les entrées du journal qui partiront ; pastille sur Accueil si une release est bloquée ou attend
+  depuis plus de 3 jours), les **dépendances** (PR de Dependabot vers `develop` avec l'état de leur CI, « Fusionner »
+  quand elle est passée), la **consommation de Claude** (relevée à la fin de chaque passage d'un ticket dans le
+  journal de `claude-code-action` : jetons du jour, des 7 et 30 derniers jours, par modèle et par ticket, coût estimé au
+  prix public, et l'état du quota de l'abonnement, fenêtres de 5 h et de la semaine, tel que Claude l'a donné au dernier
+  passage, pas en direct : `worker/claude-usage.ts`, table `claude_usage`, gardée 90 jours), quelques chiffres
+  (comptes, nouveaux comptes, connexions, abonnés aux notifications, bibliothèques, listes), les tickets par colonne et
+  l'état des réglages (secrets présents ou non, jamais leur valeur).
+- **Tickets** : le tableau des demandes envoyées à Claude (voir [Tickets (Claude)](#tickets-claude)). Chaque ticket
+  garde son auteur et chaque action qui l'a faite ; filtre « Les miens » ; pastille de CI sur les tickets à valider
+  (relue au passage régulier du serveur).
+- **Outils** : notification de test (vers ses propres appareils seulement), vérification des nouveautés tout de suite
+  (le passage de 7 h, avec confirmation), resynchronisation de l'index de recherche, erreur de test Sentry. Les
+  anciennes routes à clé de debug (`/api/run-check`…) restent en place.
+
+**Deux portes** (`worker/admin.ts`) : **Cloudflare Access** devant tout le domaine (le Worker vérifie en plus la
+signature du jeton Access sur chaque appel `/api` du domaine admin : `worker/access.ts`), puis un **compte Seancy**
+dont l'adresse est dans le secret `ADMIN_EMAILS`. Sur `seancy.com`, aucune session n'ouvre l'espace admin (`/admin` et
+l'ancienne adresse `/tickets` y renvoient vers `admin.seancy.com`) ; sur les previews et en local, il est joignable
+sous `/admin` (ou `admin.localhost`). Connexion par e-mail (lien ou code) : Google et Apple ne sont pas proposés sur
+ce domaine (son adresse de retour n'est pas déclarée chez eux). Le domaine admin est compté comme la production : il
+ne renvoie jamais de lien ni de code de connexion dans la réponse.
+
+### Mise en route de l'espace admin
+
+1. **Release** `develop` → `main` : le Worker de production ne se déploie que depuis `main` (la migration `0023` des
+   tickets est appliquée par la CI).
+2. **Domaine** : dashboard Cloudflare → Workers & Pages → `seancy` → Settings → Domains & Routes → _Add_ → _Custom
+   domain_ → `admin.seancy.com` (comme `www.seancy.com` ; pas dans `wrangler.jsonc`, que le Worker `develop` partage).
+3. **Cloudflare Access** : Zero Trust → Access → Applications → _Add an application_ → _Self-hosted_ → domaine
+   `admin.seancy.com`, politique _Allow_ avec vos deux adresses e-mail. Copier l'**Application Audience (AUD) Tag**
+   de l'application et le nom de l'équipe (Zero Trust → Settings → Custom Pages : `<équipe>.cloudflareaccess.com`).
+4. **Secrets du Worker** `seancy` (type **Secret**) : `ADMIN_EMAILS` (adresses des comptes Seancy administrateurs,
+   séparées par des virgules), `ACCESS_TEAM_DOMAIN` (`<équipe>.cloudflareaccess.com`) et `ACCESS_AUD` (le tag de
+   l'étape 3). Sans ces deux derniers, le tableau de bord signale Access « non réglé » et seule la connexion admin de
+   Seancy protège l'espace.
+5. **Quotas Cloudflare** (facultatif) : Cloudflare → My Profile → API Tokens → _Create Custom Token_ avec la seule
+   permissions **Account · Account Analytics · Read** et **Account · D1 · Read** (lecture seule) sur le compte de
+   Seancy, puis secret `CF_ANALYTICS_TOKEN` du Worker `seancy`. Le tableau de bord montre alors les volumes du forfait
+   Workers Paid (depuis le 17 nov. 2026) sur la période de facturation en cours, du 17 au 16 (`BILLING_DAY`) : requêtes
+   des Workers, temps de calcul, lignes lues et écrites dans D1, stockage, avec le coût estimé au-delà de l'inclus, et les
+   neurones Workers AI du jour (10 000 gratuits par jour UTC), le
+   détail par Worker et par modèle, la liste des bases D1 (nom, tables, taille, activité du jour), les erreurs et
+   dépassements de calcul du Worker, et les 7 derniers jours (`worker/cloudflare-usage.ts`, API d'analyse GraphQL, relue au plus toutes
+   les 2 minutes).
+   **Alertes de quota** (`worker/quota-alerts.ts`, au passage régulier du serveur, toutes les 10 minutes) : notification
+   aux appareils abonnés aux tickets (et Discord) quand un volume inclus dépasse 80 % ou sera épuisé avant la remise à
+   zéro au rythme actuel, puis quand il est épuisé (facturé au-delà) ; pareil pour les neurones gratuits du jour et pour
+   les fenêtres du quota de l'abonnement Claude (80 % ou alerte de Claude, puis atteint). Une seule fois par seuil et par
+   période ; rappel en tête des cartes « Quotas Cloudflare » et « Claude ».
+6. Ouvrir `admin.seancy.com`, passer Access, se connecter avec son compte Seancy : le tableau de bord liste ce qui
+   manque encore.
+
+## Tickets (Claude)
+
+Les demandes de développement ne passent plus par Trello : elles vivent dans Seancy, sur la page **Tickets** de
+l'[espace admin](#espace-admin-adminseancycom) (`admin.seancy.com/tickets`), un tableau façon Trello repris de Paddock Live : **Idées**,
+**À faire**, **En cours**, **À valider**, **Faits**. Une carte glissée d'une colonne à l'autre fait l'action de la
+colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec confirmation.
+
+- **Envoi** : le Worker (`worker/tickets.ts`, logique pure dans `worker/tickets-logic.ts`, tables de la migration
+  `0023`) ouvre une issue `Ticket <id>` avec `@claude`. Le workflow **Tickets (Claude)**
+  (`.github/workflows/claude-tickets.yml`) la traite aussitôt en suivant le skill `.claude/skills/ticket/SKILL.md`
+  (mêmes règles que l'ancien pipeline Trello : reprise de l'historique, feature ou hotfix, contrôles, changeset,
+  sous-agents `reviewer` / `ui-reviewer`), ouvre la PR en brouillon et écrit son compte rendu dans le ticket
+  (`node scripts/tickets.ts answer …`). Modèle (Opus ou Sonnet), effort et case **Hotfix** se choisissent par ticket.
+- **Validation** : « Valider et fusionner » fusionne la PR (squash) si elle contient toute sa base et que la CI est
+  passée ; sinon le ticket attend **en file** : la page Tickets ouverte (au plus toutes les 90 s) et le workflow
+  **Tickets (passage)** (toutes les 10 minutes, `.github/workflows/tickets-tick.yml`) mettent la PR à jour, attendent
+  la CI et fusionnent, un ticket à la fois. Pas de tâche planifiée Cloudflare : le forfait gratuit en compte 5 pour
+  tout le compte. Conflit ou CI rouge : le ticket repart tout seul chez Claude (2 essais au
+  plus). Hotfix : fusion dans `main`, puis `main` refusionné dans `develop`. « Valider et commenter » fusionne puis
+  renvoie le commentaire à Claude (nouvelle PR). « Retouche » relance Claude sur la même PR, « Rouvrir » repart
+  d'une branche neuve.
+- **Quota Claude épuisé** : ticket en pause, relancé tout seul une heure après (8 fois au plus). La preview de la PR
+  (commentaire de la CI) est notée toute seule dans le ticket.
+- **Notifications** : sur Discord (prêt à valider, arrêté, en pause, fusionné, validation impossible).
+- **Sessions Claude** : `node scripts/tickets.ts` (`inbox`, `answer`, `progress`, `file`, `add`, `list`, `get`), avec
+  la clé `SEANCY_TICKETS_KEY` (créée sur la page Tickets → Réglages ; seule son empreinte est gardée).
+
+- **Dépôt public** : le contenu des tickets reste dans la base de Seancy ; l'issue GitHub n'en porte que l'identifiant
+  et les réglages, et Claude ne recopie jamais le texte d'un ticket dans une PR, un commit ou un commentaire (consigne
+  du skill). Le journal de Claude n'est pas joint aux lancements (il serait téléchargeable par tous) et le résumé des
+  commandes refusées ne montre que leur nom. Seul le propriétaire du dépôt déclenche Claude. Reste un risque
+  d'**injection de consignes** : Claude lance des commandes avec le jeton `TICKETS_GITHUB_TOKEN`, donc un texte piégé
+  dans un ticket pourrait tenter de le faire fuiter. Seuls les administrateurs écrivent les tickets ; si des tickets
+  viennent un jour d'un texte extérieur (alerte Sentry…), les traiter comme de simples données. Garder ce jeton limité
+  au dépôt `seancy` et protéger `main` et `develop` (pas de push direct).
+
+### Mise en route (une fois)
+
+1. **Espace admin** en place (voir [sa mise en route](#mise-en-route-de-lespace-admin)).
+2. **Secrets du Worker** `seancy` (dashboard Cloudflare → Settings → Variables and Secrets, type **Secret**) :
+   `GITHUB_TICKETS_TOKEN` (jeton GitHub _fine-grained_ sur le dépôt `seancy` : Contents, Issues et Pull requests en
+   écriture, Actions en écriture pour arrêter Claude quand un envoi est annulé ; ajouter Workflows en écriture si
+   Claude doit pouvoir modifier `.github/workflows`), et facultativement `DISCORD_TICKETS_WEBHOOK_URL` (webhook
+   Discord du salon des notifications).
+3. **Clé des sessions** : sur `admin.seancy.com/tickets` → **Réglages** → **Créer la clé**.
+4. **Secrets du dépôt** (GitHub → Settings → Secrets and variables → Actions) : `CLAUDE_CODE_OAUTH_TOKEN` (le même
+   que sur le NAS), `TICKETS_GITHUB_TOKEN` (le même jeton qu'à l'étape 2 : les pushes et la PR passent par lui pour
+   que la CI et la preview se lancent), `SEANCY_TICKETS_KEY` (la clé de l'étape 3) ; facultatifs : `TMDB_API_KEY`,
+   `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` (captures des previews). Variable facultative `SEANCY_RUNNER`
+   (`self-hosted` pour faire tourner Claude sur un runner du NAS au lieu des machines de GitHub).
+
+### Bascule depuis Trello
+
+1. Ajouter les secrets `TRELLO_KEY` et `TRELLO_TOKEN` au dépôt (les mêmes valeurs que le `.env` du NAS).
+2. Actions → **Import Trello** → _Run workflow_ avec l'adresse du board, d'abord en **essai à blanc** (liste de ce qui
+   serait importé), puis pour de vrai (`scripts/trello-import.ts`, conversion dans `scripts/trelloLib.ts`). Toutes
+   les cartes ouvertes sont recopiées avec leur description, leurs checklists, étiquettes, commentaires et pièces
+   jointes (fichiers de 1,5 Mo au plus recopiés, les autres gardés en liens). Rien n'est envoyé à Claude : les cartes
+   « En cours » arrivent dans **À faire** (étiquette « Était en cours sur Trello »), « To merge » dans **À valider**.
+   L'import est rejouable : une carte déjà importée est sautée.
+3. Couper le webhook Trello du NAS (le listener garde le webhook Sentry). Les règles de `trello-ticket-pipeline` sont
+   reprises dans le skill `ticket` ; l'ancien skill ne fait plus que prévenir sur Discord qu'un webhook Trello est
+   arrivé. `sentry-triage` crée ses tickets avec `node scripts/tickets.ts add` (et rattache un correctif direct à un
+   ticket « À valider » avec `answer --pr`) : ajouter `SEANCY_TICKETS_KEY` (la
+   clé de la page Tickets) au `.env` du NAS (passée au conteneur par `docker-compose-seancy.yml`), puis `seancy-pull` et
+   `seancy-rebuild claude`.
 
 ## Sécurité
 

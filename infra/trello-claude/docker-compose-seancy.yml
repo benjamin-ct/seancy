@@ -61,6 +61,10 @@ services:
       - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET:-}
       # Clé TMDB pour `wrangler dev` en local (sinon les pages restent vides). Optionnelle.
       - TMDB_API_KEY=${TMDB_API_KEY:-}
+      # Clé de la page Tickets (Réglages) : sentry-triage y crée ses tickets
+      # (`node scripts/tickets.ts add`). Optionnelle : sans elle, le ticket
+      # proposé est seulement décrit dans le résumé Discord.
+      - SEANCY_TICKETS_KEY=${SEANCY_TICKETS_KEY:-}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
       - CLAUDE_EFFORT=${CLAUDE_EFFORT:-medium}
       # Auth Cloudflare (`wrangler whoami`) pour le benchmark Workers AI (carte

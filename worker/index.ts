@@ -34,6 +34,7 @@ import {
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
   getNotInterestedForUser,
+  getNotInterestedIdsForUser,
   addNotInterested,
   getRecommendationCache,
   setRecommendationCache,
@@ -56,13 +57,18 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
+import { handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
+import { accessGate, adminEmails, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
+import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
+  buildTasteContinuation,
   buildTasteProfile,
   getRecommendationCandidates,
   rankRecommendations,
   type RecommendationItem,
   type RecommendationMediaType,
+  type TasteContinuation,
 } from "./recommendations.ts";
 import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
 import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
@@ -863,6 +869,8 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       shareSlug: user.shareSlug,
       username: user.username,
       avatarVersion: await getAvatarVersion(env.DB, user.id),
+      // Administrateur : bouton « Admin » du site (l'espace admin reste derrière Cloudflare Access)
+      admin: adminEmails(env).includes(user.email.toLowerCase()),
     },
     200,
     { "set-cookie": sessionCookieHeaders(request, sessionToken) }
@@ -881,6 +889,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     username: user.username,
     pendingDeletionAt: user.pendingDeletionAt,
     avatarVersion: await getAvatarVersion(env.DB, user.id),
+    admin: adminEmails(env).includes(user.email.toLowerCase()),
   });
 }
 
@@ -2127,7 +2136,10 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 // du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
 // pages suivantes soient servies par le même lot sans recalcul.
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const RECOMMENDATION_CACHE_SIZE = 96;
+const RECOMMENDATION_CACHE_SIZE = 240;
+// Le lot ne peut pas dépasser le pool de candidats : on le relève aussi (le
+// défaut de 200 par type est conservé pour les suggestions IA).
+const RECOMMENDATION_CANDIDATE_POOL = 400;
 
 // Chaque calcul décode/redimensionne une image en WASM dans ce même Worker
 // (~6 ms une fois l'isolate chaud, ~25 ms à froid — voir le commentaire de
@@ -2217,17 +2229,39 @@ async function handleGetRecommendations(
   const offsetParam = Number(url.searchParams.get("offset"));
   const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
 
+  // Fin du lot : genres de la suite du défilement (voir TasteContinuation),
+  // avec les titres "pas intéressé" relus à chaque fois (jamais figés dans
+  // le cache du lot). Absent tant que le lot a encore des titres.
+  const withContinuation = async (continuation: TasteContinuation | null) =>
+    continuation && (typeParam === "movie" || typeParam === "tv")
+      ? {
+          ...continuation,
+          excludeIds: await getNotInterestedIdsForUser(env.DB, user.id, typeParam),
+        }
+      : null;
+
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
-  if (cached && isFresh && cached.items.length >= offset + limit) {
+  if (cached && isFresh) {
     const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
-    await refreshMissingThumbhashes(env, pageItems);
-    scheduleMissingThumbhashes(ctx, env, pageItems);
-    return json({
-      items: pageItems,
-      coldStart: cached.coldStart,
-      hasMore: offset + pageItems.length < cached.items.length,
-    });
+    const hasMore = offset + pageItems.length < cached.items.length;
+    // Lot complet (le classement a rendu moins de titres que demandé) : sa
+    // fin est servie par le cache, sans recalcul. Un lot mis en cache avant
+    // la suite du défilement (`continuation` undefined) est recalculé
+    // quand sa fin est atteinte.
+    const covers = cached.items.length >= offset + limit || cached.complete;
+    if (covers && (hasMore || cached.continuation !== undefined)) {
+      await refreshMissingThumbhashes(env, pageItems);
+      scheduleMissingThumbhashes(ctx, env, pageItems);
+      return json({
+        items: pageItems,
+        coldStart: cached.coldStart,
+        hasMore,
+        continuation: hasMore
+          ? null
+          : await withContinuation(cached.continuation as TasteContinuation | null),
+      });
+    }
   }
 
   const [library, excludedGenreIds, notInterested] = await Promise.all([
@@ -2240,19 +2274,30 @@ async function handleGetRecommendations(
   const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
 
   const candidateLists = await Promise.all(
-    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+    mediaTypes.map((mediaType) =>
+      getRecommendationCandidates(env, mediaType, RECOMMENDATION_CANDIDATE_POOL)
+    )
   );
   const candidates = candidateLists.flat();
-  const items = rankRecommendations(candidates, profile, {
-    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
-  });
-  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  const rankLimit = Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE);
+  const items = rankRecommendations(candidates, profile, { limit: rankLimit });
+  const continuation =
+    typeParam === "movie" || typeParam === "tv" ? buildTasteContinuation(profile, typeParam) : null;
+  await setRecommendationCache(
+    env.DB,
+    user.id,
+    typeParam,
+    { items, complete: items.length < rankLimit, continuation },
+    profile.isColdStart
+  );
   const pageItems = items.slice(offset, offset + limit);
+  const hasMore = offset + pageItems.length < items.length;
   scheduleMissingThumbhashes(ctx, env, pageItems);
   return json({
     items: pageItems,
     coldStart: profile.isColdStart,
-    hasMore: offset + pageItems.length < items.length,
+    hasMore,
+    continuation: hasMore ? null : await withContinuation(continuation),
   });
 }
 
@@ -2981,10 +3026,56 @@ async function handleTmdbProxy(
   return response;
 }
 
+/**
+ * Appels internes du Worker admin (service binding, voir worker/admin-split.ts) : ce qui demande un
+ * secret du site, gardé par ce Worker seul (clé privée des notifications, état des réglages du site).
+ */
+async function internalApi(request: Request, env: Env): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (pathname === "/api/internal/push-admins" && request.method === "POST") {
+    const b = (await request.json().catch(() => ({}))) as {
+      text?: string;
+      id?: string;
+      tag?: string;
+    };
+    await pushAdmins(env, String(b.text ?? ""), String(b.id ?? ""), b.tag || undefined);
+    return json({ ok: true });
+  }
+  if (pathname === "/api/internal/site-config" && request.method === "GET") {
+    return json(siteConfig(env));
+  }
+  return json({ error: "Introuvable" }, 404);
+}
+
 export default withSentry({
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(url.hostname)) {
+    // Espace admin sur son propre Worker (voir worker/admin-split.ts)
+    if (env.ADMIN_WORKER && env.SITE) {
+      const route = adminWorkerRoute(url.pathname);
+      if (route === "site") {
+        return env.SITE.fetch(request);
+      }
+      if (route === "assets") {
+        return env.ASSETS.fetch(request);
+      }
+    } else {
+      // Worker du site : appels internes du Worker admin, et API de l'admin et des tickets qui lui revient
+      if (url.hostname === INTERNAL_HOSTNAME) {
+        return internalApi(request, env);
+      }
+      if (env.ADMIN && forwardToAdmin(url.hostname, url.pathname)) {
+        return env.ADMIN.fetch(request);
+      }
+    }
+    // Exception : l'API des tickets appelée avec la clé des sessions Claude
+    // (workflows GitHub, import Trello) passe par l'adresse workers.dev, hors
+    // de la zone seancy.com, dont le Bot Fight Mode (forfait gratuit, sans
+    // exception possible) bloque les machines de GitHub. Seule la clé y ouvre
+    // l'accès : aucune session admin sur ces adresses (voir worker/admin.ts).
+    const ticketsByKey =
+      /^\/api\/tickets(\/|$)/.test(url.pathname) && request.headers.has("x-tickets-key");
+    if (REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(url.hostname) && !ticketsByKey) {
       return Response.redirect(`https://${PRODUCTION_HOSTNAME}${url.pathname}${url.search}`, 301);
     }
     // `run_worker_first` (wrangler.jsonc) route surtout /api/* ici : les
@@ -3016,6 +3107,11 @@ export default withSentry({
     // page d'erreur Cloudflare en HTML (sans en-têtes de sécurité), que le
     // client ne sait pas lire.
     try {
+      // Espace admin : tout appel /api de son domaine doit porter un jeton
+      // Cloudflare Access valide (en plus de la connexion admin de Seancy).
+      if (isAdminHostname(url.hostname) && !(await accessGate(request, env))) {
+        return withSecurityHeaders(json({ error: "Accès refusé (Cloudflare Access)." }, 403));
+      }
       // Poignée de main WebSocket de la synchro temps réel : la réponse 101
       // ne doit pas passer par withSecurityHeaders (voir openSyncSocket).
       if (url.pathname === "/api/sync/socket" && request.method === "GET") {
@@ -3038,6 +3134,12 @@ export default withSentry({
   // invocation plutôt que dans celle de runDailyCheck, pour ne pas partager
   // son budget de sous-requêtes TMDB avec les notifications quotidiennes.
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Worker de l'admin (wrangler.admin.jsonc, toutes les 2 minutes) : file de validation des tickets, relances,
+    // previews… sans attendre le workflow « Tickets (passage) », que GitHub ne lance que toutes les quelques heures
+    if (env.ADMIN_WORKER) {
+      ctx.waitUntil(runTicketsCron(env));
+      return;
+    }
     if (event.cron === SEARCH_INDEX_SYNC_CRON) {
       ctx.waitUntil(syncPopularTitles(env));
       return;
@@ -3052,11 +3154,21 @@ async function routeRequest(
   url: URL,
   ctx: ExecutionContext
 ): Promise<Response> {
+  // Espace admin (tableau de bord, outils) et tickets envoyés à Claude :
+  // réservés aux administrateurs et aux sessions Claude (voir worker/admin.ts
+  // et worker/tickets.ts).
+  if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) {
+    return handleAdmin(request, env, url, ctx);
+  }
+  if (url.pathname === "/api/tickets" || url.pathname.startsWith("/api/tickets/")) {
+    return handleTickets(request, env, url, ctx);
+  }
   if (url.pathname === "/api/vapid-public-key" && request.method === "GET") {
     if (!env.VAPID_PUBLIC_KEY) {
       return json({ error: "VAPID_PUBLIC_KEY non configurée." }, 503);
     }
-    return cachedStaticJson(request, ctx, { publicKey: env.VAPID_PUBLIC_KEY });
+    // Sans cache, comme la clé reCAPTCHA : après un changement de clé, les navigateurs se réabonnent tout de suite
+    return json({ publicKey: env.VAPID_PUBLIC_KEY }, 200, { "cache-control": "no-store" });
   }
 
   // Clé "site" reCAPTCHA v3 : faite pour être publique (elle apparaît de
@@ -3067,7 +3179,9 @@ async function routeRequest(
   // anti-robot (le serveur, lui, saute aussi la vérification côté
   // verifyRecaptcha tant que RECAPTCHA_SECRET_KEY n'est pas configurée).
   if (url.pathname === "/api/recaptcha-site-key" && request.method === "GET") {
-    return cachedStaticJson(request, ctx, { siteKey: env.RECAPTCHA_SITE_KEY || null });
+    // Sans cache (ni ici, ni dans le navigateur) : après un changement de clé,
+    // une ancienne clé gardée en cache empêche toute connexion (jeton refusé).
+    return json({ siteKey: env.RECAPTCHA_SITE_KEY || null }, 200, { "cache-control": "no-store" });
   }
 
   // DSN Sentry pour l'init côté client (voir src/core/logger.ts) : servi

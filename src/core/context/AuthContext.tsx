@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { getRecaptchaToken } from "../lib/recaptcha.ts";
 import { clearAccountDataFromDevice } from "../lib/accountStorage.ts";
@@ -60,6 +61,8 @@ interface AuthContextValue {
   // Suppression de compte programmée (ms depuis l'epoch), `null` sinon —
   // voir DataSettings. Se reconnecter l'annule automatiquement.
   pendingDeletionAt: number | null;
+  // Compte administrateur de Seancy (secret ADMIN_EMAILS) : bouton « Admin » de la barre et du profil
+  admin: boolean;
   requestLink: (email: string) => Promise<RequestLinkResult>;
   verify: (token: string) => Promise<VerifyResult>;
   verifyCode: (email: string, code: string) => Promise<VerifyResult>;
@@ -132,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
   const [pendingDeletionAt, setPendingDeletionAt] = useState<number | null>(null);
+  const [admin, setAdmin] = useState(false);
 
   // `verify()` (consommation du jeton sur /auth/verify) et `refresh()` (la
   // vérification passive "suis-je déjà connecté" au montage) peuvent
@@ -159,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsername(null);
       setAvatarVersion(null);
       setPendingDeletionAt(null);
+      setAdmin(false);
       setStatus("anonymous");
       return Promise.resolve();
     }
@@ -174,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: string | null;
           avatarVersion: number | null;
           pendingDeletionAt: number | null;
+          admin?: boolean;
         }>;
       })
       .then((data) => {
@@ -183,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsername(data.username ?? null);
         setAvatarVersion(data.avatarVersion ?? null);
         setPendingDeletionAt(data.pendingDeletionAt ?? null);
+        setAdmin(data.admin === true);
         setStatus("authenticated");
         pinnedRef.current = true;
       })
@@ -196,6 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsername(null);
         setAvatarVersion(null);
         setPendingDeletionAt(null);
+        setAdmin(false);
         setStatus("anonymous");
       });
   }, []);
@@ -278,6 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Le serveur annule toute suppression programmée à chaque connexion
       // réussie (voir handleVerify) : toujours `null` après ce point.
       setPendingDeletionAt(null);
+      setAdmin(data.admin === true);
       setStatus("authenticated");
       return data;
     },
@@ -509,6 +518,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username,
       avatarVersion,
       pendingDeletionAt,
+      admin,
       requestLink,
       verify,
       verifyCode,
@@ -534,6 +544,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username,
       avatarVersion,
       pendingDeletionAt,
+      admin,
       requestLink,
       verify,
       verifyCode,
@@ -559,7 +570,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 // Les messages d'erreur du Worker sont en français : on les traduit côté
 // client à partir du `reason` (ou du statut HTTP) qu'il renvoie.
 function emailChangeErrorMessage(
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: TFunction,
   data: { reason?: unknown; retryAfter?: unknown },
   status: number
 ): string {
