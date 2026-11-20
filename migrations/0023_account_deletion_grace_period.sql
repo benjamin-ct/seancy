@@ -5,6 +5,9 @@
 -- avant la suppression effective. Se reconnecter pendant ce délai annule la
 -- suppression (voir cancelPendingDeletion, appelé après chaque connexion
 -- réussie). NULL = pas de suppression en attente (défaut).
+-- Numéro 0023 partagé avec 0023_tickets.sql (comme les deux 0017) : nom gardé
+-- tel quel car déjà joué sur la base de preview de la PR ; wrangler suit les
+-- migrations par nom de fichier, l'ordre n'a pas d'importance ici.
 ALTER TABLE users ADD COLUMN pending_deletion_at INTEGER;
 
 CREATE TABLE IF NOT EXISTS account_deletion_requests (
