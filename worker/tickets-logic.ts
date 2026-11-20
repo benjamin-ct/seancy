@@ -289,7 +289,7 @@ function cleanHistory(h: unknown): HistoryEvent[] {
         kind: str(o.kind, 20),
       };
       if (o.text) {
-        ev.text = str(o.text, 3000);
+        ev.text = str(o.text, 8000);
       }
       if (o.pr) {
         ev.pr = str(o.pr, 400);
