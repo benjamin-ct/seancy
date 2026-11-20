@@ -723,6 +723,17 @@ const main = async () => {
     ]
   );
 
+  // Compte rendu long : gardé en entier dans l'historique (même limite que le champ answer)
+  {
+    const text = "Compte rendu détaillé. ".repeat(250).trim();
+    const t = applyAction(
+      { status: "work" as TicketStatus, data: { ...EMPTY_DATA, title: "T", sent: 1 } },
+      { type: "answer", text },
+      2
+    );
+    check("Compte rendu long gardé en entier dans l'historique", t.data.history.at(-1)?.text, text);
+  }
+
   // Membres d'un ticket (« Me rajouter ») et réécriture par l'IA
   {
     const base = {
