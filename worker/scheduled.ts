@@ -9,6 +9,7 @@ import {
   notifiedKey,
   providersChanged,
   knownProvidersUpdate,
+  purgeAccountsPendingDeletion,
 } from "./db.ts";
 import {
   getFlatrateProviderIdsCached,
@@ -364,6 +365,14 @@ export async function runDailyCheck(env: Env): Promise<void> {
   const db = env.DB;
   // En premier : un échec plus loin dans le cron ne doit pas l'empêcher.
   await purgeExpiredRows(db);
+  // Suppressions de compte dont le délai de grâce de 7 jours est passé
+  // (ticket « Amélioration de la page de profil utilisateur »). Isolé dans
+  // son propre try/catch, même logique que checkReminders ci-dessous.
+  try {
+    await purgeAccountsPendingDeletion(db);
+  } catch (err) {
+    logError("Cron : suppressions de compte en échec :", err);
+  }
   const subscriptions = await getAllSubscriptions(db);
   const tmdbCache = createTmdbRunCache();
   const regions = await getRegionsByUser(db);

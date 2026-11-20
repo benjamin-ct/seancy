@@ -311,13 +311,16 @@ export async function getTitleActivity(
   return {
     following: counts.following,
     entries: results.map((row) => {
-      const { rating, watchedEpisodes, watchedAt } = JSON.parse(row.data) as LibraryItem;
+      const { rating, reviewText, watchedEpisodes, watchedAt } = JSON.parse(
+        row.data
+      ) as LibraryItem;
       const effectiveDate =
         row.status === "watched" && typeof watchedAt === "number" ? watchedAt : row.updated_at;
       return {
         profile: { slug: row.share_slug, displayName: row.display_name },
         status: row.status,
         rating: row.status === "watched" && typeof rating === "number" ? rating : null,
+        reviewText: row.status === "watched" && typeof reviewText === "string" ? reviewText : null,
         updatedAt: effectiveDate,
         progress: row.status === "watchlist" ? lastWatchedEpisode(watchedEpisodes) : null,
       };

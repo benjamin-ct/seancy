@@ -77,43 +77,48 @@ export default function FollowingActivity({ mediaType, id }: { mediaType: MediaT
         <p className={styles.empty}>{t("detailPage.followingEmpty")}</p>
       ) : (
         <ul className={styles.list}>
-          {activity.entries.map(({ profile, status: entryStatus, rating, updatedAt, progress }) => {
-            const name = profile.displayName || t("detailPage.followingUnnamed");
-            const when = timeAgo(updatedAt, i18n.language);
-            return (
-              <li key={profile.slug}>
-                <Link to={`/u/${encodeURIComponent(profile.slug)}`} className={styles.row}>
-                  <Avatar slug={profile.slug} name={name} />
-                  <span className={styles.who}>
-                    <span className={styles.name}>{name}</span>
-                    <span className={styles.what}>
-                      {entryStatus === "watched"
-                        ? [
-                            rating != null
-                              ? t("detailPage.followingRated", { rating })
-                              : t("detailPage.followingWatched"),
-                            when,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
-                        : progress
-                          ? t("detailPage.followingInProgress", {
-                              season: progress.seasonNumber,
-                              episode: progress.episodeNumber,
-                            })
-                          : t("detailPage.followingWants")}
+          {activity.entries.map(
+            ({ profile, status: entryStatus, rating, reviewText, updatedAt, progress }) => {
+              const name = profile.displayName || t("detailPage.followingUnnamed");
+              const when = timeAgo(updatedAt, i18n.language);
+              return (
+                <li key={profile.slug}>
+                  <Link to={`/u/${encodeURIComponent(profile.slug)}`} className={styles.row}>
+                    <Avatar slug={profile.slug} name={name} />
+                    <span className={styles.who}>
+                      <span className={styles.name}>{name}</span>
+                      <span className={styles.what}>
+                        {entryStatus === "watched"
+                          ? [
+                              rating != null
+                                ? t("detailPage.followingRated", { rating })
+                                : t("detailPage.followingWatched"),
+                              when,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : progress
+                            ? t("detailPage.followingInProgress", {
+                                season: progress.seasonNumber,
+                                episode: progress.episodeNumber,
+                              })
+                            : t("detailPage.followingWants")}
+                      </span>
+                      {entryStatus === "watched" && reviewText && (
+                        <span className={styles.review}>“{reviewText}”</span>
+                      )}
                     </span>
-                  </span>
-                  {rating != null && (
-                    <span className={styles.rating}>
-                      <Icon name="star" filled />
-                      {rating}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
+                    {rating != null && (
+                      <span className={styles.rating}>
+                        <Icon name="star" filled />
+                        {rating}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            }
+          )}
         </ul>
       )}
     </section>

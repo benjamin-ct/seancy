@@ -150,6 +150,10 @@ export default function DetailPage() {
   const [newListName, setNewListName] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
   const [markingSeries, setMarkingSeries] = useState(false);
+  // Brouillon local de l'avis texte : distinct de la valeur stockée tant que
+  // l'utilisateur n'a pas cliqué "Enregistrer" (pas de synchro à chaque
+  // frappe, contrairement à la note qui s'applique au clic sur une étoile).
+  const [reviewDraft, setReviewDraft] = useState<string | null>(null);
   const { episodesBySeason, loadSeason } = useSeasonEpisodes(Number(id));
   const {
     isWatched,
@@ -159,6 +163,8 @@ export default function DetailPage() {
     markSeriesWatched,
     getRating,
     rateWatched,
+    getReview,
+    reviewWatched,
     getShowEntry,
     customLists,
     isInList,
@@ -188,6 +194,7 @@ export default function DetailPage() {
     }
     let cancelled = false;
     setCastBatches(0);
+    setReviewDraft(null);
     const ready = peekDetails(mediaType, id);
     if (ready) {
       setDetails(ready);
@@ -425,6 +432,20 @@ export default function DetailPage() {
       return;
     }
     rateWatched(mediaType, id, value);
+  }
+
+  // Avis texte libre, même porte que la note (seul un titre vu peut en
+  // recevoir un) : brouillon local tant que non enregistré.
+  const storedReview = watched ? getReview(mediaType, id) : null;
+  const reviewValue = reviewDraft ?? storedReview ?? "";
+  const reviewDirty = reviewDraft !== null && reviewDraft !== (storedReview ?? "");
+
+  function saveReview() {
+    if (!mediaType || !id || !watched || !requireMember()) {
+      return;
+    }
+    reviewWatched(mediaType, id, reviewValue);
+    setReviewDraft(null);
   }
 
   // « Marquer la série comme vue » coche tous les épisodes diffusés (listes
@@ -899,6 +920,34 @@ export default function DetailPage() {
                 )
               ) : (
                 <RatingStars value={rating} onRate={rate} clearable hideValue disabled={!watched} />
+              )}
+              {watched && (
+                <div className={styles.yourReview}>
+                  <label className={styles.yourReviewLabel} htmlFor="your-review-text">
+                    {t("detailPage.yourReviewLabel")}
+                  </label>
+                  <textarea
+                    id="your-review-text"
+                    className={styles.yourReviewInput}
+                    value={reviewValue}
+                    maxLength={1000}
+                    placeholder={t("detailPage.yourReviewPlaceholder")}
+                    onChange={(e) => setReviewDraft(e.target.value)}
+                  />
+                  <div className={styles.yourReviewFooter}>
+                    <span className={styles.yourReviewCount}>
+                      {t("detailPage.yourReviewCount", { count: reviewValue.length, max: 1000 })}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.yourReviewSave}
+                      onClick={saveReview}
+                      disabled={!reviewDirty}
+                    >
+                      {t("detailPage.yourReviewSave")}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

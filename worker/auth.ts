@@ -18,6 +18,10 @@
 import type { Env, UserRow } from "./types.ts";
 
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
+// Délai de grâce avant suppression effective du compte (ticket « Amélioration
+// de la page de profil utilisateur ») : se reconnecter avant cette échéance
+// annule la suppression (voir cancelPendingDeletion).
+const ACCOUNT_DELETION_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_COOKIE = "seancy_session";
 // Cookie compagnon, lisible en JS (pas HttpOnly, aucune valeur sensible :
@@ -43,6 +47,9 @@ export interface AuthUser {
   sessionToken: string;
   /** Fin de validité de la session (ms depuis l'epoch). */
   expiresAt: number;
+  /** Suppression de compte programmée (ms depuis l'epoch), `null` sinon —
+   * voir migration 0023 et createAccountDeletionRequest/confirmAccountDeletion. */
+  pendingDeletionAt: number | null;
 }
 
 // Jetons de session et de lien magique (et codes courts) stockés hachés en
@@ -234,7 +241,7 @@ export async function getUserFromRequest(
   const row = await db
     .prepare(
       `SELECT users.id, users.email, users.display_name, users.share_slug, users.username,
-              sessions.expires_at, sessions.token
+              users.pending_deletion_at, sessions.expires_at, sessions.token
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token IN (?, ?)`
     )
@@ -246,6 +253,7 @@ export async function getUserFromRequest(
       display_name: string | null;
       share_slug: string | null;
       username: string | null;
+      pending_deletion_at: number | null;
       expires_at: number;
     }>();
   if (!row || row.expires_at < Date.now()) {
@@ -262,6 +270,7 @@ export async function getUserFromRequest(
     username: row.username,
     sessionToken: token,
     expiresAt: row.expires_at,
+    pendingDeletionAt: row.pending_deletion_at,
   };
 }
 
@@ -376,6 +385,36 @@ const EMAIL_CHANGED_NOTICE_CONTENT: Record<
   },
 };
 
+const ACCOUNT_DELETION_CODE_CONTENT: Record<
+  EmailLocale,
+  { subject: string; html: (code: string) => string }
+> = {
+  fr: {
+    subject: "Confirmez la suppression de votre compte Seancy",
+    html: (code) => `
+        <p>Pour confirmer la suppression de votre compte Seancy, entrez ce code dans
+        Réglages → Mes données (valable 15 minutes) :</p>
+        <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">${code}</p>
+        <p>Une fois confirmée, la suppression aura lieu dans 7 jours. Vous pouvez
+        l'annuler à tout moment avant cette échéance, simplement en vous reconnectant.</p>
+        <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email : rien ne
+        sera supprimé sans ce code.</p>
+      `,
+  },
+  en: {
+    subject: "Confirm deletion of your Seancy account",
+    html: (code) => `
+        <p>To confirm deletion of your Seancy account, enter this code in
+        Settings → My data (valid for 15 minutes):</p>
+        <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">${code}</p>
+        <p>Once confirmed, deletion will happen in 7 days. You can cancel it at any
+        time before then, simply by signing back in.</p>
+        <p>If you didn't request this, you can safely ignore this email: nothing will
+        be deleted without this code.</p>
+      `,
+  },
+};
+
 function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
@@ -452,6 +491,71 @@ export async function confirmEmailChange(
   return { ok: true, oldEmail: current.email, newEmail: pending.new_email };
 }
 
+// Suppression de compte (ticket « Amélioration de la page de profil
+// utilisateur ») : confirmation forte par code envoyé par email (même
+// mécanique que le changement d'adresse ci-dessus), puis délai de grâce de
+// 7 jours avant la suppression effective (voir purgeAccountsPendingDeletion
+// dans worker/scheduled.ts). Remplace la confirmation précédente (saisie de
+// l'adresse email, sans preuve d'accès à la boîte mail — audit M14).
+export async function createAccountDeletionRequest(
+  db: D1Database,
+  userId: number
+): Promise<string> {
+  const code = randomCode();
+  await db
+    .prepare(
+      `INSERT INTO account_deletion_requests (user_id, code, expires_at) VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET code = excluded.code, expires_at = excluded.expires_at`
+    )
+    .bind(userId, code, Date.now() + MAGIC_LINK_TTL_MS)
+    .run();
+  return code;
+}
+
+export type ConfirmAccountDeletionResult = { ok: true; pendingDeletionAt: number } | { ok: false };
+
+// Code cherché QUE parmi la demande de `userId` (même garde que
+// confirmEmailChange) : impossible de programmer la suppression d'un autre
+// compte.
+export async function confirmAccountDeletion(
+  db: D1Database,
+  userId: number,
+  code: string | undefined | null
+): Promise<ConfirmAccountDeletionResult> {
+  const normalized = (code || "").trim().toUpperCase();
+  const pending = normalized
+    ? await db
+        .prepare("SELECT code, expires_at FROM account_deletion_requests WHERE user_id = ?")
+        .bind(userId)
+        .first<{ code: string; expires_at: number }>()
+    : null;
+  if (!pending || pending.code !== normalized || pending.expires_at < Date.now()) {
+    return { ok: false };
+  }
+  const pendingDeletionAt = Date.now() + ACCOUNT_DELETION_GRACE_PERIOD_MS;
+  await db.batch([
+    db
+      .prepare("UPDATE users SET pending_deletion_at = ? WHERE id = ?")
+      .bind(pendingDeletionAt, userId),
+    db.prepare("DELETE FROM account_deletion_requests WHERE user_id = ?").bind(userId),
+  ]);
+  return { ok: true, pendingDeletionAt };
+}
+
+// Annule une suppression programmée (bouton explicite, ou appelée sans
+// condition après chaque connexion réussie — voir handleVerify : « se
+// reconnecter annule la suppression »). Ne lève jamais, no-op si rien n'était
+// en attente.
+export async function cancelPendingDeletion(db: D1Database, userId: number): Promise<boolean> {
+  const result = await db
+    .prepare(
+      "UPDATE users SET pending_deletion_at = NULL WHERE id = ? AND pending_deletion_at IS NOT NULL"
+    )
+    .bind(userId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 export async function isEmailUsedByAnotherUser(
   db: D1Database,
   email: string,
@@ -462,6 +566,16 @@ export async function isEmailUsedByAnotherUser(
     .bind(email)
     .first<{ id: number }>();
   return !!row && row.id !== userId;
+}
+
+export function sendAccountDeletionCode(
+  env: Env,
+  email: string,
+  code: string,
+  locale: EmailLocale
+): Promise<{ skipped: boolean }> {
+  const content = ACCOUNT_DELETION_CODE_CONTENT[locale];
+  return sendEmail(env, email, content.subject, content.html(code));
 }
 
 export function sendEmailChangeCode(
