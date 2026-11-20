@@ -21,9 +21,9 @@
   "errorBoundary": {
     "eyebrow": "Erreur",
     "title": "Oups, cette page a planté",
-    "lead": "Un problème inattendu est survenu. Il nous a été signalé automatiquement. Vous pouvez réessayer, ou revenir à l’accueil.",
+    "lead": "Un problème inattendu est survenu. Il nous a été signalé automatiquement. Vous pouvez réessayer, ou revenir à l'accueil.",
     "retry": "Réessayer",
-    "backToHome": "Retour à l’accueil"
+    "backToHome": "Retour à l'accueil"
   },
   "legalLinks": {
     "ariaLabel": "Informations légales",
@@ -122,8 +122,8 @@
     "markWatchedAria": "Marquer {{title}} S{{season}} · É{{episode}} comme vu"
   },
   "personCard": {
-    "departmentActing": "Acteur/Actrice",
-    "departmentDirecting": "Réalisateur/Réalisatrice",
+    "departmentActing": "Acteur·rice",
+    "departmentDirecting": "Réalisateur·rice",
     "departmentWriting": "Scénariste",
     "departmentProduction": "Production"
   },
@@ -149,36 +149,36 @@
   },
   "loginPage": {
     "title": "Se connecter",
-    "subtitle": "Connectez-vous pour retrouver votre liste \"envie de voir\" / \"déjà vu\" sur tous vos appareils. Pas de mot de passe : on vous envoie un lien de connexion par email.",
+    "subtitle": "Connectez-vous pour retrouver votre liste « envie de voir » / « déjà vu » sur tous vos appareils. Pas de mot de passe : on vous envoie un lien de connexion par e-mail.",
     "unknownError": "Erreur inconnue.",
     "linkSentBefore": "Un lien de connexion a été envoyé à ",
     "linkSentAfter": ".",
     "checkInbox": "Vérifiez votre boîte mail (et vos spams) — le lien est valable 15 minutes.",
-    "devModeLinkLabel": "Mode développement (pas d'email configuré) : ",
-    "codeLabel": "Ou entrez le code reçu par email",
+    "devModeLinkLabel": "Mode développement (pas d'e-mail configuré) : ",
+    "codeLabel": "Ou entrez le code reçu par e-mail",
     "codeHint": "Si Seancy est installée sur votre écran d'accueil, le lien risque de s'ouvrir dans le navigateur au lieu de l'app — le code, lui, fonctionne toujours ici.",
     "devModeCodeLabel": "Mode développement : code {{code}}",
     "verifying": "Vérification…",
     "submitCode": "Valider le code",
-    "emailLabel": "Adresse email",
+    "emailLabel": "Adresse e-mail",
     "emailPlaceholder": "vous@exemple.com",
     "sending": "Envoi…",
     "submitEmail": "Recevoir mon lien de connexion",
     "continueWith": "Continuer avec {{provider}}",
-    "orEmail": "ou avec votre adresse email",
+    "orEmail": "ou avec votre adresse e-mail",
     "oauthErrors": {
       "unavailable": "Ce moyen de connexion n'est pas disponible pour le moment.",
       "rate-limited": "Trop de tentatives de connexion. Réessayez dans quelques minutes.",
       "expired": "La connexion a expiré ou a déjà été utilisée. Recommencez.",
       "cancelled": "Connexion annulée.",
-      "failed": "La connexion n'a pas abouti. Réessayez, ou recevez un lien par email.",
-      "no-email": "Ce compte ne nous a pas transmis d'adresse email vérifiée : connectez-vous avec un lien par email, puis associez-le depuis Profil → Réglages → Compte.",
-      "provider-taken": "Votre compte Seancy est déjà associé à un autre compte de ce fournisseur. Connectez-vous avec celui-ci ou avec un lien par email."
+      "failed": "La connexion n'a pas abouti. Réessayez, ou recevez un lien par e-mail.",
+      "no-email": "Ce compte ne nous a pas transmis d'adresse e-mail vérifiée : connectez-vous avec un lien par e-mail, puis associez-le depuis Profil → Réglages → Compte.",
+      "provider-taken": "Votre compte Seancy est déjà associé à un autre compte de ce fournisseur. Connectez-vous avec celui-ci ou avec un lien par e-mail."
     }
   },
   "membersOnly": {
     "title": "Action réservée aux membres connectés",
-    "text": "Connectez-vous pour enregistrer vos films et séries vus, votre liste d'envies, vos notes et vos listes perso. Pas de mot de passe : on vous envoie un lien de connexion par email."
+    "text": "Connectez-vous pour enregistrer vos films et séries vus, votre liste d'envies, vos notes et vos listes perso. Pas de mot de passe : on vous envoie un lien de connexion par e-mail."
   },
   "trailer": {
     "button": "Bande-annonce",
@@ -293,8 +293,8 @@
     "avatarCropConfirm": "Valider",
     "signInMethods": {
       "title": "Moyens de connexion",
-      "hint": "Connectez-vous avec Google ou Apple en plus du lien envoyé par email, qui reste toujours disponible. L'adresse email du compte ne change pas.",
-      "magicLink": "Lien ou code par email",
+      "hint": "Connectez-vous avec Google ou Apple en plus du lien envoyé par e-mail, qui reste toujours disponible. L'adresse e-mail du compte ne change pas.",
+      "magicLink": "Lien ou code par e-mail",
       "alwaysOn": "Toujours actif",
       "linked": "Associé",
       "notLinked": "Non associé",
@@ -354,7 +354,7 @@
     },
     "searching": "Recherche…",
     "noResults": "Aucun résultat.",
-    "personRoleHint": "Acteur/Actrice, réalisateur·rice…",
+    "personRoleHint": "Acteur·rice, réalisateur·rice…",
     "mediaTypeMovie": "Film",
     "mediaTypeSeries": "Série",
     "viewAllResults": "Voir tous les résultats pour « {{query}} » →",
@@ -442,7 +442,7 @@
     "max": "Max",
     "ratingOutOf10": "Note (sur 10)",
     "minVoteCount": "Nombre de votes minimum",
-    "minVoteCountPlaceholder": "Ex: 100",
+    "minVoteCountPlaceholder": "Ex. : 100",
     "runtimeMinutes": "Durée (minutes)",
     "originCountry": "Pays de production",
     "allCountries": "Tous les pays",
@@ -627,7 +627,7 @@
     "typeTv": "Série"
   },
   "notificationSettings": {
-    "unsupported": "Les notifications push ne sont pas supportées par ce navigateur.",
+    "unsupported": "Les notifications push ne sont pas prises en charge par ce navigateur.",
     "permissionDenied": "Permission refusée. Autorisez les notifications dans les réglages du navigateur pour ce site.",
     "pushServiceError": "Le service de notifications de votre navigateur a refusé l'inscription. Réessayez dans un moment ; si l'erreur revient, ouvrez Seancy dans Chrome (sur Android, les notifications push ont besoin des services Google).",
     "pushServiceErrorBrave": "Brave bloque l'inscription aux notifications push. Activez « Utiliser les services Google pour la messagerie push » dans les paramètres de Brave (Confidentialité et sécurité), puis réessayez. Sinon, ouvrez Seancy dans Chrome.",
@@ -636,11 +636,11 @@
     "incompleteSubscription": "Abonnement push incomplet.",
     "enabling": "Activation…",
     "testNow": "Envoyer une notification de test",
-    "testDelayed": "Envoyer dans 15 s",
+    "testDelayed": "Envoyer dans 15 s",
     "testSending": "Envoi…",
     "testSentInApp": "Envoyée dans l'app : un appareil de votre compte a l'app ouverte.",
     "testSentPush": "Envoyée en push : aucun appareil de votre compte n'a l'app ouverte.",
-    "testScheduled": "Envoi dans {{seconds}} s : fermez l'app maintenant.",
+    "testScheduled": "Envoi dans {{seconds}} s : fermez l'app maintenant.",
     "testFailed": "Envoi impossible ({{status}}).",
     "pushLabel": "Notifications push",
     "testNowHint": "Arrive dans quelques secondes sur cet appareil.",
@@ -698,7 +698,7 @@
     },
     "account": {
       "title": "Compte et connexion",
-      "text": "La création d'un compte se fait par email, via un lien de connexion à usage unique (aucun mot de passe n'est stocké). Vous êtes responsable de la sécurité de l'accès à votre boîte email, seul moyen d'accéder à votre compte."
+      "text": "La création d'un compte se fait par e-mail, via un lien de connexion à usage unique (aucun mot de passe n'est stocké). Vous êtes responsable de la sécurité de l'accès à votre boîte e-mail, seul moyen d'accéder à votre compte."
     },
     "usage": {
       "title": "Usage autorisé",
@@ -734,15 +734,15 @@
       "title": "Données que nous collectons",
       "account": {
         "label": "Compte",
-        "text": " : votre adresse email (seule information demandée à l'inscription), utilisée pour la connexion par lien/code à usage unique — aucun mot de passe n'est stocké. Vous pouvez la modifier depuis votre profil : la nouvelle adresse n'est enregistrée qu'après saisie d'un code envoyé à celle-ci (la demande en attente est conservée 15 minutes au plus), et un avertissement est envoyé à l'ancienne. Vous pouvez aussi renseigner un nom affiché, facultatif, visible sur votre carte de compte et synchronisé entre vos appareils, ainsi qu'une photo de profil, facultative : elle est recadrée et réduite sur votre appareil avant envoi (ce qui retire ses métadonnées, dont la position GPS), conservée tant que vous ne la supprimez pas, et remplace alors votre photo Gravatar."
+        "text": " : votre adresse e-mail (seule information demandée à l'inscription), utilisée pour la connexion par lien/code à usage unique — aucun mot de passe n'est stocké. Vous pouvez la modifier depuis votre profil : la nouvelle adresse n'est enregistrée qu'après saisie d'un code envoyé à celle-ci (la demande en attente est conservée 15 minutes au plus), et un avertissement est envoyé à l'ancienne. Vous pouvez aussi renseigner un nom affiché, facultatif, visible sur votre carte de compte et synchronisé entre vos appareils, ainsi qu'une photo de profil, facultative : elle est recadrée et réduite sur votre appareil avant envoi (ce qui retire ses métadonnées, dont la position GPS), conservée tant que vous ne la supprimez pas, et remplace alors votre photo Gravatar."
       },
       "library": {
         "label": "Bibliothèque personnelle",
-        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », les notes que vous leur donnez (pour une série, aussi par saison et par épisode), vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour toi ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse email ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
+        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », les notes que vous leur donnez (pour une série, aussi par saison et par épisode), vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour vous ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse e-mail ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
       },
       "preferences": {
         "label": "Préférences",
-        "text": " : genres exclus, plateformes de streaming favorites, région."
+        "text": " : genres exclus, plateformes de streaming favorites, région."
       },
       "push": {
         "label": "Notifications push",
@@ -750,27 +750,27 @@
       },
       "technical": {
         "label": "Données techniques",
-        "text": " : votre adresse IP est traitée brièvement pour limiter les abus (anti-spam sur la connexion), sans être conservée sous une forme identifiable liée à votre compte."
+        "text": " : votre adresse IP est traitée brièvement pour limiter les abus (anti-spam sur la connexion), sans être conservée sous une forme identifiable liée à votre compte."
       },
       "sharedLists": {
         "label": "Listes partagées",
-        "text": " (si vous choisissez de partager une liste personnalisée) : son nom, son contenu, vos notes sur les titres qu'elle contient et votre nom affiché deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse email. Vous pouvez arrêter ce partage à tout moment depuis la liste, ce qui rend le lien définitivement invalide."
+        "text": " (si vous choisissez de partager une liste personnalisée) : son nom, son contenu, vos notes sur les titres qu'elle contient et votre nom affiché deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse e-mail. Vous pouvez arrêter ce partage à tout moment depuis la liste, ce qui rend le lien définitivement invalide."
       },
       "follows": {
         "label": "Abonnements",
-        "text": " : quand vous suivez un profil, nous enregistrons ce lien d'abonnement et sa date. Il sert à afficher les compteurs et listes d'abonnés/abonnements, votre fil d'activité et à prévenir la personne suivie. Si votre profil est partagé, votre nom affiché et le lien vers votre profil apparaissent dans ces listes ; sinon, vous y figurez uniquement comme « profil privé ». Un profil partagé peut aussi être trouvé par son nom affiché dans la recherche de profils des membres connectés. Vous pouvez ne plus suivre un profil à tout moment."
+        "text": " : quand vous suivez un profil, nous enregistrons ce lien d'abonnement et sa date. Il sert à afficher les compteurs et listes d'abonnés/abonnements, votre fil d'activité et à prévenir la personne suivie. Si votre profil est partagé, votre nom affiché et le lien vers votre profil apparaissent dans ces listes ; sinon, vous y figurez uniquement comme « profil privé ». Un profil partagé peut aussi être trouvé par son nom affiché dans la recherche de profils des membres connectés. Vous pouvez ne plus suivre un profil à tout moment."
       },
       "reminders": {
         "label": "Rappels « Me prévenir »",
-        "text": " : quand vous activez la cloche d'un titre à venir, nous enregistrons sur votre compte ce titre (identifiant, nom, affiche, date de sortie), la date du rappel et les plateformes de streaming déjà connues pour ce titre. Ils servent uniquement à vous prévenir le jour de la sortie et à l'arrivée du titre sur une plateforme. Désactiver la cloche supprime le rappel."
+        "text": " : quand vous activez la cloche d'un titre à venir, nous enregistrons sur votre compte ce titre (identifiant, nom, affiche, date de sortie), la date du rappel et les plateformes de streaming déjà connues pour ce titre. Ils servent uniquement à vous prévenir le jour de la sortie et à l'arrivée du titre sur une plateforme. Désactiver la cloche supprime le rappel."
       },
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
-        "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse email. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
+        "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse e-mail. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
       },
       "signInProviders": {
         "label": "Connexion avec Google ou Apple",
-        "text": " (si vous l'utilisez) : l'identifiant de votre compte chez ce fournisseur et l'adresse email qu'il nous transmet, rattachés à votre compte Seancy pour vous reconnaître aux connexions suivantes. Nous ne recevons ni votre mot de passe ni d'autres données de ce compte. Vous pouvez dissocier ce compte à tout moment depuis votre profil, ce qui supprime ces données."
+        "text": " (si vous l'utilisez) : l'identifiant de votre compte chez ce fournisseur et l'adresse e-mail qu'il nous transmet, rattachés à votre compte Seancy pour vous reconnaître aux connexions suivantes. Nous ne recevons ni votre mot de passe ni d'autres données de ce compte. Vous pouvez dissocier ce compte à tout moment depuis votre profil, ce qui supprime ces données."
       }
     },
     "why": {
@@ -786,36 +786,36 @@
       },
       "resend": {
         "label": "Resend",
-        "text": " : envoie les emails contenant votre lien/code de connexion, ainsi que le code de confirmation et l'avertissement liés à un changement d'adresse — reçoit votre adresse email (ancienne et nouvelle, dans ce dernier cas) à cette seule fin."
+        "text": " : envoie les e-mails contenant votre lien/code de connexion, ainsi que le code de confirmation et l'avertissement liés à un changement d'adresse — reçoit votre adresse e-mail (ancienne et nouvelle, dans ce dernier cas) à cette seule fin."
       },
       "recaptcha": {
         "label": "Google reCAPTCHA",
-        "text": " : protège certains formulaires contre les robots, selon la politique de confidentialité de Google."
+        "text": " : protège certains formulaires contre les robots, selon la politique de confidentialité de Google."
       },
       "cloudflare": {
         "label": "Cloudflare",
-        "text": " : héberge l'application et la base de données (Workers, D1), et génère les suggestions personnalisées « Pour vous ce soir » à partir de votre historique de visionnage via Workers AI (traitement réalisé sur l'infrastructure Cloudflare, aucune donnée transmise à un tiers supplémentaire)."
+        "text": " : héberge l'application et la base de données (Workers, D1), et génère les suggestions personnalisées « Pour vous ce soir » à partir de votre historique de visionnage via Workers AI (traitement réalisé sur l'infrastructure Cloudflare, aucune donnée transmise à un tiers supplémentaire)."
       },
       "sentry": {
         "label": "Sentry",
-        "text": " : reçoit les erreurs techniques survenant dans l'application (navigateur et serveur), dans le seul but de les diagnostiquer et de les corriger. Une erreur peut occasionnellement contenir des informations techniques (URL visitée, message d'erreur) mais aucune donnée de compte n'y est envoyée intentionnellement."
+        "text": " : reçoit les erreurs techniques survenant dans l'application (navigateur et serveur), dans le seul but de les diagnostiquer et de les corriger. Une erreur peut occasionnellement contenir des informations techniques (URL visitée, message d'erreur) mais aucune donnée de compte n'y est envoyée intentionnellement."
       },
       "analytics": {
         "label": "Cloudflare Web Analytics",
-        "text": " : mesure d'audience anonyme (pages vues, visiteurs) — sans cookies, sans identifiant persistant, sans donnée personnelle."
+        "text": " : mesure d'audience anonyme (pages vues, visiteurs) — sans cookies, sans identifiant persistant, sans donnée personnelle."
       },
       "gravatar": {
         "label": "Gravatar",
-        "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse email. Nous ne transmettons jamais votre email en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
+        "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse e-mail. Nous ne transmettons jamais votre e-mail en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
       },
       "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires.",
       "google": {
         "label": "Google (Se connecter avec Google)",
-        "text": " : si vous choisissez de vous connecter avec Google, la connexion se fait chez Google, selon sa politique de confidentialité, qui nous transmet alors votre identifiant de compte et votre adresse email."
+        "text": " : si vous choisissez de vous connecter avec Google, la connexion se fait chez Google, selon sa politique de confidentialité, qui nous transmet alors votre identifiant de compte et votre adresse e-mail."
       },
       "apple": {
         "label": "Apple (Se connecter avec Apple)",
-        "text": " : même principe pour la connexion avec Apple, selon sa politique de confidentialité ; Apple peut nous transmettre une adresse email de relais à la place de la vôtre si vous le choisissez."
+        "text": " : même principe pour la connexion avec Apple, selon sa politique de confidentialité ; Apple peut nous transmettre une adresse e-mail de relais à la place de la vôtre si vous le choisissez."
       }
     },
     "cookies": {
@@ -834,7 +834,7 @@
     },
     "changes": {
       "title": "Modification de cette politique",
-      "text": "Cette politique peut évoluer avec le service, notamment si de nouveaux outils (mesure d'audience, financement participatif...) sont ajoutés. La date de dernière mise à jour est indiquée en haut de cette page."
+      "text": "Cette politique peut évoluer avec le service, notamment si de nouveaux outils (mesure d'audience, financement participatif…) sont ajoutés. La date de dernière mise à jour est indiquée en haut de cette page."
     }
   },
   "changelogPage": {
@@ -847,7 +847,7 @@
     "upcomingTheatrical": "Bientôt au cinéma",
     "movie": "Film",
     "series": "Série",
-    "rank": "N° {{rank}}",
+    "rank": "N° {{rank}}",
     "upcomingFallback": "Cinéma",
     "episodeJustReleased": "Vient de sortir",
     "episodeUpcoming": "Prochainement",
@@ -858,15 +858,16 @@
     "markAsWatchedNamed": "Marquer comme vu : {{title}}",
     "notInterested": "Pas intéressé",
     "notInterestedNamed": "Pas intéressé : {{title}}",
-    "position": "N° {{position}} de la liste",
+    "position": "N° {{position}} de la liste",
     "ownerRating": "Note du propriétaire : {{rating}}/10"
   },
   "detailPage": {
     "back": "← Retour",
     "seasonsCount_one": "{{count}} saison",
     "seasonsCount_other": "{{count}} saisons",
-    "episodesCount": "{{count}} épisodes",
-    "runtimeMinutes": "{{count}} min",
+    "episodesCount_one": "{{count}} épisode",
+    "episodesCount_other": "{{count}} épisodes",
+    "runtimeMinutes": "{{count}} min",
     "votesCount_one": "{{formattedCount}} vote",
     "votesCount_other": "{{formattedCount}} votes",
     "inTheatersNow": "Actuellement au cinéma (sorti le {{date}})",
@@ -905,8 +906,8 @@
     "ifYouLiked": "Si vous avez aimé « {{title}} »",
     "kindMovie": "Film",
     "kindTv": "Série",
-    "runtimeHours_one": "{{hours}} h {{minutes}}",
-    "runtimeHours_other": "{{hours}} h {{minutes}}",
+    "runtimeHours_one": "{{hours}} h {{minutes}}",
+    "runtimeHours_other": "{{hours}} h {{minutes}}",
     "addToList": "Ajouter à une liste",
     "listsShort": "Listes",
     "listsShortCount": "Listes · {{count}}",
@@ -1038,7 +1039,7 @@
     "seasonRateHint": "Cochez un épisode vu pour noter la saison",
     "specialsNotInSeries": "Les épisodes spéciaux ne comptent pas dans la note de la série.",
     "rateEpisode": "Noter {{episode}}",
-    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier"
+    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier"
   },
   "profileShare": {
     "title": "Lien public",
@@ -1083,7 +1084,7 @@
   },
   "topPicks": {
     "title": "Mon top 5",
-    "addAt": "Ajouter un titre en n° {{rank}}",
+    "addAt": "Ajouter un titre en n° {{rank}}",
     "pickerTitle": "Ajouter à mon top 5",
     "searchLabel": "Rechercher parmi vos titres vus",
     "searchPlaceholder": "Rechercher parmi vos titres vus…",
@@ -1111,7 +1112,7 @@
     "viewOnProfile": "Voir sur mon profil",
     "movie": "Film",
     "series": "Série",
-    "moveLabel": "Déplacer {{title}}, n° {{rank}} sur {{count}}",
+    "moveLabel": "Déplacer {{title}}, n° {{rank}} sur {{count}}",
     "drag": "Glisser",
     "add": "Ajouter",
     "freeSlot": "Emplacement libre",
@@ -1252,14 +1253,14 @@
     "another": "Autre suggestion",
     "preparingTitle": "On vous prépare ça…",
     "preparingText": "Vos suggestions du jour arrivent dans quelques secondes.",
-    "allSkippedTitle": "C’est tout pour aujourd’hui",
+    "allSkippedTitle": "C'est tout pour aujourd'hui",
     "allSkippedText": "Revenez demain pour de nouvelles suggestions, ou trouvez votre bonheur dans le catalogue personnalisé ci-dessous.",
     "emptyTitle": "Pas encore de suggestions",
     "emptyText": "Vos suggestions du soir ne sont pas disponibles pour l'instant. Revenez un peu plus tard, ou parcourez le catalogue personnalisé ci-dessous."
   },
   "filterPanel": {
     "inTheatersFilter": "Au cinéma",
-    "inTheatersOnly": "Seulement les films en salle",
+    "inTheatersOnly": "Seulement les films en salles",
     "filters": "Filtres",
     "activeCount_one": "{{count}} filtre actif",
     "activeCount_other": "{{count}} filtres actifs",
