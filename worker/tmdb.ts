@@ -5,6 +5,7 @@
 // env.TMDB_API_KEY, un secret Worker configuré séparément dans le dashboard
 // Cloudflare.
 import { retryDelayMs } from "../src/core/api/retryAfter.ts";
+import { createConcurrencyLimiter } from "../src/core/api/concurrencyLimiter.ts";
 
 // Juste ce que ce module lit sur `env` (pas le `Env` complet de ./types.ts,
 // qui dépend des types globaux Cloudflare) : permet à scripts/verify-*.ts de
@@ -34,6 +35,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Le réessai ci-dessus absorbe un 429 isolé, mais ne change rien au burst
+// qui le déclenche : getTheatricalIndex peut lancer jusqu'à
+// MAX_THEATRICAL_PAGES * 2 requêtes strictement simultanées (aucune limite
+// de concurrence), qui se représenteraient toutes ensemble au même backoff
+// en cas de 429 partagé. Même plafond que le client navigateur
+// (tmdbRequestLimiter de src/core/api/tmdbClient.ts), partagé par tous les
+// appels TMDB de cet isolate Worker (cron, proxy watch/providers,
+// getTheatricalIndex...).
+const tmdbRequestLimiter = createConcurrencyLimiter(6);
+
 export async function tmdbFetch<T>(
   env: TmdbEnv,
   path: string,
@@ -51,7 +62,7 @@ export async function tmdbFetch<T>(
     }
   }
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url.toString());
+    const res = await tmdbRequestLimiter.run(() => fetch(url.toString()));
     if (res.status === 429) {
       if (attempt >= MAX_RATE_LIMIT_RETRIES) {
         throw new Error(`Erreur TMDB (429) sur ${path}`);

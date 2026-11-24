@@ -1,11 +1,14 @@
 // Vérifie que tmdbFetch() côté Worker (worker/tmdb.ts) réessaie un 429 TMDB
-// au lieu de le laisser remonter tel quel (issue Sentry 163541596 :
+// au lieu de le laisser remonter tel quel, et qu'il ne lance jamais plus de
+// 6 requêtes réellement en vol en même temps (issue Sentry 163541596 :
 // getTheatricalIndex lance jusqu'à MAX_THEATRICAL_PAGES requêtes en
-// parallèle par liste, et un seul 429 isolé faisait échouer tout
-// /api/theatrical-index pour la région avant mise en cache).
+// parallèle par liste, sans plafond, et un seul 429 isolé faisait échouer
+// tout /api/theatrical-index pour la région avant mise en cache ; le
+// plafond évite que le burst qui déclenche le 429 se reproduise
+// identique à chaque réessai).
 //
 // Pas de framework de test dans ce repo — script autonome, sur le modèle de
-// scripts/verify-tmdb-retry-after.ts.
+// scripts/verify-tmdb-retry-after.ts et scripts/verify-tmdb-concurrency-cap.ts.
 
 import { tmdbFetch } from "../worker/tmdb.ts";
 
@@ -54,6 +57,21 @@ try {
 }
 check("abandonne après MAX_RATE_LIMIT_RETRIES avec une erreur lisible", threw, true);
 check("un essai initial + deux réessais, pas plus", calls, 3);
+
+let active = 0;
+let maxActive = 0;
+globalThis.fetch = (async () => {
+  active++;
+  maxActive = Math.max(maxActive, active);
+  await new Promise((resolve) => realSetTimeout(resolve, 10));
+  active--;
+  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+}) as typeof fetch;
+
+await Promise.all(
+  Array.from({ length: 20 }, (_, i) => tmdbFetch(env, "/movie/now_playing", { page: i + 1 }))
+);
+check("jamais plus de 6 requêtes TMDB en vol en même temps", maxActive <= 6, true);
 
 globalThis.setTimeout = realSetTimeout;
 
