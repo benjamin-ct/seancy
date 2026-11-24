@@ -13,6 +13,7 @@ import {
   useLocation,
   useSearchParams,
 } from "react-router-dom";
+import { isNetworkError, recoverFromAccessExpiry } from "../../core/api/accessSession.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import { hideInitialLoader } from "../../core/initialLoader.ts";
 import { adminPrefix, isAdminHost } from "../../core/lib/adminHost.ts";
@@ -109,7 +110,17 @@ export default function AdminApp() {
           setError("");
         }
       })
-      .catch(() => live && setError("Serveur injoignable"));
+      .catch(async (err: unknown) => {
+        // Session Cloudflare Access expirée (page servie par le service
+        // worker, appel redirigé vers la connexion Access et bloqué) : la
+        // page repart vers Access. Sinon, vraie coupure réseau.
+        if (isNetworkError(err) && (await recoverFromAccessExpiry())) {
+          return;
+        }
+        if (live) {
+          setError("Serveur injoignable");
+        }
+      });
     return () => {
       live = false;
     };
@@ -160,6 +171,9 @@ export default function AdminApp() {
         <div className={styles.card}>
           <h1>Accès refusé</h1>
           <p className={styles.muted}>{error}</p>
+          <button type="button" className={styles.btn} onClick={() => window.location.reload()}>
+            Réessayer
+          </button>
         </div>
       );
     }
