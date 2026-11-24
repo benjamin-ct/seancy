@@ -93,10 +93,13 @@ registerRoute(
 
 // Navigation : index.html précaché pour toute URL de l'appli (appli
 // monopage), pour qu'un lien profond (fiche, liste…) s'ouvre aussi hors
-// ligne. Les routes servies par le Worker restent sur le réseau.
+// ligne. Les routes servies par le Worker restent sur le réseau, comme le
+// renvoi vers la connexion Cloudflare Access (paramètre reauth, voir
+// src/core/api/accessSession.ts) : servi par le précache, il ne passerait
+// jamais par Access et la page resterait bloquée sur la session expirée.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("index.html"), {
-    denylist: [/^\/api\//, /^\/cdn-cgi\//, /^\/robots\.txt$/, /^\/sitemap\.xml$/],
+    denylist: [/^\/api\//, /^\/cdn-cgi\//, /^\/robots\.txt$/, /^\/sitemap\.xml$/, /[?&]reauth=/],
   })
 );
 
