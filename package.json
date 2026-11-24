@@ -29,6 +29,7 @@
     "verify:rate-limit-memory": "node scripts/verify-rate-limit-memory.ts",
     "verify:tmdb-proxy-policy": "node scripts/verify-tmdb-proxy-policy.ts",
     "verify:tmdb-retry-after": "node scripts/verify-tmdb-retry-after.ts",
+    "verify:worker-tmdb-retry": "node scripts/verify-worker-tmdb-retry.ts",
     "verify:tmdb-edge-cache": "node scripts/verify-tmdb-edge-cache.ts",
     "verify:ai-suggestions": "node scripts/verify-ai-suggestions.ts",
     "verify:security-headers": "node scripts/security-headers.ts --check",
