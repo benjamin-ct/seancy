@@ -53,6 +53,8 @@ export interface Ticket {
   queued: number;
   preview: string;
   doneAt: number;
+  /** Archivé (ms) : hors du tableau, retrouvé par la recherche ; 0 : sur le tableau. */
+  archived: number;
   history: HistoryEvent[];
   trello: {
     url: string;
@@ -165,7 +167,8 @@ export const joinTicket = (id: string, join: boolean) =>
 export const deleteTicket = (id: string) => request<{ ok: true }>(`/${id}`, { method: "DELETE" });
 export const moveTicket = (id: string, to: TicketStatus | undefined, before: string) =>
   post<{ ticket: Ticket }>(`/${id}/move`, { to, before });
-export type TicketAction = "send" | "unsend" | "validate" | "unqueue" | "retouch" | "reopen";
+export type TicketAction =
+  "send" | "unsend" | "validate" | "unqueue" | "retouch" | "reopen" | "archive" | "unarchive";
 export const ticketAction = (id: string, action: TicketAction, text = "") =>
   post<{ ok: true; queued?: boolean; merged?: number; position?: number; why?: string }>(
     `/${id}/action`,

@@ -210,6 +210,49 @@ check(
   applyAction(ticket("idea"), { type: "move", to: "todo" }, T0).status,
   "todo"
 );
+// Archivage : hors du tableau sans être supprimé, remis dessus à la demande ou en changeant de colonne
+const archived = applyAction(ticket("idea"), { type: "archive" }, T0, "Ben");
+check(
+  "Archivage : date notée, même colonne, historique signé",
+  [archived.status, archived.data.archived, archived.data.history.at(-1)],
+  ["idea", T0, { at: T0, who: "moi", kind: "archive", by: "Ben" }]
+);
+check(
+  "Archivage d'un ticket fait",
+  applyAction(ticket("done"), { type: "archive" }, T0).data.archived,
+  T0
+);
+refused("Archivage refusé pendant que Claude travaille", () =>
+  applyAction(ticket("work"), { type: "archive" }, T0)
+);
+refused("Archivage refusé sur un ticket à valider", () =>
+  applyAction(ticket("review"), { type: "archive" }, T0)
+);
+refused("Archivage refusé deux fois", () => applyAction(archived, { type: "archive" }, T0 + 1));
+const restored = applyAction(archived, { type: "unarchive" }, T0 + 1);
+check(
+  "Désarchivage : de nouveau sur le tableau",
+  [restored.status, restored.data.archived, restored.data.history.at(-1)?.kind],
+  ["idea", 0, "desarchive"]
+);
+refused("Désarchivage refusé hors archives", () =>
+  applyAction(ticket("todo"), { type: "unarchive" }, T0)
+);
+check(
+  "Archivé puis envoyé à Claude : de nouveau sur le tableau",
+  [
+    applyAction(archived, { type: "send" }, T0 + 2).data.archived,
+    applyAction(archived, { type: "move", to: "todo" }, T0 + 2).data.archived,
+  ],
+  [0, 0]
+);
+check(
+  "Archivé et modifié : reste archivé",
+  applyAction(archived, { type: "edit", fields: { title: "Autre" } }, T0 + 2).data.archived,
+  T0
+);
+check("Date d'archivage lue (nettoyage)", cleanData({ archived: "12" }).archived, 12);
+
 const failedProg = applyAction(sent, { type: "progress", stage: "fail", text: "Erreur" }, T0 + 9);
 check("Arrêt noté dans l'historique", failedProg.data.history.at(-1)?.kind, "arret");
 check(
