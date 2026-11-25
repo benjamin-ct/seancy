@@ -951,9 +951,13 @@ export default function DetailPage() {
                     }}
                   />
                   <div className={styles.yourReviewFooter}>
-                    <span className={styles.yourReviewCount}>
-                      {t("detailPage.yourReviewCount", { count: reviewValue.length, max: 1000 })}
-                    </span>
+                    {/* Le message de confirmation prend la place du compteur
+                        quelques secondes (place comptée sur mobile). */}
+                    {!reviewSaved && (
+                      <span className={styles.yourReviewCount}>
+                        {t("detailPage.yourReviewCount", { count: reviewValue.length, max: 1000 })}
+                      </span>
+                    )}
                     <span className={styles.yourReviewStatus} role="status">
                       {reviewSaved && (
                         <>

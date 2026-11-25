@@ -578,10 +578,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  margin-right: auto;
   color: var(--ok-ink);
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Corail seulement quand il y a quelque chose à enregistrer (les actions
@@ -595,6 +596,7 @@
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .yourReviewSave:not(:disabled) {
