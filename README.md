@@ -324,9 +324,10 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
   (commentaire de la CI) est notée toute seule dans le ticket.
 - **Notifications** : sur Discord (prêt à valider, arrêté, en pause, fusionné, validation impossible).
 - **Archivage** : « Archiver » (fiche d'une idée, d'un ticket à faire ou fait) sort la carte du tableau sans la
-  supprimer. Elle revient dans les résultats de la recherche (étiquette « Archivé ») et dans
-  `node scripts/tickets.ts search` ; « Remettre sur le tableau », un envoi à Claude ou un changement de colonne l'y
-  remet.
+  supprimer. Le bouton « Archivés » (avec leur nombre ; icône à côté du zoom sur téléphone) montre les cartes
+  archivées seules, dans leur colonne. Elles reviennent aussi dans les résultats de la recherche (étiquette
+  « Archivé ») et dans `node scripts/tickets.ts search` ; « Remettre sur le tableau », un envoi à Claude ou un
+  changement de colonne les y remet.
 - **Sessions Claude** : `node scripts/tickets.ts` (`inbox`, `answer`, `progress`, `file`, `add`, `list`, `search`, `get`), avec
   la clé `SEANCY_TICKETS_KEY` (créée sur la page Tickets → Réglages ; seule son empreinte est gardée).
 
