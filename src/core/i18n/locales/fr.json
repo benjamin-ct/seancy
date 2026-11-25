@@ -769,7 +769,7 @@
       },
       "commonLists": {
         "label": "Listes communes",
-        "text": " (si vous en créez ou en rejoignez une) : nous enregistrons quels comptes sont membres de quelle liste et depuis quand. Les membres d'une liste voient son nom, son contenu, ainsi que le nom affiché, le pseudo et — seulement si son profil est partagé — la photo de profil des autres membres ; jamais leur adresse e-mail. Pour être invité, un compte doit avoir choisi un pseudo : tout membre connecté peut le retrouver par ce pseudo pour l'ajouter à une liste. Un réglage de confidentialité permet de n'autoriser l'ajout que par les personnes que vous suivez. Vous pouvez quitter une liste commune à tout moment ; supprimer la liste ou votre compte supprime ces liens."
+        "text": " (si vous en créez ou en rejoignez une) : nous enregistrons quels comptes sont membres de quelle liste et depuis quand. Les membres d'une liste voient son nom, son contenu, ainsi que le nom affiché, le pseudo et — seulement si son profil est partagé — la photo de profil des autres membres ; jamais leur adresse e-mail. Pour être invité, un compte doit avoir choisi un pseudo : le propriétaire d'une liste peut le retrouver par ce pseudo pour l'y ajouter. Un réglage de confidentialité permet de n'autoriser l'ajout que par les personnes que vous suivez. Tout membre peut modifier le contenu de la liste, la renommer ou la supprimer pour tous, et vous pouvez la quitter à tout moment ; supprimer la liste ou votre compte supprime ces liens."
       },
       "follows": {
         "label": "Abonnements",

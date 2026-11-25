@@ -769,7 +769,7 @@
       },
       "commonLists": {
         "label": "Shared lists with other members",
-        "text": " (if you create or join one): we store which accounts are members of which list and since when. Members of a list see its name, its content, and the other members' display name, username and — only if their profile is shared — profile picture; never their email address. To be invited, an account must have picked a username: any signed-in member can find it by that username to add it to a list. A privacy setting lets you allow only people you follow to add you. You can leave a shared list at any time; deleting the list or your account deletes these links."
+        "text": " (if you create or join one): we store which accounts are members of which list and since when. Members of a list see its name, its content, and the other members' display name, username and — only if their profile is shared — profile picture; never their email address. To be invited, an account must have picked a username: a list's owner can find it by that username to add it to the list. A privacy setting lets you allow only people you follow to add you. Any member can edit the list's content, rename it or delete it for everyone, and you can leave it at any time; deleting the list or your account deletes these links."
       },
       "follows": {
         "label": "Follows",
