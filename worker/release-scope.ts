@@ -35,7 +35,6 @@ const RELEASE_ONLY = [
   /^index\.html$/,
   /^package(-lock)?\.json$/,
   /^vite\.config\.ts$/,
-  /^tsconfig[^/]*\.json$/,
   /^wrangler\.jsonc$/,
   /^\.github\//,
 ];
