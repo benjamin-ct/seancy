@@ -157,9 +157,14 @@
 .danger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   min-height: 38px;
-  padding: 8px 14px;
+  padding: 8px 16px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
   border-radius: 999px;
   border: 1px solid var(--border-2);
   background: var(--surface-2);
@@ -713,6 +718,7 @@
 .acts {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin: 12px 0 4px;
 }
@@ -1181,8 +1187,7 @@
 .btnIcon {
   width: 16px;
   height: 16px;
-  margin-right: 6px;
-  vertical-align: -3px;
+  flex: none;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -1190,8 +1195,6 @@
 }
 /* Lien qui ouvre un nouvel onglet (Preview, PR) : flèche après le texte */
 .btnIconEnd {
-  margin-left: 6px;
-  vertical-align: -3px;
   opacity: 0.8;
 }
 /* « Partager » qui vient de copier le lien */
