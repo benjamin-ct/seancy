@@ -105,13 +105,19 @@ export const archivable = (t: Ticket) =>
 
 /**
  * Cartes de chaque colonne, dans leur ordre (faits : les plus récents d'abord, 60 au plus).
- * Les cartes archivées n'y sont que pendant une recherche.
+ * Tableau : les cartes archivées n'y sont que pendant une recherche.
+ * Vue des archives (bouton « Archivés ») : seulement elles, recherche comprise.
  */
-export function columns(tickets: Ticket[], query = ""): Record<TicketStatus, Ticket[]> {
+export function columns(
+  tickets: Ticket[],
+  query = "",
+  archives = false
+): Record<TicketStatus, Ticket[]> {
   const q = plain(query.trim());
   const by: Record<TicketStatus, Ticket[]> = { idea: [], todo: [], work: [], review: [], done: [] };
   for (const t of tickets) {
-    if (q ? plain(`${t.title} ${t.detail} ${t.labels.join(" ")}`).includes(q) : !t.archived) {
+    const found = !q || plain(`${t.title} ${t.detail} ${t.labels.join(" ")}`).includes(q);
+    if (archives ? t.archived && found : q ? found : !t.archived) {
       by[t.status].push(t);
     }
   }
@@ -122,7 +128,7 @@ export function columns(tickets: Ticket[], query = ""): Record<TicketStatus, Tic
   by.review.sort(
     (a, b) => (a.queued || Infinity) - (b.queued || Infinity) || b.progressAt - a.progressAt
   );
-  by.done = by.done.sort((a, b) => b.doneAt - a.doneAt).slice(0, q ? 200 : DONE_SHOWN);
+  by.done = by.done.sort((a, b) => b.doneAt - a.doneAt).slice(0, q || archives ? 200 : DONE_SHOWN);
   return by;
 }
 export const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
