@@ -19,6 +19,7 @@ import {
   EFFORT_NAMES,
   STEPS,
   ago,
+  archivable,
   columnName,
   day,
   fresh,
@@ -73,6 +74,8 @@ const EVENTS: Record<string, string> = {
   annule: "Envoi annulé",
   file: "Validé : en file pour la fusion",
   valide: "Validé, PR fusionnée",
+  archive: "Archivé",
+  desarchive: "Remis sur le tableau",
 };
 const ACCEPT = "image/*,video/mp4,video/quicktime,video/webm,application/pdf";
 
@@ -320,6 +323,7 @@ export default function TicketSheet({
       : "",
     t.members.length ? `avec ${t.members.map((p) => p.name || p.email).join(", ")}` : "",
     t.status === "done" ? `fait le ${day(t.doneAt)}` : "",
+    t.archived ? `archivé le ${day(t.archived)}` : "",
   ].filter(Boolean);
 
   const actions = (
@@ -390,6 +394,22 @@ export default function TicketSheet({
           }
         >
           {member ? "Me retirer" : "Me rajouter"}
+        </button>
+      )}
+      {archivable(t) && (
+        <button
+          type="button"
+          className={styles.btn}
+          disabled={busy}
+          title="Sortir du tableau sans supprimer : la recherche le retrouve"
+          onClick={() =>
+            go(
+              () => ticketAction(t.id, "archive"),
+              `${t.status === "idea" ? "Idée archivée" : "Ticket archivé"} : la recherche le retrouve`
+            )
+          }
+        >
+          Archiver
         </button>
       )}
       {t.status === "work" && (
@@ -1038,6 +1058,23 @@ export default function TicketSheet({
           )}
         </div>
         {actions}
+        {t.archived > 0 && (
+          <div className={styles.prog} role="status">
+            <b>Archivé le {day(t.archived)}</b>
+            <p className={styles.progText}>
+              Hors du tableau : la recherche le retrouve. L'envoyer à Claude ou le changer de
+              colonne le remet aussi sur le tableau.
+            </p>
+            <button
+              type="button"
+              className={styles.link}
+              disabled={busy}
+              onClick={() => go(() => ticketAction(t.id, "unarchive"), "Remis sur le tableau")}
+            >
+              Remettre sur le tableau
+            </button>
+          </div>
+        )}
         {t.status === "work" && (
           <>
             {t.queued > 0 && (

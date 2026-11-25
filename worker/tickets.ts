@@ -1325,10 +1325,10 @@ export async function handleTickets(
         }
         return json({ ok: true, ticket: next });
       }
-      if (action === "unqueue") {
+      if (action === "unqueue" || action === "archive" || action === "unarchive") {
         return json({
           ok: true,
-          ticket: await act(env, id, { type: "unqueue" }, now, access.name),
+          ticket: await act(env, id, { type: action }, now, access.name),
         });
       }
       requireGitHub(env);

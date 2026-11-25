@@ -7,6 +7,12 @@
 // Claude), review (À valider), done (Faits). Le passage d'une colonne à
 // l'autre est toujours une action (applyAction) : envoi à Claude, compte
 // rendu, retouche, validation… qui note aussi l'historique du ticket.
+//
+// Archivage : une idée, un ticket à faire ou un ticket fait peut sortir du
+// tableau sans être supprimé (`archived`, date en ms) ; il reste dans sa
+// colonne en base et revient dans les résultats de la recherche (page et
+// `node scripts/tickets.ts search`). Tout changement de colonne le remet sur
+// le tableau.
 
 export const STATUSES = ["idea", "todo", "work", "review", "done"] as const;
 export type TicketStatus = (typeof STATUSES)[number];
@@ -86,6 +92,8 @@ export interface TicketData {
   queued: number;
   preview: string;
   doneAt: number;
+  /** Archivé (ms) : hors du tableau, retrouvé par la recherche ; 0 : sur le tableau. */
+  archived: number;
   history: HistoryEvent[];
   trello: TrelloOrigin | null;
   /** Qui a créé le ticket (nom affiché) et son adresse, pour le filtre « Les miens » ; « Claude » s'il vient d'une
@@ -145,6 +153,7 @@ export const EMPTY_DATA: TicketData = {
   queued: 0,
   preview: "",
   doneAt: 0,
+  archived: 0,
   history: [],
   trello: null,
   author: "",
@@ -224,7 +233,7 @@ export function cleanData(
   if (has("urgent")) {
     out.urgent = input.urgent === true || input.urgent === 1 || input.urgent === "1";
   }
-  for (const k of ["sent", "cancelled", "progressAt", "queued", "doneAt"] as const) {
+  for (const k of ["sent", "cancelled", "progressAt", "queued", "doneAt", "archived"] as const) {
     if (has(k)) {
       out[k] = int(input[k], 0, 8.64e15);
     }
@@ -332,6 +341,9 @@ export type Action =
   | { type: "autofix"; text: string }
   | { type: "retry"; n: number }
   | { type: "preview"; url: string }
+  /** Sorti du tableau sans être supprimé (idée, à faire, fait), ou remis dessus */
+  | { type: "archive" }
+  | { type: "unarchive" }
   /** Modèle et effort choisis automatiquement (sans événement d'historique) */
   | { type: "level"; model: Model; effort: Effort; why: string }
   /** Administrateur ajouté au ticket ou retiré (sans événement d'historique) */
@@ -531,6 +543,20 @@ export function applyAction(
     case "preview":
       patch = { preview: a.url };
       break;
+    case "archive":
+      need(
+        from === "idea" || from === "todo" || from === "done",
+        "Seuls les idées, les tickets à faire et les tickets faits s'archivent"
+      );
+      need(!d.archived, "Ticket déjà archivé");
+      patch = { archived: now };
+      ev.push({ at: now, who: "moi", kind: "archive" });
+      break;
+    case "unarchive":
+      need(!!d.archived, "Ce ticket n'est pas archivé");
+      patch = { archived: 0 };
+      ev.push({ at: now, who: "moi", kind: "desarchive" });
+      break;
     case "level":
       patch = { model: a.model, effort: a.effort, autoWhy: a.why };
       break;
@@ -552,6 +578,10 @@ export function applyAction(
   // De nouveau chez Claude (envoi, retouche, relance…) : l'annulation précédente ne compte plus
   if (status === "work") {
     patch.cancelled = 0;
+  }
+  // Changé de colonne (envoi à Claude, idée passée à faire, réouverture…) : de nouveau sur le tableau
+  if (status !== from && d.archived) {
+    patch.archived = 0;
   }
   const data = cleanData(patch, d);
   if (a.type === "answer" && data.answer) {

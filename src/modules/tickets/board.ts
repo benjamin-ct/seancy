@@ -99,12 +99,19 @@ export const day = (ms: number) =>
 
 export const DONE_SHOWN = 60;
 
-/** Cartes de chaque colonne, dans leur ordre (faits : les plus récents d'abord, 60 au plus). */
+/** Carte qu'on peut archiver (sortir du tableau sans la supprimer) : idée, à faire ou faite. */
+export const archivable = (t: Ticket) =>
+  !t.archived && (t.status === "idea" || t.status === "todo" || t.status === "done");
+
+/**
+ * Cartes de chaque colonne, dans leur ordre (faits : les plus récents d'abord, 60 au plus).
+ * Les cartes archivées n'y sont que pendant une recherche.
+ */
 export function columns(tickets: Ticket[], query = ""): Record<TicketStatus, Ticket[]> {
   const q = plain(query.trim());
   const by: Record<TicketStatus, Ticket[]> = { idea: [], todo: [], work: [], review: [], done: [] };
   for (const t of tickets) {
-    if (!q || plain(`${t.title} ${t.detail} ${t.labels.join(" ")}`).includes(q)) {
+    if (q ? plain(`${t.title} ${t.detail} ${t.labels.join(" ")}`).includes(q) : !t.archived) {
       by[t.status].push(t);
     }
   }
