@@ -95,6 +95,10 @@ function Mini({
   const live = fresh(t);
   const cover = t.status !== "done" ? t.files.find((f) => /^image\//.test(f.type)) : undefined;
   const labs: { text: string; tone?: string }[] = [];
+  // Carte archivée : montrée seulement dans les résultats d'une recherche
+  if (t.archived) {
+    labs.push({ text: "Archivé" });
+  }
   if (t.urgent) {
     labs.push({ text: "Hotfix", tone: styles.labHot });
   }
@@ -1284,7 +1288,7 @@ export default function TicketsPage() {
               const over = target?.col === c.key && !off;
               const total =
                 c.key === "done"
-                  ? (tickets ?? []).filter((t) => t.status === "done").length
+                  ? (tickets ?? []).filter((t) => t.status === "done" && !t.archived).length
                   : list.length;
               return (
                 <section

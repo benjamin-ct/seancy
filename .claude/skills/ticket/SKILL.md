@@ -33,7 +33,10 @@ L'outil est `node scripts/tickets.ts` (clé `SEANCY_TICKETS_KEY` déjà dans l'e
 - `file <id> capture.png …` : captures jointes au ticket (réduites toutes seules au-delà de 150 Ko) ;
 - `add --title "…" --detail "…" --status idea|todo --labels "Bug,Sentry"` : noter une idée ou un ticket (sans le
   coder) ;
-- `list [idea|todo|work|review|done]`, `get <id>` : état du tableau, ticket complet.
+- `list [idea|todo|work|review|done|archived]`, `get <id>` : état du tableau (sans les tickets archivés, sauf
+  `list archived`), ticket complet ;
+- `search <texte>` : tickets dont le titre, la description ou les étiquettes contiennent le texte, **archivés
+  compris** (un ticket archivé est sorti du tableau sans être supprimé : chercher là un ticket déjà noté).
 
 ## 1. Lire le ticket et reprendre l'historique
 
