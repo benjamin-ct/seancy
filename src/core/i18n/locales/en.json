@@ -321,12 +321,12 @@
     "exportDataHint": "Download a copy of all your account data in JSON format (right to data portability).",
     "exportDataButton": "Download my data",
     "deleteAccount": "Delete account",
-    "deleteAccountHint": "Permanently deletes your account and all associated data: library, lists, preferences, reminders, notification subscriptions, and profile photo. This action cannot be undone.",
+    "deleteAccountHint": "Deletes your account and all associated data: library, lists, preferences, reminders, notification subscriptions, and profile photo. Deletion happens 7 days after you confirm; after that, it cannot be undone.",
     "deleteAccountButton": "Delete my account",
-    "deleteAccountConfirmTitle": "This action is permanent.",
-    "deleteAccountConfirmText": "All your data will be deleted immediately and cannot be recovered. To confirm, type your email address ({{email}}) below.",
-    "deleteAccountConfirmPlaceholder": "Your email address",
-    "deleteAccountConfirmButton": "Delete permanently",
+    "deleteAccountCodeSent": "A confirmation code was sent to your email address (valid for 15 minutes). Once confirmed, your profile is immediately hidden from other members and deletion will happen in 7 days; you can cancel it at any time before then.",
+    "deleteAccountConfirmButton": "Confirm deletion",
+    "deleteAccountPending": "Your account will be deleted on {{date}}. Until then, your profile, shared lists and reviews are hidden from other members. Sign back in before then to cancel, or use the button below.",
+    "deleteAccountCancel": "Cancel deletion",
     "deleteAccountError": "Couldn't delete the account right now. Try again.",
     "deleting": "Deleting…"
   },
@@ -730,7 +730,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "November 18, 2026",
+    "lastUpdatedValue": "November 25, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -743,7 +743,7 @@
       },
       "library": {
         "label": "Personal library",
-        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", the ratings you give them (for a show, also per season and per episode), your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
+        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", the ratings you give them (for a show, also per season and per episode), your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, text reviews, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
       },
       "preferences": {
         "label": "Preferences",
@@ -771,7 +771,7 @@
       },
       "sharedProfile": {
         "label": "Shared profile and username",
-        "text": " (if you choose to share your profile): what you've watched, your watchlist, your custom lists, your ratings, your display name and your profile picture become visible read-only to anyone who has the link — never your email address. You can also pick an optional, unique username: it appears in the shared profile's address (/u/your_username) and on the profile itself. Turning sharing off makes the profile unreachable, including through the username; you can change or clear the username at any time from your profile."
+        "text": " (if you choose to share your profile): what you've watched, your watchlist, your custom lists, your ratings, your text reviews, your display name and your profile picture become visible read-only to anyone who has the link — never your email address. You can also pick an optional, unique username: it appears in the shared profile's address (/u/your_username) and on the profile itself. Turning sharing off makes the profile unreachable, including through the username; you can change or clear the username at any time from your profile."
       },
       "signInProviders": {
         "label": "Sign in with Google or Apple",
@@ -829,7 +829,7 @@
     },
     "retention": {
       "title": "Retention period",
-      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Settings → My data (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
+      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time from Profile → Settings → My data (\"Delete my account\" button): after confirming with a code sent by email, your profile, shared lists and reviews immediately stop being visible to other members, and deletion happens 7 days later; it remains cancellable during that period (automatically if you sign back in, or with a dedicated button). After that period, all associated data is permanently deleted. You can also request its deletion ",
       "textAfter": "."
     },
     "rights": {
@@ -902,6 +902,12 @@
     "whereToWatchSource": "{{region}} · via JustWatch",
     "yourRatingHeading": "Your rating",
     "rateAfterWatched": "Mark it as watched to rate it",
+    "yourReviewLabel": "Your review (optional)",
+    "yourReviewPlaceholder": "What did you think of this title?",
+    "yourReviewCount": "{{count}}/{{max}}",
+    "yourReviewSave": "Save review",
+    "yourReviewSaved": "Review saved",
+    "yourReviewRemoved": "Review removed",
     "seriesAverage_one": "Average of {{count}} rated season",
     "seriesAverage_other": "Average of your {{count}} rated seasons",
     "manualSeriesKept": "Your {{rating}}/10 show rating comes back if you remove the season and episode ratings.",
@@ -1156,6 +1162,8 @@
     "ownerRating": "{{rating}}/10 · {{name}}'s rating",
     "tabSeen": "Watched",
     "tabWant": "Watchlist",
+    "tabReviews": "Reviews",
+    "emptyReviews": "No reviews yet.",
     "tabLists": "Lists",
     "typeFilter": "Title type",
     "filterAll": "All",

@@ -63,7 +63,7 @@ export async function getSharedProfileAvatar(
   shareSlug: string
 ): Promise<{ contentType: string; data: ArrayBuffer } | null> {
   const row = await db
-    .prepare("SELECT id FROM users WHERE share_slug = ?")
+    .prepare("SELECT id FROM users WHERE share_slug = ? AND pending_deletion_at IS NULL")
     .bind(shareSlug)
     .first<{ id: number }>();
   return row ? getAvatar(db, row.id) : null;

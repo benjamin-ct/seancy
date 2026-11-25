@@ -13,7 +13,9 @@
 //   node scripts/tickets.ts usage <id> --file <execution.json> [--run URL]   jetons et quota d'un passage de Claude (workflow)
 //   node scripts/tickets.ts file <id> capture.png …         pièces jointes (images, PDF, vidéos ; 1,5 Mo au plus)
 //   node scripts/tickets.ts add --title "…" [--detail "…"] [--status idea|todo] [--labels "Bug,Sentry"]
-//   node scripts/tickets.ts list [idea|todo|work|review|done]
+//   node scripts/tickets.ts list [idea|todo|work|review|done|archived]   tableau (archivés : seulement avec archived)
+//   node scripts/tickets.ts search <texte>                  tickets dont le titre, la description ou les étiquettes
+//                                                          contiennent le texte, archivés compris
 //   node scripts/tickets.ts get <id>                        ticket complet (JSON)
 import fs from "node:fs";
 import path from "node:path";
@@ -36,6 +38,8 @@ interface Ticket {
   model: string;
   effort: string;
   urgent: boolean;
+  /** Archivé (ms) : hors du tableau, retrouvé par search ; 0 : sur le tableau. */
+  archived?: number;
   answer: string;
   pr: string;
   feedback: string;
@@ -96,6 +100,8 @@ const day = (ms: number) =>
         timeStyle: "short",
       })
     : "";
+// Recherche sans accents ni majuscules (comme la recherche de la page Tickets)
+const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const indent = (text: string, by = "    ") =>
   String(text || "")
     .split("\n")
@@ -127,6 +133,9 @@ const commands: Record<string, () => Promise<void>> = {
     console.log(`Titre : ${t.title}`);
     if (t.labels.length) {
       console.log(`Étiquettes : ${t.labels.join(", ")}`);
+    }
+    if (t.archived) {
+      console.log(`Archivé le ${day(t.archived)} (hors du tableau)`);
     }
     console.log(`Description :\n${indent(t.detail || "(vide)")}`);
     for (const l of t.links) {
@@ -260,8 +269,25 @@ const commands: Record<string, () => Promise<void>> = {
   },
   async list() {
     const { tickets } = await call<{ tickets: Ticket[] }>("");
-    for (const t of tickets.filter((x) => (pos[0] ? x.status === pos[0] : x.status !== "done"))) {
-      console.log(`${t.id}\t${t.status}\t${t.title}`);
+    const shown = tickets.filter((x) =>
+      pos[0] === "archived"
+        ? !!x.archived
+        : !x.archived && (pos[0] ? x.status === pos[0] : x.status !== "done")
+    );
+    for (const t of shown) {
+      console.log(`${t.id}\t${t.status}${t.archived ? " (archivé)" : ""}\t${t.title}`);
+    }
+  },
+  async search() {
+    const q = plain(pos.join(" ").trim());
+    if (!q) {
+      throw new Error("usage : search <texte>");
+    }
+    const { tickets } = await call<{ tickets: Ticket[] }>("");
+    for (const t of tickets.filter((x) =>
+      plain(`${x.title} ${x.detail} ${x.labels.join(" ")}`).includes(q)
+    )) {
+      console.log(`${t.id}\t${t.status}${t.archived ? " (archivé)" : ""}\t${t.title}`);
     }
   },
   async get() {
