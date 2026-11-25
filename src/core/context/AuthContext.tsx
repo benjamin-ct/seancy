@@ -31,6 +31,11 @@ interface EmailChangeRequestResult {
   devCode?: string;
 }
 
+interface AccountDeletionRequestResult {
+  ok: true;
+  devCode?: string;
+}
+
 interface VerifyResult {
   ok: true;
   email: string;
@@ -53,6 +58,9 @@ interface AuthContextValue {
   // Version (date de mise à jour) de la photo de profil personnelle, `null`
   // sans photo : l'avatar retombe alors sur Gravatar, puis sur l'initiale.
   avatarVersion: number | null;
+  // Suppression de compte programmée (ms depuis l'epoch), `null` sinon —
+  // voir DataSettings. Se reconnecter l'annule automatiquement.
+  pendingDeletionAt: number | null;
   // Compte administrateur de Seancy (secret ADMIN_EMAILS) : bouton « Admin » de la barre et du profil
   admin: boolean;
   requestLink: (email: string) => Promise<RequestLinkResult>;
@@ -79,11 +87,13 @@ interface AuthContextValue {
   // Remplace ou supprime la photo de profil personnelle.
   uploadAvatar: (image: Blob) => Promise<void>;
   removeAvatar: () => Promise<void>;
-  // Suppression définitive du compte et de toutes ses données (audit M14,
-  // ticket RGPD). La confirmation forte (saisie de l'adresse e-mail) se
-  // fait côté appelant (voir AccountSettings) ; cet appel exécute la
-  // suppression sans autre garde que la session déjà ouverte.
-  deleteAccount: () => Promise<void>;
+  // Suppression de compte en trois temps (remplace la suppression
+  // immédiate de l'audit M14) : un code envoyé par email confirme l'accès
+  // à la boîte mail, puis la suppression effective a lieu 7 jours plus
+  // tard (annulable à tout moment avant, voir DataSettings).
+  requestAccountDeletion: () => Promise<AccountDeletionRequestResult>;
+  confirmAccountDeletion: (code: string) => Promise<void>;
+  cancelAccountDeletion: () => Promise<void>;
 }
 
 export interface UsernameCheck {
@@ -124,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
+  const [pendingDeletionAt, setPendingDeletionAt] = useState<number | null>(null);
   const [admin, setAdmin] = useState(false);
 
   // `verify()` (consommation du jeton sur /auth/verify) et `refresh()` (la
@@ -151,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(null);
       setUsername(null);
       setAvatarVersion(null);
+      setPendingDeletionAt(null);
       setAdmin(false);
       setStatus("anonymous");
       return Promise.resolve();
@@ -166,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           shareSlug: string | null;
           username: string | null;
           avatarVersion: number | null;
+          pendingDeletionAt: number | null;
           admin?: boolean;
         }>;
       })
@@ -175,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(data.shareSlug ?? null);
         setUsername(data.username ?? null);
         setAvatarVersion(data.avatarVersion ?? null);
+        setPendingDeletionAt(data.pendingDeletionAt ?? null);
         setAdmin(data.admin === true);
         setStatus("authenticated");
         pinnedRef.current = true;
@@ -188,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(null);
         setUsername(null);
         setAvatarVersion(null);
+        setPendingDeletionAt(null);
         setAdmin(false);
         setStatus("anonymous");
       });
@@ -268,6 +283,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(data.shareSlug ?? null);
       setUsername(data.username ?? null);
       setAvatarVersion(data.avatarVersion ?? null);
+      // Le serveur annule toute suppression programmée à chaque connexion
+      // réussie (voir handleVerify) : toujours `null` après ce point.
+      setPendingDeletionAt(null);
       setAdmin(data.admin === true);
       setStatus("authenticated");
       return data;
@@ -439,15 +457,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [t]
   );
 
-  // Si l'appel échoue, rien n'est effacé : l'erreur remonte au bouton, comme
-  // logoutAll ci-dessus.
-  const deleteAccount = useCallback(async () => {
-    const res = await fetch("/api/account", { method: "DELETE", headers: syncClientHeaders() });
+  // Envoie un code de confirmation par email (voir DataSettings, premier
+  // temps de la suppression de compte en trois étapes).
+  const requestAccountDeletion = useCallback(async (): Promise<AccountDeletionRequestResult> => {
+    const res = await fetch("/api/account/delete/request", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...syncClientHeaders() },
+      body: JSON.stringify({ locale }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || t("accountCard.deleteAccountError"));
+    }
+    return data;
+  }, [locale, t]);
+
+  // Confirme le code reçu : programme la suppression dans 7 jours, ne
+  // déconnecte pas (le compte reste utilisable jusque là, voir DataSettings
+  // pour l'annulation explicite).
+  const confirmAccountDeletion = useCallback(
+    async (code: string): Promise<void> => {
+      const res = await fetch("/api/account/delete/confirm", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...syncClientHeaders() },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data.reason === "invalid-code"
+            ? t("accountCard.emailChange.errors.invalid-code")
+            : data.error || t("accountCard.deleteAccountError")
+        );
+      }
+      setPendingDeletionAt(data.pendingDeletionAt);
+    },
+    [t]
+  );
+
+  const cancelAccountDeletion = useCallback(async (): Promise<void> => {
+    const res = await fetch("/api/account/delete/cancel", {
+      method: "POST",
+      headers: syncClientHeaders(),
+    });
     if (!res.ok) {
       throw new Error(t("accountCard.deleteAccountError"));
     }
-    pinnedRef.current = false;
-    leaveAccount();
+    setPendingDeletionAt(null);
   }, [t]);
 
   // Audit H9 (fichiers concernés) : sans ce useMemo, un nouvel objet était
@@ -461,6 +517,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      pendingDeletionAt,
       admin,
       requestLink,
       verify,
@@ -475,7 +532,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       checkUsername,
       uploadAvatar,
       removeAvatar,
-      deleteAccount,
+      requestAccountDeletion,
+      confirmAccountDeletion,
+      cancelAccountDeletion,
     }),
     [
       status,
@@ -484,6 +543,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      pendingDeletionAt,
       admin,
       requestLink,
       verify,
@@ -498,7 +558,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       checkUsername,
       uploadAvatar,
       removeAvatar,
-      deleteAccount,
+      requestAccountDeletion,
+      confirmAccountDeletion,
+      cancelAccountDeletion,
     ]
   );
 
