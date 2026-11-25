@@ -1,4 +1,5 @@
 import { NavLink, Link, matchPath, useLocation, useNavigate } from "react-router-dom";
+import { ADMIN_ORIGIN } from "../../../core/lib/adminHost.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { searchMultiRanked, posterUrl } from "../../../core/api/tmdb.ts";
@@ -6,6 +7,7 @@ import { useAuth } from "../../../core/context/AuthContext.tsx";
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
 import { prefersReducedMotion } from "../../lib/motion.ts";
+import { useAvatarSources } from "../../hooks/useAvatarSources.ts";
 import type { SearchMultiResult } from "../../../core/types/tmdb.ts";
 import TicketLogo from "../TicketLogo/TicketLogo.tsx";
 import Icon, { type IconName } from "../Icon/Icon.tsx";
@@ -177,8 +179,11 @@ export default function NavBar() {
   const { pathname } = useLocation();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, admin } = useAuth();
   const { region } = useRegion();
+  // Photo de profil à la place de la silhouette générique, quand elle est
+  // disponible (sinon on garde l'icône : repli géré au rendu, pas ici).
+  const { url: avatarUrl, onError: onAvatarError } = useAvatarSources();
   // Pendant la vérification de la session au rechargement ("loading", seulement
   // quand le cookie compagnon est présent), on affiche déjà la navigation
   // d'un membre connecté : sinon « Connexion » puis l'onglet Profil
@@ -441,6 +446,16 @@ export default function NavBar() {
           {/* Profil réservé aux membres connectés (voir ProfilePage) : un
               visiteur anonyme n'y a aucun accès visible, seulement
               « Connexion ». La déconnexion se fait depuis Profil › Compte. */}
+          {/* Administrateur : lien vers l'espace admin (téléphone : dans Profil › Compte) */}
+          {authenticated && admin && (
+            <a
+              href={ADMIN_ORIGIN}
+              className={`${styles.adminBtn} ${styles.desktopOnly}`}
+              title={t("navBar.adminTitle")}
+            >
+              {t("navBar.admin")}
+            </a>
+          )}
           {authenticated ? (
             <NavLink
               to="/profil"
@@ -450,7 +465,17 @@ export default function NavBar() {
               aria-label={t("navBar.profileAriaLabel")}
               title={t("navBar.profileTitle")}
             >
-              <Icon name="user" strokeWidth={1.8} />
+              {avatarUrl ? (
+                <img
+                  key={avatarUrl}
+                  src={avatarUrl}
+                  alt=""
+                  className={styles.navAvatarImg}
+                  onError={onAvatarError}
+                />
+              ) : (
+                <Icon name="user" strokeWidth={1.8} />
+              )}
             </NavLink>
           ) : (
             <Link to="/connexion" className={styles.loginBtn} onClick={onNavClick}>
@@ -519,7 +544,19 @@ export default function NavBar() {
           >
             {({ isActive }) => (
               <>
-                <Icon name={link.icon} size={isActive ? 20 : 24} strokeWidth={1.9} />
+                {link.key === "profile" && avatarUrl ? (
+                  <img
+                    key={avatarUrl}
+                    src={avatarUrl}
+                    alt=""
+                    width={isActive ? 20 : 24}
+                    height={isActive ? 20 : 24}
+                    className={styles.tabbarAvatarImg}
+                    onError={onAvatarError}
+                  />
+                ) : (
+                  <Icon name={link.icon} size={isActive ? 20 : 24} strokeWidth={1.9} />
+                )}
                 {/* Libellé visible seulement sur l'onglet actif (audit F8) :
                     les autres restent en icône seule, faute de place pour
                     tout étiqueter dans cette largeur de pilule mobile. */}

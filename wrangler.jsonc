@@ -18,6 +18,13 @@
   // prochain déploiement (même mécanisme que "vars" ci-dessous — voir
   // README section Observabilité pour le reste : Sentry, Analytics Engine,
   // Web Analytics, health check).
+  //
+  // Traces échantillonnées à 10 % : chaque requête produit ~4 spans
+  // (fetch TMDB, cache_match, cache_put, D1), soit ~80 % des événements
+  // d'observabilité du compte. À 100 %, le passage d'Applebot (~85 000
+  // requêtes/jour) a épuisé le quota gratuit de 200 000 événements/jour
+  // partagé par tous les Workers du compte (ingestion coupée jusqu'à
+  // minuit UTC). Les logs restent à 100 % pour ne perdre aucune erreur.
   "observability": {
     "logs": {
       "enabled": true,
@@ -27,7 +34,7 @@
     },
     "traces": {
       "enabled": true,
-      "head_sampling_rate": 1,
+      "head_sampling_rate": 0.1,
       "persist": true
     }
   },
@@ -37,7 +44,7 @@
   // "keep_vars" et disparaître à chaque déploiement (voir TMDB_API_KEY et
   // VAPID_PRIVATE_KEY, elles, en Secret dans le dashboard, qui survivent).
   "vars": {
-    "VAPID_PUBLIC_KEY": "BDqiaLNi0uMdi-hi74JI8hALtzeks3ZiuTIBomUVGm9mtg8CeQEUeXUUr-X6J7NJFvF8li7ovMBQE3Hu1_sa3D8",
+    "VAPID_PUBLIC_KEY": "BNo5rVb2lpqnSDxkL-_YRx_EUeTSf1u3yIRJRzvbgzz0Vp5r3eINGoCANuFGouD-PGctWp3TXKt_3jbtrV_OjhQ",
     "VAPID_SUBJECT": "mailto:creusatbenjamin@gmail.com",
     // Token du beacon Cloudflare Web Analytics (public par nature). Renseigné
     // depuis le dashboard Cloudflare (Analytics & Logs → Web Analytics →
@@ -50,7 +57,7 @@
     // client saute la vérification anti-robot sans rien casser. Vide-la
     // avec ta clé depuis google.com/recaptcha/admin (voir README), et
     // ajoute RECAPTCHA_SECRET_KEY en Secret côté dashboard Cloudflare.
-    "RECAPTCHA_SITE_KEY": "6Ldgj4ctAAAAACH345AamgXKs4vXMlF1D1p1HHxz"
+    "RECAPTCHA_SITE_KEY": "6LeKNCcuAAAAAG-aoAslJE1UzqbCPmjuUKCmaLUq"
   },
   "d1_databases": [
     {
@@ -59,6 +66,14 @@
       "database_id": "3403301e-2ef9-4f70-9f2e-e10d577beda0"
     }
   ],
+  // Workers AI : suggestions « Pour vous ce soir » (voir
+  // worker/ai-suggestions.ts, modèle fixé par AI_SUGGESTIONS_MODEL). Plan
+  // gratuit pour démarrer : ~10 000 neurones/jour partagés par tout le compte,
+  // remis à zéro à 00:00 UTC ; au-delà, repli sur l'algo non-IA.
+  "ai": { "binding": "AI" },
+  // Espace admin sur son propre Worker (wrangler.admin.jsonc, worker/admin-split.ts) : l'API de l'admin
+  // et des tickets reçue sur les adresses de production lui est renvoyée
+  "services": [{ "binding": "ADMIN", "service": "seancy-admin" }],
   // Binding natif « Rate Limiting » de Workers (audit F4) : compteur partagé
   // entre isolats/colos, sans écriture D1 — contrairement à
   // `checkRateLimitInMemory` (worker/rate-limit-memory.ts), qui compte par
@@ -114,7 +129,9 @@
   // les notifications push (voir worker/scheduled.ts) ; 7h30 UTC resynchronise
   // l'index local des titres populaires utilisé par la recherche (voir
   // worker/search-index.ts). Décalé de 30 min pour ne pas partager son
-  // budget de sous-requêtes TMDB avec le premier.
+  // budget de sous-requêtes TMDB avec le premier. Pas de troisième tâche : le forfait
+  // gratuit en compte 5 pour tout le compte (prod + develop + autres Workers) ;
+  // la file des tickets avance autrement (voir worker/tickets.ts, maybeTick).
   "triggers": {
     "crons": ["0 7 * * *", "30 7 * * *"]
   }

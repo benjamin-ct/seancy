@@ -7,8 +7,9 @@
 // fonctionner dans le runtime Workers. On récupère à la place les détails de
 // requête déjà prêts (`generateRequestDetails`) et on les envoie nous-mêmes
 // avec `fetch`, natif à Workers.
-import webpush from "web-push";
+import * as webpush from "web-push";
 import type { Env, SubscriptionRow } from "./types.ts";
+import { cleanVapidKey, vapidProblem } from "./vapid.ts";
 
 export class ExpiredSubscriptionError extends Error {}
 
@@ -26,12 +27,16 @@ function ensureVapid(env: Env): void {
   if (vapidConfigured) {
     return;
   }
-  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) {
-    throw new Error(
-      "Clés VAPID manquantes (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT) — à configurer dans les secrets du Worker."
-    );
+  const problem = vapidProblem(env);
+  if (problem) {
+    throw new Error(`Notifications impossibles : ${problem}`);
   }
-  webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+  // Clés nettoyées (worker/vapid.ts) : un secret collé avec un retour à la ligne ou des guillemets passe
+  webpush.setVapidDetails(
+    env.VAPID_SUBJECT.trim(),
+    cleanVapidKey(env.VAPID_PUBLIC_KEY),
+    cleanVapidKey(env.VAPID_PRIVATE_KEY)
+  );
   vapidConfigured = true;
 }
 
@@ -39,6 +44,12 @@ export interface PushPayload {
   title: string;
   body: string;
   url: string;
+  /** Icône de la notification (celle de l'espace admin pour les tickets ; /icon-192.png sinon). */
+  icon?: string;
+  /** Même tag : la notification remplace la précédente (un ticket = une notification). */
+  tag?: string;
+  /** Pastille de l'icône de l'appli installée (tickets qui attendent). */
+  count?: number;
 }
 
 // `subscription` : { endpoint, p256dh, auth } (forme stockée en base).

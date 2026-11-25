@@ -43,3 +43,4 @@ export { default as FollowStats } from "./FollowStats/FollowStats.tsx";
 export { default as ProfileList } from "./ProfileList/ProfileList.tsx";
 export { default as ListCover } from "./ListCover/ListCover.tsx";
 export { default as ReadOnlyBanner } from "./ReadOnlyBanner/ReadOnlyBanner.tsx";
+export { default as AccountAvatar } from "./AccountAvatar/AccountAvatar.tsx";

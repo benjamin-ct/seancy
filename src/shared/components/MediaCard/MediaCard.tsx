@@ -14,6 +14,7 @@ import { useIsWatched, useIsInWatchlist } from "../../../core/context/useLibrary
 import { useRegion } from "../../../core/context/RegionContext.tsx";
 import { useLocale } from "../../../core/context/LocaleContext.tsx";
 import { posterAccentFromGenres } from "../../lib/posterAccent.ts";
+import { usePosterThumbhash } from "../../lib/thumbhash.ts";
 import { setMediaPreview } from "../../lib/mediaPreviewCache.ts";
 import { pop } from "../../lib/motion.ts";
 import type {
@@ -56,6 +57,13 @@ interface MediaCardProps {
    * recommandations. Absent ailleurs — un visiteur de Nouveautés ou de Ma
    * liste n'a pas cette action. */
   onNotInterested?: (item: MediaItem) => void;
+  /** Opt-in (fiche détail, section "Titres similaires") : empêche les
+   * crawlers de suivre ce lien pour découvrir de nouveaux ids en profondeur
+   * (Applebot crawlait ~98% de son volume via cette seule section plutôt
+   * que le sitemap, voir carte Trello "Vérifier l'utilisation du site").
+   * Absent ailleurs : les autres grilles (Découvrir, Nouveautés...) restent
+   * suivies normalement. */
+  nofollow?: boolean;
 }
 
 // Largeur affichée des affiches de la grille (voir mediaGrid.module.css : 2,
@@ -76,6 +84,7 @@ function MediaCard({
   ownerRating,
   position,
   onNotInterested,
+  nofollow = false,
 }: MediaCardProps) {
   const { t } = useTranslation();
   const { toggleWatched, toggleWatchlist } = useLibraryActions();
@@ -133,7 +142,17 @@ function MediaCard({
   // #296 : le shimmer restait affiché en permanence, même une fois l'image
   // chargée, car la classe ne dépendait que de la présence d'un poster_path,
   // jamais de son état de chargement réel).
-  const [posterLoaded, setPosterLoaded] = useState(false);
+  // Aperçu flou (voir migration 0021, scripts/generate-thumbhashes.ts) :
+  // affiché à la place du shimmer gris pendant le chargement, quand l'item
+  // en a un (voir worker/index.ts, enrichResponseWithPosterThumbhashes).
+  const {
+    hasThumbhash,
+    loaded: posterLoaded,
+    backgroundStyle: posterThumbhashStyle,
+    imgRef: posterImgRef,
+    onLoad: handlePosterLoad,
+    onError: handlePosterError,
+  } = usePosterThumbhash(item.poster_thumbhash);
 
   const [provider, setProvider] = useState<WatchProviderEntry | null>(null);
   // Distingue "pas encore vérifié" de "vérifié, rien trouvé".
@@ -200,13 +219,19 @@ function MediaCard({
 
   return (
     <div className={styles.card}>
-      <Link to={`/media/${mediaType}/${item.id}`} className={styles.link}>
+      <Link
+        to={`/media/${mediaType}/${item.id}`}
+        className={styles.link}
+        rel={nofollow ? "nofollow" : undefined}
+      >
         <div
-          className={`${styles.poster} ${item.poster_path && !posterLoaded ? skeletonStyles.block : ""}`}
+          className={`${styles.poster} ${item.poster_path && !posterLoaded && !posterThumbhashStyle ? skeletonStyles.block : ""}`}
+          style={posterThumbhashStyle}
           ref={posterRef}
         >
           {item.poster_path ? (
             <img
+              ref={posterImgRef}
               src={posterUrl(item.poster_path) ?? undefined}
               srcSet={posterSrcSet(item.poster_path)}
               sizes={CARD_POSTER_SIZES}
@@ -214,8 +239,20 @@ function MediaCard({
               alt=""
               loading="lazy"
               decoding="async"
-              onLoad={() => setPosterLoaded(true)}
-              onError={() => setPosterLoaded(true)}
+              // Masquée tant qu'elle n'a pas fini de charger, seulement
+              // quand un ThumbHash existe dessous : sinon le navigateur
+              // peint l'image au fil du téléchargement par-dessus le flou
+              // encore visible, d'où le rendu mi-net mi-flou remonté sur
+              // la carte Trello "ThumbHash affiches" le 2026-10-17.
+              className={
+                hasThumbhash
+                  ? posterLoaded
+                    ? styles.posterImgLoaded
+                    : styles.posterImg
+                  : undefined
+              }
+              onLoad={handlePosterLoad}
+              onError={handlePosterError}
             />
           ) : (
             <div className={`${styles.noPoster} ${posterStyles[accentKey]}`} aria-hidden="true">

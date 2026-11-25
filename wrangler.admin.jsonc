@@ -1,0 +1,55 @@
+// Worker de l'espace admin (admin.seancy.com), mis en ligne à chaque fusion
+// dans develop par la CI (job deploy-admin de .github/workflows/ci.yml) : ses
+// retouches n'attendent plus une release du site. Même code que le site
+// (worker/index.ts), qui ne traite ici que l'API de l'admin et des tickets et
+// renvoie tout le reste au Worker du site par le service binding SITE (voir
+// worker/admin-split.ts). Base de production partagée avec le site.
+//
+// Une seule tâche planifiée, celle des tickets (toutes les 2 minutes ; les
+// autres restent sur le site), pas d'adresse workers.dev : il n'est joignable que par son domaine admin.seancy.com
+// (domaine personnalisé, réglé une fois sur le compte) et par le site.
+//
+// Secrets à régler une fois sur ce Worker (Cloudflare → Workers et Pages →
+// seancy-admin → Paramètres → Variables et secrets) : ACCESS_AUD,
+// ACCESS_TEAM_DOMAIN, ADMIN_EMAILS, CF_ANALYTICS_TOKEN, GITHUB_TICKETS_TOKEN,
+// DISCORD_TICKETS_WEBHOOK_URL (facultatif), SENTRY_DSN (facultatif). Les
+// autres secrets restent sur le site.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "seancy-admin",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    }
+  },
+  "vars": {
+    "ADMIN_WORKER": "1",
+    "VAPID_PUBLIC_KEY": "BNo5rVb2lpqnSDxkL-_YRx_EUeTSf1u3yIRJRzvbgzz0Vp5r3eINGoCANuFGouD-PGctWp3TXKt_3jbtrV_OjhQ",
+    "VAPID_SUBJECT": "mailto:creusatbenjamin@gmail.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "seancy-notifications",
+      "database_id": "3403301e-2ef9-4f70-9f2e-e10d577beda0"
+    }
+  ],
+  "ai": { "binding": "AI" },
+  "services": [{ "binding": "SITE", "service": "seancy" }],
+  // Toutes les 2 minutes : file de validation des tickets, relances, previews (runTicketsCron, worker/index.ts)
+  "triggers": { "crons": ["*/2 * * * *"] }
+}

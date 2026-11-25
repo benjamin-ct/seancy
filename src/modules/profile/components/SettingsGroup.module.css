@@ -40,6 +40,11 @@
   border-top: 1px solid var(--border);
 }
 
+.rowWide {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
 .rowLabel {
   font-family: var(--font-display);
   font-size: 17px;

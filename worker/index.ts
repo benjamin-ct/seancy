@@ -44,9 +44,11 @@ import {
   getExcludedGenresForUser,
   replaceExcludedGenresForUser,
   getNotInterestedForUser,
+  getNotInterestedIdsForUser,
   addNotInterested,
   getRecommendationCache,
   setRecommendationCache,
+  getThumbhashesForPosterPaths,
   getFavoriteProvidersForUser,
   replaceFavoriteProvidersForUser,
   getFavoriteLanguagesForUser,
@@ -66,13 +68,21 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
+import { handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
+import { accessGate, adminEmails, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
+import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
+  buildTasteContinuation,
   buildTasteProfile,
   getRecommendationCandidates,
   rankRecommendations,
+  type RecommendationItem,
   type RecommendationMediaType,
+  type TasteContinuation,
 } from "./recommendations.ts";
+import { computeAndStorePosterThumbhash } from "./images/posterThumbhash.ts";
+import { getTonightSuggestions, skipTonightSuggestion } from "./ai-suggestions.ts";
 import { isMediaType } from "../src/core/validation/mediaType.ts";
 import { sendPush, ExpiredSubscriptionError } from "./push.ts";
 import {
@@ -114,7 +124,12 @@ const EMAIL_LOCALES: EmailLocale[] = ["fr", "en"];
 function sanitizeEmailLocale(value: unknown): EmailLocale {
   return EMAIL_LOCALES.includes(value as EmailLocale) ? (value as EmailLocale) : "fr";
 }
-import { checkRateLimit, getClientIp, secondsUntilWindowEnd } from "./rate-limit.ts";
+import {
+  checkBindingRateLimit,
+  checkRateLimit,
+  getClientIp,
+  secondsUntilWindowEnd,
+} from "./rate-limit.ts";
 import { checkRateLimitInMemory } from "./rate-limit-memory.ts";
 import { WORKER_ONLY_PARAMS, isValidRegion, parseTmdbProxyRequest } from "./tmdb-proxy-policy.ts";
 import { detectKnownCrawler } from "./bots.ts";
@@ -861,6 +876,8 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       username: user.username,
       restrictListInvites: user.restrictListInvites,
       avatarVersion: await getAvatarVersion(env.DB, user.id),
+      // Administrateur : bouton « Admin » du site (l'espace admin reste derrière Cloudflare Access)
+      admin: adminEmails(env).includes(user.email.toLowerCase()),
     },
     200,
     { "set-cookie": sessionCookieHeaders(request, sessionToken) }
@@ -879,6 +896,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     username: user.username,
     restrictListInvites: user.restrictListInvites,
     avatarVersion: await getAvatarVersion(env.DB, user.id),
+    admin: adminEmails(env).includes(user.email.toLowerCase()),
   });
 }
 
@@ -1041,7 +1059,13 @@ async function handlePutAvatar(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!(await env.AVATAR_RATE_LIMITER.limit({ key: `avatar:user:${user.id}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.AVATAR_RATE_LIMITER,
+      `avatar:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (Number(request.headers.get("content-length") ?? 0) > AVATAR_MAX_BYTES) {
@@ -1411,7 +1435,13 @@ async function handleDeleteReminder(request: Request, env: Env): Promise<Respons
 // plafonné par IP pour qu'on ne puisse pas balayer l'espace des slugs.
 async function handleGetPublicProfile(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const viewer = await getUserFromRequest(env.DB, request);
@@ -1502,7 +1532,13 @@ async function handleGetPublicFollowList(
   kind: "followers" | "following"
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   const targetId = SHARE_SLUG_PATTERN.test(slug) ? await getUserIdBySlug(env.DB, slug) : null;
@@ -1596,7 +1632,13 @@ async function handleGetPublicProfileAvatar(
   slug: string
 ): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-profile:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-profile:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1730,7 +1772,13 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   if (user instanceof Response) {
     return user;
   }
-  if (!(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library:user:${user.id}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (writeBodyTooLarge(request)) {
@@ -1769,7 +1817,11 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `library-sync:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `library-sync:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1823,7 +1875,11 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-lists:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-lists:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1853,7 +1909,11 @@ async function handlePutCustomList(request: Request, env: Env, listId: string): 
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1894,7 +1954,11 @@ async function handleDeleteCustomList(
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -1951,7 +2015,13 @@ async function handlePutListShare(request: Request, env: Env): Promise<Response>
 // sa vue éditable côté client).
 async function handleGetPublicList(request: Request, env: Env, slug: string): Promise<Response> {
   const ip = getClientIp(request);
-  if (!(await env.PUBLIC_SLUG_RATE_LIMITER.limit({ key: `public-list:ip:${ip}` })).success) {
+  if (
+    !(await checkBindingRateLimit(
+      env.PUBLIC_SLUG_RATE_LIMITER,
+      `public-list:ip:${ip}`,
+      new URL(request.url).hostname
+    ))
+  ) {
     return RATE_LIMIT_RESPONSE();
   }
   if (!SHARE_SLUG_PATTERN.test(slug)) {
@@ -1965,7 +2035,7 @@ async function handleGetPublicList(request: Request, env: Env, slug: string): Pr
   return json(list);
 }
 
-// Listes communes (ticket "Ma liste commune", migration 0021) -------------
+// Listes communes (ticket "Ma liste commune", migration 0021_list_members) -------------
 //
 // Une liste perso devient "commune" dès qu'elle a des membres : pas de
 // nouveau type de liste côté stockage, juste la table list_members en plus
@@ -2063,7 +2133,11 @@ async function handlePostListMember(
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `list-members:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `list-members:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2081,7 +2155,7 @@ async function handlePostListMember(
   if ((await countListMembers(env.DB, user.id, listId)) >= MAX_LIST_MEMBERS) {
     return json({ error: "Nombre maximal de membres atteint.", reason: "too-many-members" }, 400);
   }
-  // Réglage de profil de la cible (migration 0022, retour du 2026-10-11) :
+  // Réglage de profil de la cible (migration 0022_restrict_list_invites, retour du 2026-10-11) :
   // si activé, seules les personnes qu'elle suit peuvent l'ajouter à une
   // liste commune — vérifié ici (pas seulement côté recherche d'invitation)
   // pour couvrir aussi un appel direct à cette route.
@@ -2148,7 +2222,11 @@ async function handleDeleteListMember(
     return json({ error: "Action non autorisée." }, 403);
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `list-members:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `list-members:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2179,7 +2257,11 @@ async function handleLeaveSharedList(
     return json({ error: "Le propriétaire ne peut pas quitter sa propre liste." }, 400);
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `list-members:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `list-members:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2210,7 +2292,11 @@ async function handlePutSharedList(
     return json({ error: "Liste introuvable." }, 404);
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${ownerId}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${ownerId}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2252,7 +2338,11 @@ async function handleDeleteSharedList(
     return json({ error: "Liste introuvable." }, 404);
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `custom-list:user:${ownerId}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `custom-list:user:${ownerId}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2283,8 +2373,11 @@ async function handlePutExcludedGenres(request: Request, env: Env): Promise<Resp
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `excluded-genres:user:${user.id}` }))
-      .success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `excluded-genres:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2321,9 +2414,83 @@ const RECOMMENDATIONS_RATE_LIMIT = { limit: 30, windowMs: 60_000 };
 // du lot calculé couvre plusieurs pages de scroll d'un coup, pour que les
 // pages suivantes soient servies par le même lot sans recalcul.
 const RECOMMENDATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const RECOMMENDATION_CACHE_SIZE = 96;
+const RECOMMENDATION_CACHE_SIZE = 240;
+// Le lot ne peut pas dépasser le pool de candidats : on le relève aussi (le
+// défaut de 200 par type est conservé pour les suggestions IA).
+const RECOMMENDATION_CANDIDATE_POOL = 400;
 
-async function handleGetRecommendations(request: Request, env: Env): Promise<Response> {
+// Chaque calcul décode/redimensionne une image en WASM dans ce même Worker
+// (~6 ms une fois l'isolate chaud, ~25 ms à froid — voir le commentaire de
+// computePosterThumbhash, worker/images/posterThumbhash.ts) : au-delà de
+// quelques affiches manquantes dans une seule réponse, le total facturé sur
+// le budget CPU de la requête (10 ms sur le plan Workers Free, y compris le
+// temps passé dans `waitUntil`) dépasse largement la limite et le Worker est
+// coupé en plein calcul (carte Trello "Limite temps CPU atteinte", erreurs
+// Sentry "ThumbHash à la demande échoué... ExitStatus exit(1)"). Les
+// affiches au-delà de cette limite restent simplement en silhouette jusqu'au
+// prochain passage du batch CI quotidien (scripts/generate-thumbhashes.ts)
+// ou à une requête ultérieure.
+const MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST = 4;
+
+// Affiches sans ThumbHash connu parmi la page réellement servie : calcul en
+// arrière-plan (jamais dans le chemin synchrone de la réponse), voir
+// worker/images/posterThumbhash.ts. Ne couvre que la page retournée, pas
+// tout le pool de candidats, pour ne consommer le budget `waitUntil` que
+// pour les affiches effectivement vues par un utilisateur actif.
+function scheduleMissingThumbhashes(
+  ctx: ExecutionContext,
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): void {
+  let scheduled = 0;
+  for (const item of items) {
+    if (scheduled >= MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      break;
+    }
+    if (item.posterPath && !item.posterThumbhash) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, item.posterPath));
+      scheduled++;
+    }
+  }
+}
+
+// `recommendation_cache` fige `posterThumbhash` au moment du calcul (voir
+// RECOMMENDATION_CACHE_TTL_MS, 24h) : un ThumbHash calculé à la demande
+// après coup (scheduleMissingThumbhashes) n'apparaîtrait donc jamais tant
+// que le cache n'expire pas, même une fois stocké en base — bug remonté en
+// review (carte Trello "ThumbHash affiches", page Découvrir toujours en
+// silhouette malgré plusieurs rechargements). Mute les items en place avec
+// la valeur actuelle de `poster_thumbhashes` pour les affiches encore
+// marquées `null` dans le cache.
+async function refreshMissingThumbhashes(
+  env: Env,
+  items: Array<{ posterPath: string | null; posterThumbhash: string | null }>
+): Promise<void> {
+  const missingPaths = items
+    .filter((item) => item.posterPath && !item.posterThumbhash)
+    .map((item) => item.posterPath as string);
+  if (missingPaths.length === 0) {
+    return;
+  }
+  const fresh = await getThumbhashesForPosterPaths(env.DB, [...new Set(missingPaths)]);
+  if (fresh.size === 0) {
+    return;
+  }
+  for (const item of items) {
+    if (item.posterPath && !item.posterThumbhash) {
+      const hash = fresh.get(item.posterPath);
+      if (hash) {
+        item.posterThumbhash = hash;
+      }
+    }
+  }
+}
+
+async function handleGetRecommendations(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
     return user;
@@ -2340,15 +2507,39 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   const offsetParam = Number(url.searchParams.get("offset"));
   const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
 
+  // Fin du lot : genres de la suite du défilement (voir TasteContinuation),
+  // avec les titres "pas intéressé" relus à chaque fois (jamais figés dans
+  // le cache du lot). Absent tant que le lot a encore des titres.
+  const withContinuation = async (continuation: TasteContinuation | null) =>
+    continuation && (typeParam === "movie" || typeParam === "tv")
+      ? {
+          ...continuation,
+          excludeIds: await getNotInterestedIdsForUser(env.DB, user.id, typeParam),
+        }
+      : null;
+
   const cached = await getRecommendationCache(env.DB, user.id, typeParam);
   const isFresh = !!cached && Date.now() - cached.computedAt < RECOMMENDATION_CACHE_TTL_MS;
-  if (cached && isFresh && cached.items.length >= offset + limit) {
-    const pageItems = cached.items.slice(offset, offset + limit);
-    return json({
-      items: pageItems,
-      coldStart: cached.coldStart,
-      hasMore: offset + pageItems.length < cached.items.length,
-    });
+  if (cached && isFresh) {
+    const pageItems = cached.items.slice(offset, offset + limit) as RecommendationItem[];
+    const hasMore = offset + pageItems.length < cached.items.length;
+    // Lot complet (le classement a rendu moins de titres que demandé) : sa
+    // fin est servie par le cache, sans recalcul. Un lot mis en cache avant
+    // la suite du défilement (`continuation` undefined) est recalculé
+    // quand sa fin est atteinte.
+    const covers = cached.items.length >= offset + limit || cached.complete;
+    if (covers && (hasMore || cached.continuation !== undefined)) {
+      await refreshMissingThumbhashes(env, pageItems);
+      scheduleMissingThumbhashes(ctx, env, pageItems);
+      return json({
+        items: pageItems,
+        coldStart: cached.coldStart,
+        hasMore,
+        continuation: hasMore
+          ? null
+          : await withContinuation(cached.continuation as TasteContinuation | null),
+      });
+    }
   }
 
   const [library, excludedGenreIds, notInterested] = await Promise.all([
@@ -2361,18 +2552,30 @@ async function handleGetRecommendations(request: Request, env: Env): Promise<Res
   const profile = buildTasteProfile(watched, watchlist, notInterested, excludedGenreIds);
 
   const candidateLists = await Promise.all(
-    mediaTypes.map((mediaType) => getRecommendationCandidates(env, mediaType))
+    mediaTypes.map((mediaType) =>
+      getRecommendationCandidates(env, mediaType, RECOMMENDATION_CANDIDATE_POOL)
+    )
   );
   const candidates = candidateLists.flat();
-  const items = rankRecommendations(candidates, profile, {
-    limit: Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE),
-  });
-  await setRecommendationCache(env.DB, user.id, typeParam, items, profile.isColdStart);
+  const rankLimit = Math.max(offset + limit, RECOMMENDATION_CACHE_SIZE);
+  const items = rankRecommendations(candidates, profile, { limit: rankLimit });
+  const continuation =
+    typeParam === "movie" || typeParam === "tv" ? buildTasteContinuation(profile, typeParam) : null;
+  await setRecommendationCache(
+    env.DB,
+    user.id,
+    typeParam,
+    { items, complete: items.length < rankLimit, continuation },
+    profile.isColdStart
+  );
   const pageItems = items.slice(offset, offset + limit);
+  const hasMore = offset + pageItems.length < items.length;
+  scheduleMissingThumbhashes(ctx, env, pageItems);
   return json({
     items: pageItems,
     coldStart: profile.isColdStart,
-    hasMore: offset + pageItems.length < items.length,
+    hasMore,
+    continuation: hasMore ? null : await withContinuation(continuation),
   });
 }
 
@@ -2382,7 +2585,11 @@ async function handlePostNotInterested(request: Request, env: Env): Promise<Resp
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `not-interested:user:${user.id}` })).success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `not-interested:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2417,6 +2624,63 @@ async function handlePostNotInterested(request: Request, env: Env): Promise<Resp
   return json({ ok: true });
 }
 
+// Suggestions IA « Pour vous ce soir » -----------------------------------
+// Toute la logique (verrou, génération en arrière-plan, repli v1) vit dans
+// ai-suggestions.ts. Le client interroge le GET toutes les quelques
+// secondes tant que la réponse est "pending" : plafond en mémoire assez
+// large pour ce polling, la génération elle-même étant de toute façon
+// limitée à une par utilisateur et par jour par le cache D1.
+const TONIGHT_SUGGESTIONS_RATE_LIMIT = { limit: 60, windowMs: 60_000 };
+
+async function handleGetTonightSuggestions(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !checkRateLimitInMemory(`tonight-suggestions:user:${user.id}`, TONIGHT_SUGGESTIONS_RATE_LIMIT)
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  return json(await getTonightSuggestions(env, ctx, user.id, new URL(request.url).hostname));
+}
+
+async function handlePostTonightSkip(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  if (
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `tonight-skip:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
+  ) {
+    return RATE_LIMIT_RESPONSE();
+  }
+  if (writeBodyTooLarge(request)) {
+    return BODY_TOO_LARGE_RESPONSE();
+  }
+  const body = await readJsonObject(request);
+  if (!body) {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  if (!isMediaType(body.mediaType)) {
+    return json({ error: "mediaType invalide." }, 400);
+  }
+  const tmdbId = Number(body.tmdbId);
+  if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
+    return json({ error: "tmdbId invalide." }, 400);
+  }
+  await skipTonightSuggestion(env, user.id, body.mediaType, tmdbId);
+  return json({ ok: true });
+}
+
 // Plateformes favorites synchronisées -------------------------------------
 //
 // Même garde IDOR que handleGetLibrary/handlePutLibrary : user.id vient
@@ -2436,8 +2700,11 @@ async function handlePutFavoriteProviders(request: Request, env: Env): Promise<R
     return user;
   }
   if (
-    !(await env.LIBRARY_WRITE_RATE_LIMITER.limit({ key: `favorite-providers:user:${user.id}` }))
-      .success
+    !(await checkBindingRateLimit(
+      env.LIBRARY_WRITE_RATE_LIMITER,
+      `favorite-providers:user:${user.id}`,
+      new URL(request.url).hostname
+    ))
   ) {
     return RATE_LIMIT_RESPONSE();
   }
@@ -2711,6 +2978,125 @@ async function enrichDiscoverResultsWithRegionDate(
   );
 }
 
+// Toute affiche TMDB proxée, pas seulement celles des recommandations
+// (carte Trello "ThumbHash affiches" — demande explicite d'étendre la
+// couverture à Découvrir/recherche/tendances/fiches détail, y compris pour
+// un visiteur non connecté, puisque le ThumbHash d'une affiche n'a rien
+// d'utilisateur). Un item TMDB peut porter `poster_path` à plusieurs
+// profondeurs selon la route (résultats paginés, fiche détail elle-même,
+// `belongs_to_collection`, `parts` d'une collection, `cast` via
+// append_to_response=credits...) : on descend récursivement plutôt que
+// d'énumérer chaque forme, pour rester correct si une route ou un
+// append_to_response change de forme plus tard.
+function collectPosterPathHolders(
+  node: unknown,
+  holders: Array<{ poster_path: string; poster_thumbhash?: string | null }> = []
+): Array<{ poster_path: string; poster_thumbhash?: string | null }> {
+  if (Array.isArray(node)) {
+    for (const entry of node) {
+      collectPosterPathHolders(entry, holders);
+    }
+  } else if (node && typeof node === "object") {
+    const record = node as Record<string, unknown>;
+    if (typeof record.poster_path === "string") {
+      holders.push(record as { poster_path: string; poster_thumbhash?: string | null });
+    }
+    for (const value of Object.values(record)) {
+      if (value && typeof value === "object") {
+        collectPosterPathHolders(value, holders);
+      }
+    }
+  }
+  return holders;
+}
+
+// Même mécanisme que scheduleMissingThumbhashes/refreshMissingThumbhashes
+// (recommandations) mais générique sur n'importe quelle réponse TMDB
+// proxée : lecture groupée de `poster_thumbhashes` pour les affiches
+// déjà connues, calcul en arrière-plan (jamais dans le chemin synchrone de
+// la réponse) pour celles qui manquent encore.
+//
+// `allowCompute` à false pour les crawlers connus (voir handleTmdbProxy) :
+// ils reçoivent les hashes déjà en base mais ne déclenchent jamais de
+// calcul. Applebot explorait tout le catalogue (~99 % du trafic du Worker,
+// des milliers d'affiches jamais vues par heure) : ces décodages WASM
+// dépassaient le budget CPU de 10 ms (erreurs exceededCpu en rafale) et
+// faisaient grimper la mémoire des isolats au-delà de la limite de
+// 128 Mio, sans aucun bénéfice — un crawler n'affiche pas la silhouette.
+async function enrichResponseWithPosterThumbhashes(
+  data: unknown,
+  env: Env,
+  ctx: ExecutionContext,
+  allowCompute: boolean
+): Promise<void> {
+  const holders = collectPosterPathHolders(data);
+  if (holders.length === 0) {
+    return;
+  }
+  const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
+  const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  let scheduled = 0;
+  for (const holder of holders) {
+    const hash = hashes.get(holder.poster_path);
+    holder.poster_thumbhash = hash ?? null;
+    if (!hash && allowCompute && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+      scheduled++;
+    }
+  }
+}
+
+// Variante de enrichResponseWithPosterThumbhashes pour un hit du cache
+// d'edge (voir handleTmdbProxy) : ne lit/réécrit que les affiches encore
+// `null` dans la réponse déjà figée, sans retoucher à celles déjà connues
+// ni toucher à l'entrée de cache elle-même (chaque requête suivante refait
+// ce même correctif tant que le cache n'a pas expiré, coût borné à une
+// lecture D1 groupée). Repart tôt sans toucher au corps de la réponse si
+// aucune affiche n'est manquante.
+async function refreshCachedPosterThumbhashes(
+  response: Response,
+  env: Env,
+  ctx: ExecutionContext,
+  allowCompute: boolean
+): Promise<Response> {
+  const data = await response
+    .clone()
+    .json()
+    .catch(() => null);
+  if (!data) {
+    return response;
+  }
+  const holders = collectPosterPathHolders(data).filter((holder) => !holder.poster_thumbhash);
+  if (holders.length === 0) {
+    return response;
+  }
+  const posterPaths = [...new Set(holders.map((holder) => holder.poster_path))];
+  const hashes = await getThumbhashesForPosterPaths(env.DB, posterPaths);
+  let scheduled = 0;
+  for (const holder of holders) {
+    const hash = hashes.get(holder.poster_path);
+    if (hash) {
+      holder.poster_thumbhash = hash;
+    } else if (allowCompute && scheduled < MAX_THUMBHASH_COMPUTATIONS_PER_REQUEST) {
+      ctx.waitUntil(computeAndStorePosterThumbhash(env, holder.poster_path));
+      scheduled++;
+    }
+  }
+  // En-têtes reconstruits à la main plutôt que copiés depuis `response.headers` :
+  // le corps change de taille dès qu'une affiche passe de `null` à un hash (ou
+  // l'inverse), et on ne sait pas si le Cache API de Cloudflare matérialise un
+  // `content-length` (ou un `age`) sur la représentation qu'il renvoie — ne
+  // garder que ce dont ce proxy a vraiment besoin évite tout risque d'en-tête
+  // devenu incohérent avec le nouveau corps.
+  return new Response(JSON.stringify(data), {
+    status: response.status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": response.headers.get("cache-control") || "public, max-age=300",
+    },
+  });
+}
+
 // Proxy TMDB : la clé API TMDB n'est plus exposée côté client (elle
 // n'apparaît dans aucune requête réseau visible depuis le navigateur). Le
 // front (src/core/api/tmdbClient.ts) appelle /api/tmdb/<chemin TMDB> ; ce
@@ -2752,7 +3138,13 @@ async function handleTmdbProxy(
   );
   const cached = await cache.match(cacheKey);
   if (cached) {
-    return cached;
+    // Le cache d'edge fige `poster_thumbhash` tel qu'il était au moment de
+    // sa mise en cache (même souci que `recommendation_cache`, voir
+    // refreshMissingThumbhashes) : sans ce correctif, une affiche calculée
+    // en arrière-plan juste après la première requête resterait en
+    // silhouette pour tout visiteur suivant jusqu'à expiration du cache
+    // (jusqu'à 1h sur les routes par titre).
+    return refreshCachedPosterThumbhashes(cached, env, ctx, !crawler);
   }
 
   // Plafonds vérifiés APRÈS le cache d'edge : une réponse servie depuis le
@@ -2840,7 +3232,11 @@ async function handleTmdbProxy(
 
   const res = await fetch(tmdbUrl.toString());
   let body = await res.text();
-  if (res.ok && (shouldEnrichProviders || shouldEnrichRegionDate)) {
+  // Le ThumbHash est posé sur TOUTE réponse TMDB proxée qui porte des
+  // affiches (pas seulement les grilles Découvrir enrichies de badges) :
+  // le JSON.parse ci-dessous n'est donc plus conditionné aux deux
+  // enrichissements existants.
+  if (res.ok) {
     const data = JSON.parse(body);
     const usage: TmdbUsage = { calls: 0 };
     if (shouldEnrichProviders) {
@@ -2859,6 +3255,7 @@ async function handleTmdbProxy(
       const region = params.get("region_release_date_region") || "FR";
       await enrichDiscoverResultsWithRegionDate(data, region, url.origin, env, ctx, usage);
     }
+    await enrichResponseWithPosterThumbhashes(data, env, ctx, !crawler);
     // Imputés après coup (on ne connaît qu'ici le nombre d'appels hors cache) :
     // la requête en cours est servie, les suivantes seront refusées.
     if (usage.calls > 0) {
@@ -2907,10 +3304,56 @@ async function handleTmdbProxy(
   return response;
 }
 
+/**
+ * Appels internes du Worker admin (service binding, voir worker/admin-split.ts) : ce qui demande un
+ * secret du site, gardé par ce Worker seul (clé privée des notifications, état des réglages du site).
+ */
+async function internalApi(request: Request, env: Env): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (pathname === "/api/internal/push-admins" && request.method === "POST") {
+    const b = (await request.json().catch(() => ({}))) as {
+      text?: string;
+      id?: string;
+      tag?: string;
+    };
+    await pushAdmins(env, String(b.text ?? ""), String(b.id ?? ""), b.tag || undefined);
+    return json({ ok: true });
+  }
+  if (pathname === "/api/internal/site-config" && request.method === "GET") {
+    return json(siteConfig(env));
+  }
+  return json({ error: "Introuvable" }, 404);
+}
+
 export default withSentry({
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(url.hostname)) {
+    // Espace admin sur son propre Worker (voir worker/admin-split.ts)
+    if (env.ADMIN_WORKER && env.SITE) {
+      const route = adminWorkerRoute(url.pathname);
+      if (route === "site") {
+        return env.SITE.fetch(request);
+      }
+      if (route === "assets") {
+        return env.ASSETS.fetch(request);
+      }
+    } else {
+      // Worker du site : appels internes du Worker admin, et API de l'admin et des tickets qui lui revient
+      if (url.hostname === INTERNAL_HOSTNAME) {
+        return internalApi(request, env);
+      }
+      if (env.ADMIN && forwardToAdmin(url.hostname, url.pathname)) {
+        return env.ADMIN.fetch(request);
+      }
+    }
+    // Exception : l'API des tickets appelée avec la clé des sessions Claude
+    // (workflows GitHub, import Trello) passe par l'adresse workers.dev, hors
+    // de la zone seancy.com, dont le Bot Fight Mode (forfait gratuit, sans
+    // exception possible) bloque les machines de GitHub. Seule la clé y ouvre
+    // l'accès : aucune session admin sur ces adresses (voir worker/admin.ts).
+    const ticketsByKey =
+      /^\/api\/tickets(\/|$)/.test(url.pathname) && request.headers.has("x-tickets-key");
+    if (REDIRECTED_TO_PRODUCTION_HOSTNAMES.includes(url.hostname) && !ticketsByKey) {
       return Response.redirect(`https://${PRODUCTION_HOSTNAME}${url.pathname}${url.search}`, 301);
     }
     // `run_worker_first` (wrangler.jsonc) route surtout /api/* ici : les
@@ -2942,6 +3385,11 @@ export default withSentry({
     // page d'erreur Cloudflare en HTML (sans en-têtes de sécurité), que le
     // client ne sait pas lire.
     try {
+      // Espace admin : tout appel /api de son domaine doit porter un jeton
+      // Cloudflare Access valide (en plus de la connexion admin de Seancy).
+      if (isAdminHostname(url.hostname) && !(await accessGate(request, env))) {
+        return withSecurityHeaders(json({ error: "Accès refusé (Cloudflare Access)." }, 403));
+      }
       // Poignée de main WebSocket de la synchro temps réel : la réponse 101
       // ne doit pas passer par withSecurityHeaders (voir openSyncSocket).
       if (url.pathname === "/api/sync/socket" && request.method === "GET") {
@@ -2964,6 +3412,12 @@ export default withSentry({
   // invocation plutôt que dans celle de runDailyCheck, pour ne pas partager
   // son budget de sous-requêtes TMDB avec les notifications quotidiennes.
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Worker de l'admin (wrangler.admin.jsonc, toutes les 2 minutes) : file de validation des tickets, relances,
+    // previews… sans attendre le workflow « Tickets (passage) », que GitHub ne lance que toutes les quelques heures
+    if (env.ADMIN_WORKER) {
+      ctx.waitUntil(runTicketsCron(env));
+      return;
+    }
     if (event.cron === SEARCH_INDEX_SYNC_CRON) {
       ctx.waitUntil(syncPopularTitles(env));
       return;
@@ -2978,11 +3432,21 @@ async function routeRequest(
   url: URL,
   ctx: ExecutionContext
 ): Promise<Response> {
+  // Espace admin (tableau de bord, outils) et tickets envoyés à Claude :
+  // réservés aux administrateurs et aux sessions Claude (voir worker/admin.ts
+  // et worker/tickets.ts).
+  if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) {
+    return handleAdmin(request, env, url, ctx);
+  }
+  if (url.pathname === "/api/tickets" || url.pathname.startsWith("/api/tickets/")) {
+    return handleTickets(request, env, url, ctx);
+  }
   if (url.pathname === "/api/vapid-public-key" && request.method === "GET") {
     if (!env.VAPID_PUBLIC_KEY) {
       return json({ error: "VAPID_PUBLIC_KEY non configurée." }, 503);
     }
-    return cachedStaticJson(request, ctx, { publicKey: env.VAPID_PUBLIC_KEY });
+    // Sans cache, comme la clé reCAPTCHA : après un changement de clé, les navigateurs se réabonnent tout de suite
+    return json({ publicKey: env.VAPID_PUBLIC_KEY }, 200, { "cache-control": "no-store" });
   }
 
   // Clé "site" reCAPTCHA v3 : faite pour être publique (elle apparaît de
@@ -2993,7 +3457,9 @@ async function routeRequest(
   // anti-robot (le serveur, lui, saute aussi la vérification côté
   // verifyRecaptcha tant que RECAPTCHA_SECRET_KEY n'est pas configurée).
   if (url.pathname === "/api/recaptcha-site-key" && request.method === "GET") {
-    return cachedStaticJson(request, ctx, { siteKey: env.RECAPTCHA_SITE_KEY || null });
+    // Sans cache (ni ici, ni dans le navigateur) : après un changement de clé,
+    // une ancienne clé gardée en cache empêche toute connexion (jeton refusé).
+    return json({ siteKey: env.RECAPTCHA_SITE_KEY || null }, 200, { "cache-control": "no-store" });
   }
 
   // DSN Sentry pour l'init côté client (voir src/core/logger.ts) : servi
@@ -3295,11 +3761,19 @@ async function routeRequest(
   }
 
   if (url.pathname === "/api/recommendations" && request.method === "GET") {
-    return handleGetRecommendations(request, env);
+    return handleGetRecommendations(request, env, ctx);
   }
 
   if (url.pathname === "/api/not-interested" && request.method === "POST") {
     return handlePostNotInterested(request, env);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions" && request.method === "GET") {
+    return handleGetTonightSuggestions(request, env, ctx);
+  }
+
+  if (url.pathname === "/api/tonight-suggestions/skip" && request.method === "POST") {
+    return handlePostTonightSkip(request, env);
   }
 
   if (url.pathname === "/api/favorite-providers" && request.method === "GET") {

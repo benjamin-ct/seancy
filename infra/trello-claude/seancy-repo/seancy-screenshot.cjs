@@ -6,9 +6,16 @@
 //   seancy-screenshot <url> <sortie.png> [--mobile | --desktop | --both]
 //                     [--full] [--wait <ms>] [--cookie nom=valeur]...
 //                     [--click <sélecteur CSS>]... [--dark | --light]
+//                     [--ready <sélecteur CSS>]
 //
 // --both produit <sortie>-desktop.png et <sortie>-mobile.png. Les erreurs
 // console et les requêtes en échec sont affichées sur la sortie standard.
+//
+// --ready <sélecteur> : pour une page connectée qui ouvre une connexion de
+// synchro temps réel (SSE/WebSocket, voir core/sync/liveSync.ts) — `page.goto`
+// n'atteint jamais `networkidle` tant que cette connexion reste ouverte.
+// Avec ce flag, la navigation utilise `waitUntil: "load"` puis attend ce
+// sélecteur (état applicatif précis) au lieu de compter sur `networkidle`.
 //
 // Previews Cloudflare (*.dev.seancy.com, et les anciennes *.workers.dev,
 // derrière Cloudflare Access) : si
@@ -19,7 +26,15 @@ const { chromium, devices } = require("playwright");
 const path = require("node:path");
 
 function parseArgs(argv) {
-  const opts = { mode: "desktop", full: false, wait: 1500, cookies: [], clicks: [], scheme: null };
+  const opts = {
+    mode: "desktop",
+    full: false,
+    wait: 1500,
+    cookies: [],
+    clicks: [],
+    scheme: null,
+    ready: null,
+  };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -35,6 +50,8 @@ function parseArgs(argv) {
       opts.cookies.push(argv[++i]);
     } else if (arg === "--click") {
       opts.clicks.push(argv[++i]);
+    } else if (arg === "--ready") {
+      opts.ready = argv[++i];
     } else {
       rest.push(arg);
     }
@@ -84,8 +101,14 @@ async function capture(browser, opts, mode, out) {
   page.on("requestfailed", (req) =>
     console.log(`[${mode}] requête en échec: ${req.url()} (${req.failure()?.errorText})`)
   );
-  const response = await page.goto(opts.url, { waitUntil: "networkidle", timeout: 45_000 });
+  const response = await page.goto(opts.url, {
+    waitUntil: opts.ready ? "load" : "networkidle",
+    timeout: 45_000,
+  });
   console.log(`[${mode}] HTTP ${response?.status()} ${page.url()}`);
+  if (opts.ready) {
+    await page.waitForSelector(opts.ready, { timeout: 10_000 });
+  }
   for (const selector of opts.clicks) {
     await page.click(selector, { timeout: 10_000 });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -100,7 +123,7 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.url || !opts.out) {
     console.error(
-      "Usage : seancy-screenshot <url> <sortie.png> [--mobile|--desktop|--both] [--full] [--wait ms] [--cookie nom=valeur] [--click sélecteur] [--dark|--light]"
+      "Usage : seancy-screenshot <url> <sortie.png> [--mobile|--desktop|--both] [--full] [--wait ms] [--cookie nom=valeur] [--click sélecteur] [--dark|--light] [--ready sélecteur]"
     );
     process.exit(2);
   }

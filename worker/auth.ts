@@ -41,7 +41,7 @@ export interface AuthUser {
   /** Pseudo public (migration 0012), `null` tant qu'aucun n'a été choisi. */
   username: string | null;
   /** Si actif, seules les personnes que ce compte suit peuvent l'ajouter à
-   * une liste commune (migration 0022). */
+   * une liste commune (migration 0022_restrict_list_invites). */
   restrictListInvites: boolean;
   sessionToken: string;
   /** Fin de validité de la session (ms depuis l'epoch). */

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "r
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
+import { usePosterThumbhash } from "../../shared/lib/thumbhash.ts";
 import type { TFunction } from "i18next";
 import {
   backdropUrl,
@@ -41,6 +42,7 @@ import { useExcludedTitles } from "../../core/context/ExcludedTitlesContext.tsx"
 import { useMembersOnly } from "../../core/context/MembersOnlyContext.tsx";
 import { posterAccentFromGenres } from "../../shared/lib/posterAccent.ts";
 import { STAR_LABEL_KEYS } from "../../shared/lib/ratingTier.ts";
+import { formatRating, seriesRating, wholeRating } from "../../core/lib/seriesRatings.ts";
 import { pop } from "../../shared/lib/motion.ts";
 import { getMediaPreview, type MediaPreview } from "../../shared/lib/mediaPreviewCache.ts";
 import { toMediaItem } from "../../shared/lib/mediaItem.ts";
@@ -157,6 +159,7 @@ export default function DetailPage() {
     markSeriesWatched,
     getRating,
     rateWatched,
+    getShowEntry,
     customLists,
     sharedLists,
     isInList,
@@ -176,6 +179,14 @@ export default function DetailPage() {
   const { isExcludedTitle, toggleExcludedTitle } = useExcludedTitles();
   const { requireMember } = useMembersOnly();
   const recommendationsRef = useRef<HTMLElement>(null);
+  const {
+    hasThumbhash: posterHasThumbhash,
+    loaded: posterLoaded,
+    backgroundStyle: posterThumbhashStyle,
+    imgRef: posterImgRef,
+    onLoad: handlePosterLoad,
+    onError: handlePosterError,
+  } = usePosterThumbhash(details?.poster_thumbhash);
 
   useEffect(() => {
     if (!mediaType || !id) {
@@ -401,7 +412,19 @@ export default function DetailPage() {
     isInList(list.id, mediaType, id, list.ownerId)
   ).length;
 
-  const rating = watched ? getRating(mediaType, id) : null;
+  // Série : note effective = moyenne des saisons notées (voir
+  // core/lib/seriesRatings.ts), affichée même pendant le visionnage ; sans
+  // saison notée, note donnée à la main comme pour un film.
+  const showEntry = mediaType === "tv" ? getShowEntry(mediaType, id) : null;
+  const seriesSummary = showEntry ? seriesRating(showEntry) : null;
+  const seriesAverage =
+    seriesSummary && seriesSummary.ratedSeasons > 0 ? seriesSummary.value : null;
+  const rating =
+    seriesAverage != null
+      ? wholeRating(seriesAverage)
+      : watched
+        ? (seriesSummary?.manual ?? getRating(mediaType, id))
+        : null;
 
   // La note est portée par l'entrée « vu » de la bibliothèque : seul un titre
   // déjà vu peut être noté (les étoiles sont inactives sinon).
@@ -582,16 +605,23 @@ export default function DetailPage() {
           {backLink(styles.back)}
           <div className={styles.posterWrap}>
             {details.poster_path ? (
-              <img
-                src={posterUrl(details.poster_path, "w342") ?? undefined}
-                srcSet={posterSrcSet(details.poster_path)}
-                sizes={DETAIL_POSTER_SIZES}
-                alt={title}
-                className={styles.poster}
-                fetchPriority="high"
-              />
+              <div className={styles.posterFrame} style={posterThumbhashStyle}>
+                <img
+                  ref={posterImgRef}
+                  src={posterUrl(details.poster_path, "w342") ?? undefined}
+                  srcSet={posterSrcSet(details.poster_path)}
+                  sizes={DETAIL_POSTER_SIZES}
+                  alt={title}
+                  className={`${styles.poster} ${posterHasThumbhash ? (posterLoaded ? styles.posterLoaded : styles.posterLoading) : ""}`}
+                  fetchPriority="high"
+                  onLoad={handlePosterLoad}
+                  onError={handlePosterError}
+                />
+              </div>
             ) : (
-              <div className={`${styles.poster} ${styles.posterEmpty} ${posterStyles[accentKey]}`}>
+              <div
+                className={`${styles.posterFrame} ${styles.posterEmpty} ${posterStyles[accentKey]}`}
+              >
                 {title}
               </div>
             )}
@@ -852,8 +882,15 @@ export default function DetailPage() {
                 <span className="eyebrow">{t("detailPage.yourRatingHeading")}</span>
                 {rating != null ? (
                   <>
-                    <b className={styles.yourRatingValue}>{rating}/10</b>
-                    <span>{t(STAR_LABEL_KEYS[rating - 1])}</span>
+                    <b className={styles.yourRatingValue}>
+                      {seriesAverage != null ? formatRating(seriesAverage, localeTag) : rating}
+                      /10
+                    </b>
+                    <span>
+                      {seriesSummary && seriesAverage != null
+                        ? t("detailPage.seriesAverage", { count: seriesSummary.ratedSeasons })
+                        : t(STAR_LABEL_KEYS[rating - 1])}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -864,7 +901,15 @@ export default function DetailPage() {
                   </>
                 )}
               </p>
-              <RatingStars value={rating} onRate={rate} clearable hideValue disabled={!watched} />
+              {seriesSummary && seriesAverage != null ? (
+                seriesSummary.manual != null && (
+                  <p className={styles.yourRatingNote}>
+                    {t("detailPage.manualSeriesKept", { rating: seriesSummary.manual })}
+                  </p>
+                )
+              ) : (
+                <RatingStars value={rating} onRate={rate} clearable hideValue disabled={!watched} />
+              )}
             </div>
           </div>
         </div>
@@ -967,7 +1012,7 @@ export default function DetailPage() {
           </div>
           <div className={gridStyles.grid}>
             {recommendations.slice(0, 12).map((item) => (
-              <MediaCard key={item.id} item={toMediaItem(item, mediaType)} />
+              <MediaCard key={item.id} item={toMediaItem(item, mediaType)} nofollow />
             ))}
           </div>
         </section>

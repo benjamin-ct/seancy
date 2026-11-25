@@ -3,16 +3,25 @@
 export interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  // Espace admin sur son propre Worker (voir worker/admin-split.ts) : sur le
+  // Worker du site, ADMIN mène au Worker `seancy-admin` ; sur celui-ci,
+  // ADMIN_WORKER vaut « 1 » et SITE mène au Worker du site.
+  ADMIN?: Fetcher;
+  SITE?: Fetcher;
+  ADMIN_WORKER?: string;
   // Binding natif Rate Limiting (audit F4, voir wrangler.jsonc) : slugs
   // publics (profil, abonnés, avatar partagé, liste) et upload d'avatar.
-  PUBLIC_SLUG_RATE_LIMITER: RateLimit;
-  AVATAR_RATE_LIMITER: RateLimit;
+  // Optionnel : absent sur les previews de PR (limitation Cloudflare, voir
+  // checkBindingRateLimit dans rate-limit.ts), présent partout ailleurs.
+  PUBLIC_SLUG_RATE_LIMITER?: RateLimit;
+  AVATAR_RATE_LIMITER?: RateLimit;
   // Écritures authentifiées à fort volume potentiel (audit M4) : library,
   // library/sync, custom-lists (plein et par liste), excluded-genres,
   // favorite-providers. Binding natif plutôt que checkRateLimit (D1) : ce
   // sont justement les routes dont l'amplification d'écritures D1 est le
   // problème visé, inutile d'en ajouter une par vérification de débit.
-  LIBRARY_WRITE_RATE_LIMITER: RateLimit;
+  // Optionnel pour la même raison que PUBLIC_SLUG_RATE_LIMITER ci-dessus.
+  LIBRARY_WRITE_RATE_LIMITER?: RateLimit;
   // Événements d'usage (recherche, activation notifs, watchlist...) —
   // consommés côté Grafana Cloud via la datasource Cloudflare Analytics.
   // Voir worker/analytics.ts. Optionnel : le binding n'est déclaré dans
@@ -23,6 +32,14 @@ export interface Env {
   // uniquement dans la config des previews PR (scripts/preview-d1.ts) ; en
   // prod, le hub est atteint via `exports` (cloudflare:workers).
   USER_SYNC_HUB?: DurableObjectNamespace<import("./sync.ts").UserSyncHub>;
+  // Workers AI (voir worker/ai-suggestions.ts) : suggestions « Pour vous ce
+  // soir ». Plan gratuit, quota journalier partagé par tout le compte.
+  // Optionnel pour la même raison que les bindings Rate Limiting ci-dessus :
+  // absent sur les previews de PR (constaté en prod, Sentry SEANCY-LOGS-3K),
+  // présent partout ailleurs.
+  AI?: Ai;
+  /** Clé de l'API Anthropic (facultative) : titre des tickets laissé vide écrit par Claude Haiku, sinon par Workers AI. */
+  ANTHROPIC_API_KEY?: string;
 
   // Secrets (dashboard Cloudflare, jamais commités).
   TMDB_API_KEY?: string;
@@ -48,6 +65,27 @@ export interface Env {
   APPLE_KEY_ID?: string;
   /** Clé privée .p8 (PEM PKCS#8 ; les « \n » littéraux sont acceptés). */
   APPLE_PRIVATE_KEY?: string;
+  // Espace admin (admin.seancy.com, voir worker/admin.ts) : adresses e-mail
+  // des comptes administrateurs (séparées par des virgules) ; Cloudflare
+  // Access devant le domaine : équipe (<équipe>.cloudflareaccess.com) et
+  // « Application Audience (AUD) Tag » de l'application (worker/access.ts).
+  ADMIN_EMAILS?: string;
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
+  // Tickets envoyés à Claude (worker/tickets.ts) : jeton GitHub (Issues, Pull
+  // requests, Contents et Actions sur le dépôt), webhook Discord des
+  // notifications (facultatif).
+  GITHUB_TICKETS_TOKEN?: string;
+  DISCORD_TICKETS_WEBHOOK_URL?: string;
+  /** Dépôt des tickets (benjamin-ct/seancy par défaut). */
+  GITHUB_TICKETS_REPO?: string;
+  /** Adresse de l'espace admin dans les notifications (https://admin.seancy.com par défaut). */
+  TICKETS_SITE_URL?: string;
+  // Quotas Cloudflare du tableau de bord admin (worker/cloudflare-usage.ts) :
+  // jeton API « Account Analytics : Read » du compte (lecture seule) ;
+  // identifiant du compte (celui de Seancy par défaut).
+  CF_ANALYTICS_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
 
   // Variables non sensibles (commitées dans wrangler.jsonc, voir vars).
   VAPID_PUBLIC_KEY: string;

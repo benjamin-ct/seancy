@@ -53,7 +53,7 @@
   box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 70%, transparent);
 }
 
-/* Mobile : 4 colonnes égales sur toute la largeur, icône au-dessus du
+/* Mobile : 2 colonnes égales sur toute la largeur, icône au-dessus du
    libellé, barre collée sous l'en-tête au défilement. */
 @media (max-width: 720px) {
   .tabs {
@@ -61,7 +61,7 @@
     top: var(--topnav-height, var(--header-height));
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin: 20px calc(-1 * var(--gutter)) 0;
     background: color-mix(in srgb, var(--bg) 92%, transparent);
     -webkit-backdrop-filter: blur(14px);
@@ -89,12 +89,6 @@
   }
 }
 
-.settings {
-  padding-block: clamp(20px, 3vw, 32px) 16px;
-}
-
-/* Même espace sous les onglets que .settings : le contenu démarre à la même
-   hauteur quel que soit l'onglet. */
 .section {
   padding-block: clamp(20px, 3vw, 32px) clamp(28px, 4vw, 44px);
 }

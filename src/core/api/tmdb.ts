@@ -403,7 +403,8 @@ export function getDetails(mediaType: MediaType, id: string | number): Promise<M
   return promise;
 }
 
-// Fiche allégée pour la roue aléatoire (RandomPage) : cet écran n'affiche ni
+// Fiche allégée pour la roue aléatoire (RandomPage), reprise telle quelle
+// par « Pour vous ce soir » (AiTonightPick, même besoin) : cet écran n'affiche ni
 // casting, ni recommandations, ni les dates de sortie des autres pays
 // (seulement poster/titre/synopsis/genres/note, déjà dans la réponse de
 // base, plus la bande-annonce et les plateformes de la région en cours).

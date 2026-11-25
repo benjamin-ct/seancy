@@ -1,0 +1,37 @@
+# Calcule les ThumbHash des affiches de popular_titles qui n'en ont pas
+# encore (voir scripts/generate-thumbhashes.ts, migration 0021, ticket
+# Trello "ThumbHash affiches").
+#
+# Tourne en CI plutôt que dans le Worker : décoder un JPEG (via `sharp`,
+# Node uniquement) dépasse largement le budget CPU du plan Workers gratuit
+# (10 ms/requête) sur lequel tourne seancy aujourd'hui.
+#
+# Planifié 45 min après les deux crons Worker ("0 7 * * *" et "30 7 * * *",
+# voir wrangler.jsonc) pour laisser syncPopularTitles (search-index.ts)
+# rafraîchir popular_titles avant de calculer les ThumbHash manquants
+# dessus. Un premier remplissage à froid peut dépasser le plafond par run
+# (BATCH_SIZE) : les runs suivants rattrapent le reste.
+name: Sync ThumbHash affiches
+
+on:
+  schedule:
+    - cron: "45 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Calculer les ThumbHash manquants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Calculer et insérer les ThumbHash manquants
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run generate:thumbhashes

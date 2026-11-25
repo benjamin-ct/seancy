@@ -1,6 +1,6 @@
 // Petites fonctions d'accès à D1. Pas d'ORM : le schéma est simple (voir
 // migrations/) et les requêtes préparées suffisent largement.
-import { decodeHtmlEntities } from "./validate.ts";
+import { decodeHtmlEntities, toPublicItem } from "./validate.ts";
 import {
   getFollowCounts,
   getFollowedByViewerFollowing,
@@ -388,12 +388,6 @@ export async function isUsernameAvailable(
     .bind(username)
     .first<{ id: number }>();
   return !row || row.id === userId;
-}
-
-// Le détail des épisodes vus n'est pas exposé : la page publique n'affiche
-// que les titres, affiches et notes.
-function toPublicItem({ watchedEpisodes: _watchedEpisodes, ...item }: LibraryItem): LibraryItem {
-  return item;
 }
 
 function byMostRecent(a: LibraryItem, b: LibraryItem): number {
@@ -815,13 +809,13 @@ export async function deleteCustomListForUser(
       .bind(userId, listId),
     db.prepare("DELETE FROM custom_lists WHERE user_id = ? AND id = ?").bind(userId, listId),
     // Une liste supprimée ne doit pas laisser de ligne list_members orpheline
-    // derrière elle (voir migration 0021) : sans ça, une future liste recréée
+    // derrière elle (voir migration 0021_list_members) : sans ça, une future liste recréée
     // avec le même id hériterait silencieusement des anciens membres.
     db.prepare("DELETE FROM list_members WHERE owner_id = ? AND list_id = ?").bind(userId, listId),
   ]);
 }
 
-// Listes communes (migration 0021). -----------------------------------
+// Listes communes (migration 0021_list_members). -----------------------------------
 
 // Recherche d'un compte à inviter, par pseudo (préfixe ou sous-chaîne,
 // insensible à la casse puisque `username` est déjà normalisé en minuscules
@@ -881,7 +875,7 @@ export async function getListMembers(
 }
 
 /** Seules les personnes que `targetUserId` suit peuvent-elles l'ajouter à
- * une liste commune ? (migration 0022, réglage de profil). */
+ * une liste commune ? (migration 0022_restrict_list_invites, réglage de profil). */
 export async function getRestrictListInvites(
   db: D1Database,
   targetUserId: number
@@ -902,6 +896,28 @@ export async function setRestrictListInvites(
     .prepare("UPDATE users SET restrict_list_invites = ? WHERE id = ?")
     .bind(enabled ? 1 : 0, userId)
     .run();
+}
+
+// { listId: membres } pour toutes les listes du compte qui en ont (export
+// des données du compte).
+async function getOwnListMembers(
+  db: D1Database,
+  ownerId: number
+): Promise<Record<string, { username: string | null; displayName: string | null }[]>> {
+  const { results } = await db
+    .prepare(
+      `SELECT list_members.list_id, users.username, users.display_name
+       FROM list_members JOIN users ON users.id = list_members.member_id
+       WHERE list_members.owner_id = ?
+       ORDER BY list_members.list_id, list_members.created_at`
+    )
+    .bind(ownerId)
+    .all<{ list_id: string; username: string | null; display_name: string | null }>();
+  const byList: Record<string, { username: string | null; displayName: string | null }[]> = {};
+  for (const row of results) {
+    (byList[row.list_id] ??= []).push({ username: row.username, displayName: row.display_name });
+  }
+  return byList;
 }
 
 export async function countListMembers(
@@ -1127,7 +1143,7 @@ export async function getPublicListBySlug(
     ratingRows.map((row) => [`${row.media_type}:${row.tmdb_id}`, row.rating])
   );
   const items = itemRows.map((row) => {
-    const { watchedEpisodes: _watchedEpisodes, ...item } = JSON.parse(row.data) as LibraryItem;
+    const item = toPublicItem(JSON.parse(row.data) as LibraryItem);
     if (typeof item.title === "string") {
       item.title = decodeHtmlEntities(item.title);
     }
@@ -1215,6 +1231,21 @@ export async function getNotInterestedForUser(
   }));
 }
 
+// Ids seuls, pour un type : exclusions de la suite du défilement "Pour toi"
+// (voir TasteContinuation, worker/recommendations.ts), relues à chaque
+// réponse plutôt que figées dans le cache du lot.
+export async function getNotInterestedIdsForUser(
+  db: D1Database,
+  userId: number,
+  mediaType: string
+): Promise<number[]> {
+  const { results } = await db
+    .prepare("SELECT tmdb_id FROM not_interested WHERE user_id = ? AND media_type = ?")
+    .bind(userId, mediaType)
+    .all<{ tmdb_id: number }>();
+  return results.map((row) => row.tmdb_id);
+}
+
 export async function addNotInterested(
   db: D1Database,
   userId: number,
@@ -1237,8 +1268,21 @@ export async function addNotInterested(
 // scope de type ("movie" | "tv" | "all", voir migration 0020) — évite de
 // relire toute la bibliothèque et de rescorer les candidats à chaque
 // ouverture de la page d'accueil.
-export interface RecommendationCacheRow {
+//
+// La colonne `items` contient soit le tableau seul (ancien format), soit
+// `{ items, complete, continuation }` (sans migration) : `complete` dit que
+// le classement a rendu moins de titres que demandé (la fin d'un lot court
+// est servie par le cache), `continuation` les genres de la suite du
+// défilement (voir TasteContinuation, worker/recommendations.ts).
+// `continuation` reste `undefined` pour un lot mis en cache à l'ancien
+// format, `null` quand le profil n'en a pas.
+export interface RecommendationCacheEntry {
   items: unknown[];
+  complete: boolean;
+  continuation: unknown;
+}
+
+export interface RecommendationCacheRow extends RecommendationCacheEntry {
   coldStart: boolean;
   computedAt: number;
 }
@@ -1257,8 +1301,16 @@ export async function getRecommendationCache(
   if (!row) {
     return null;
   }
+  const stored = JSON.parse(row.items) as unknown[] | Partial<RecommendationCacheEntry>;
+  const entry: RecommendationCacheEntry = Array.isArray(stored)
+    ? { items: stored, complete: false, continuation: undefined }
+    : {
+        items: Array.isArray(stored.items) ? stored.items : [],
+        complete: stored.complete === true,
+        continuation: stored.continuation ?? null,
+      };
   return {
-    items: JSON.parse(row.items),
+    ...entry,
     coldStart: row.cold_start === 1,
     computedAt: row.computed_at,
   };
@@ -1268,7 +1320,7 @@ export async function setRecommendationCache(
   db: D1Database,
   userId: number,
   mediaScope: string,
-  items: unknown[],
+  entry: RecommendationCacheEntry,
   coldStart: boolean
 ): Promise<void> {
   await db
@@ -1278,8 +1330,51 @@ export async function setRecommendationCache(
        ON CONFLICT (user_id, media_scope) DO UPDATE SET
          items = excluded.items, cold_start = excluded.cold_start, computed_at = excluded.computed_at`
     )
-    .bind(userId, mediaScope, JSON.stringify(items), coldStart ? 1 : 0, Date.now())
+    .bind(userId, mediaScope, JSON.stringify(entry), coldStart ? 1 : 0, Date.now())
     .run();
+}
+
+// `recommendation_cache.items` fige `posterThumbhash` tel qu'il était au
+// moment du calcul (voir setRecommendationCache) : un ThumbHash calculé à
+// la demande après coup (voir worker/images/posterThumbhash.ts) n'y
+// apparaît donc jamais tant que le cache (24h, RECOMMENDATION_CACHE_TTL_MS)
+// n'est pas recalculé de zéro. Permet de relire l'état courant pour une
+// poignée de poster_path, sans payer le coût d'un recalcul complet du
+// classement, afin que les affiches servies par le cache affichent le
+// ThumbHash dès qu'il existe plutôt que de rester en silhouette pendant
+// jusqu'à 24h.
+// Découpé par lots de MAX_BOUND_IDS (voir getNotifiedKeys) : depuis que
+// cette fonction tourne sur toute réponse TMDB proxée (pas seulement une
+// page de recommandations, bornée à quelques dizaines d'items), une
+// filmographie fournie via /person/{id}/combined_credits peut dépasser
+// largement la limite de paramètres liés d'une seule requête D1.
+export async function getThumbhashesForPosterPaths(
+  db: D1Database,
+  posterPaths: string[]
+): Promise<Map<string, string>> {
+  if (posterPaths.length === 0) {
+    return new Map();
+  }
+  const statements: D1PreparedStatement[] = [];
+  for (let i = 0; i < posterPaths.length; i += MAX_BOUND_IDS) {
+    const paths = posterPaths.slice(i, i + MAX_BOUND_IDS);
+    statements.push(
+      db
+        .prepare(
+          `SELECT poster_path, thumbhash FROM poster_thumbhashes
+           WHERE poster_path IN (${paths.map(() => "?").join(", ")})`
+        )
+        .bind(...paths)
+    );
+  }
+  const results = await db.batch<{ poster_path: string; thumbhash: string }>(statements);
+  const hashes = new Map<string, string>();
+  for (const { results: rows } of results) {
+    for (const row of rows) {
+      hashes.set(row.poster_path, row.thumbhash);
+    }
+  }
+  return hashes;
 }
 
 export async function getFavoriteProvidersForUser(
@@ -1577,11 +1672,20 @@ export async function deleteUserAccount(db: D1Database, userId: number): Promise
     db.prepare("DELETE FROM user_avatars WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM email_changes WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM list_shares WHERE user_id = ?").bind(userId),
+    // Listes communes : celles du compte (owner_id) et celles où il est membre.
+    db.prepare("DELETE FROM list_members WHERE owner_id = ? OR member_id = ?").bind(userId, userId),
     db.prepare("DELETE FROM follows WHERE follower_id = ? OR followed_id = ?").bind(userId, userId),
     db.prepare("DELETE FROM custom_list_items WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM custom_lists WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM library_items WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM excluded_genre_prefs WHERE user_id = ?").bind(userId),
+    db
+      .prepare(
+        "DELETE FROM ai_suggestion_titles WHERE batch_id IN (SELECT id FROM ai_suggestion_batches WHERE user_id = ?)"
+      )
+      .bind(userId),
+    db.prepare("DELETE FROM ai_suggestion_batches WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM ai_suggestion_skips WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM favorite_provider_prefs WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM favorite_language_prefs WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM favorite_country_prefs WHERE user_id = ?").bind(userId),
@@ -1604,11 +1708,16 @@ export interface AccountExport {
     locale: string | null;
     region: string | null;
     topPicks: string[];
+    restrictListInvites: boolean;
     createdAt: number;
   };
   library: LibraryState;
   customLists: CustomListMap;
   listShares: Record<string, string>;
+  // Listes communes : membres de ses propres listes, et listes d'autres
+  // comptes dont on est membre (voir getListsSharedWithUser).
+  listMembers: Record<string, { username: string | null; displayName: string | null }[]>;
+  sharedLists: CustomListMap;
   reminders: ReminderSummary[];
   excludedGenres: number[];
   favoriteProviders: number[];
@@ -1642,7 +1751,7 @@ export async function exportUserAccountData(
 ): Promise<AccountExport | null> {
   const userRow = await db
     .prepare(
-      "SELECT email, display_name, username, share_slug, locale, region, top_picks, created_at FROM users WHERE id = ?"
+      "SELECT email, display_name, username, share_slug, locale, region, top_picks, restrict_list_invites, created_at FROM users WHERE id = ?"
     )
     .bind(userId)
     .first<{
@@ -1653,6 +1762,7 @@ export async function exportUserAccountData(
       locale: string | null;
       region: string | null;
       top_picks: string | null;
+      restrict_list_invites: number;
       created_at: number;
     }>();
   if (!userRow) {
@@ -1671,6 +1781,8 @@ export async function exportUserAccountData(
     following,
     topPicks,
     avatar,
+    listMembers,
+    sharedLists,
   ] = await Promise.all([
     getLibraryForUser(db, userId),
     getCustomListsForUser(db, userId),
@@ -1687,6 +1799,8 @@ export async function exportUserAccountData(
     getFollowing(db, userId, userId),
     getTopPicks(db, userId),
     getAvatar(db, userId),
+    getOwnListMembers(db, userId),
+    getListsSharedWithUser(db, userId),
   ]);
   return {
     account: {
@@ -1697,11 +1811,14 @@ export async function exportUserAccountData(
       locale: userRow.locale,
       region: userRow.region,
       topPicks,
+      restrictListInvites: userRow.restrict_list_invites === 1,
       createdAt: userRow.created_at,
     },
     library,
     customLists,
     listShares,
+    listMembers,
+    sharedLists,
     reminders,
     excludedGenres,
     favoriteProviders,

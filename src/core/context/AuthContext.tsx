@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { getRecaptchaToken } from "../lib/recaptcha.ts";
 import { clearAccountDataFromDevice } from "../lib/accountStorage.ts";
@@ -55,6 +56,8 @@ interface AuthContextValue {
   // Si actif, seules les personnes qu'on suit peuvent nous ajouter à une
   // liste commune (voir ListMembersDialog / handlePostListMember).
   restrictListInvites: boolean;
+  // Compte administrateur de Seancy (secret ADMIN_EMAILS) : bouton « Admin » de la barre et du profil
+  admin: boolean;
   requestLink: (email: string) => Promise<RequestLinkResult>;
   verify: (token: string) => Promise<VerifyResult>;
   verifyCode: (email: string, code: string) => Promise<VerifyResult>;
@@ -127,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
   const [restrictListInvites, setRestrictListInvitesState] = useState(false);
+  const [admin, setAdmin] = useState(false);
 
   // `verify()` (consommation du jeton sur /auth/verify) et `refresh()` (la
   // vérification passive "suis-je déjà connecté" au montage) peuvent
@@ -154,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsername(null);
       setAvatarVersion(null);
       setRestrictListInvitesState(false);
+      setAdmin(false);
       setStatus("anonymous");
       return Promise.resolve();
     }
@@ -169,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: string | null;
           restrictListInvites: boolean;
           avatarVersion: number | null;
+          admin?: boolean;
         }>;
       })
       .then((data) => {
@@ -178,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsername(data.username ?? null);
         setRestrictListInvitesState(data.restrictListInvites ?? false);
         setAvatarVersion(data.avatarVersion ?? null);
+        setAdmin(data.admin === true);
         setStatus("authenticated");
         pinnedRef.current = true;
       })
@@ -190,6 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(null);
         setUsername(null);
         setAvatarVersion(null);
+        setRestrictListInvitesState(false);
+        setAdmin(false);
         setStatus("anonymous");
       });
   }, []);
@@ -270,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsername(data.username ?? null);
       setRestrictListInvitesState(data.restrictListInvites ?? false);
       setAvatarVersion(data.avatarVersion ?? null);
+      setAdmin(data.admin === true);
       setStatus("authenticated");
       return data;
     },
@@ -479,6 +489,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username,
       avatarVersion,
       restrictListInvites,
+      admin,
       requestLink,
       verify,
       verifyCode,
@@ -503,6 +514,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username,
       avatarVersion,
       restrictListInvites,
+      admin,
       requestLink,
       verify,
       verifyCode,
@@ -527,7 +539,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 // Les messages d'erreur du Worker sont en français : on les traduit côté
 // client à partir du `reason` (ou du statut HTTP) qu'il renvoie.
 function emailChangeErrorMessage(
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: TFunction,
   data: { reason?: unknown; retryAfter?: unknown },
   status: number
 ): string {

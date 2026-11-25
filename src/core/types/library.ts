@@ -30,9 +30,17 @@ export interface LibraryItem extends LibraryItemInput {
    * ne pas faire apparaître comme "récent" dans le fil social un film vu il y a
    * longtemps mais coché aujourd'hui. */
   watchedAt?: number;
+  /** Note sur 10. Pour une série, note effective arrondie (moyenne des saisons,
+   * sinon `manualRating`) : voir core/lib/seriesRatings.ts. */
   rating?: number | null;
   /** Uniquement pour les séries — clés "saison-épisode", ex. "1-5". */
   watchedEpisodes?: string[];
+  /** Séries : note donnée à la main à la série entière (voir seriesRatings.ts). */
+  manualRating?: number | null;
+  /** Séries : notes données à la main aux saisons, clé = numéro de saison. */
+  seasonRatings?: Record<string, number>;
+  /** Séries : notes des épisodes, clés "saison-épisode" comme `watchedEpisodes`. */
+  episodeRatings?: Record<string, number>;
   directors?: DirectorRef[];
 }
 

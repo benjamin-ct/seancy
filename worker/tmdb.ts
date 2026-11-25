@@ -4,7 +4,16 @@
 // navigateur et lit import.meta.env.VITE_TMDB_API_KEY) : ici on lit
 // env.TMDB_API_KEY, un secret Worker configuré séparément dans le dashboard
 // Cloudflare.
-import type { Env } from "./types.ts";
+import { retryDelayMs } from "../src/core/api/retryAfter.ts";
+import { createConcurrencyLimiter } from "../src/core/api/concurrencyLimiter.ts";
+
+// Juste ce que ce module lit sur `env` (pas le `Env` complet de ./types.ts,
+// qui dépend des types globaux Cloudflare) : permet à scripts/verify-*.ts de
+// typer ce fichier sous tsconfig.node.json (voir
+// scripts/verify-worker-tmdb-retry.ts) sans tirer tout le Worker avec lui.
+interface TmdbEnv {
+  TMDB_API_KEY?: string;
+}
 
 const BASE_URL = "https://api.themoviedb.org/3";
 // Région de repli pour les vérifications de disponibilité : abonnements
@@ -12,8 +21,32 @@ const BASE_URL = "https://api.themoviedb.org/3";
 export const DEFAULT_REGION = "FR";
 const LANGUAGE = "fr-FR";
 
-async function tmdbFetch<T>(
-  env: Env,
+// getTheatricalIndex peut lancer jusqu'à MAX_THEATRICAL_PAGES requêtes en
+// parallèle par liste (now_playing, upcoming) : un 429 isolé de TMDB n'y
+// était pas réessayé, contrairement au client navigateur
+// (src/core/api/tmdbClient.ts) — il remontait tel quel jusqu'à
+// /api/theatrical-index (500 pour tout visiteur de la région avant la mise
+// en cache, issue Sentry 163541596). Même politique de réessai que côté
+// navigateur : backoff de retryAfter.ts, 2 essais supplémentaires avant
+// d'abandonner.
+const MAX_RATE_LIMIT_RETRIES = 2;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Le réessai ci-dessus absorbe un 429 isolé, mais ne change rien au burst
+// qui le déclenche : getTheatricalIndex peut lancer jusqu'à
+// MAX_THEATRICAL_PAGES * 2 requêtes strictement simultanées (aucune limite
+// de concurrence), qui se représenteraient toutes ensemble au même backoff
+// en cas de 429 partagé. Même plafond que le client navigateur
+// (tmdbRequestLimiter de src/core/api/tmdbClient.ts), partagé par tous les
+// appels TMDB de cet isolate Worker (cron, proxy watch/providers,
+// getTheatricalIndex...).
+const tmdbRequestLimiter = createConcurrencyLimiter(6);
+
+export async function tmdbFetch<T>(
+  env: TmdbEnv,
   path: string,
   params: Record<string, string | number | undefined> = {}
 ): Promise<T> {
@@ -28,11 +61,20 @@ async function tmdbFetch<T>(
       url.searchParams.set(key, String(value));
     }
   }
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`Erreur TMDB (${res.status}) sur ${path}`);
+  for (let attempt = 0; ; attempt++) {
+    const res = await tmdbRequestLimiter.run(() => fetch(url.toString()));
+    if (res.status === 429) {
+      if (attempt >= MAX_RATE_LIMIT_RETRIES) {
+        throw new Error(`Erreur TMDB (429) sur ${path}`);
+      }
+      await sleep(retryDelayMs(res.headers.get("retry-after"), attempt));
+      continue;
+    }
+    if (!res.ok) {
+      throw new Error(`Erreur TMDB (${res.status}) sur ${path}`);
+    }
+    return res.json() as Promise<T>;
   }
-  return res.json() as Promise<T>;
 }
 
 interface WatchProvidersResult {
@@ -46,7 +88,7 @@ interface WatchProvidersResult {
 export type FlatrateByRegion = Record<string, number[]>;
 
 async function getFlatrateProvidersByRegion(
-  env: Env,
+  env: TmdbEnv,
   mediaType: string,
   tmdbId: number
 ): Promise<FlatrateByRegion> {
@@ -90,7 +132,7 @@ export function createTmdbRunCache(): TmdbRunCache {
 // du destinataire), ou [] si rien.
 export async function getFlatrateProviderIdsCached(
   cache: TmdbRunCache,
-  env: Env,
+  env: TmdbEnv,
   mediaType: string,
   tmdbId: number,
   region: string
@@ -106,7 +148,7 @@ export async function getFlatrateProviderIdsCached(
 
 export function discoverRecentByGenreCached(
   cache: TmdbRunCache,
-  env: Env,
+  env: TmdbEnv,
   mediaType: string,
   genreId: number,
   windowDays: number
@@ -122,7 +164,7 @@ export function discoverRecentByGenreCached(
 
 // Nouveautés (sorties des `windowDays` derniers jours) dans un genre donné.
 export async function discoverRecentByGenre(
-  env: Env,
+  env: TmdbEnv,
   mediaType: string,
   genreId: number,
   windowDays: number
@@ -143,7 +185,7 @@ export async function discoverRecentByGenre(
 
 // Grosses sorties généralistes (tendances du jour), tous genres confondus —
 // sert de filet pour les nouveautés qu'on n'aurait pas via les genres favoris.
-export async function trendingToday(env: Env): Promise<TmdbListItem[]> {
+export async function trendingToday(env: TmdbEnv): Promise<TmdbListItem[]> {
   const data = await tmdbFetch<{ results?: TmdbListItem[] }>(env, "/trending/all/day");
   return (data.results || []).filter(
     (item) => item.media_type === "movie" || item.media_type === "tv"
@@ -153,7 +195,7 @@ export async function trendingToday(env: Env): Promise<TmdbListItem[]> {
 const MAX_THEATRICAL_PAGES = 10; // now_playing + upcoming restent largement sous ce plafond en pratique
 
 async function fetchAllPageIds(
-  env: Env,
+  env: TmdbEnv,
   path: string,
   region: string,
   maxPages: number
@@ -182,7 +224,10 @@ export interface TheatricalIndexResult {
 // nombre de visiteurs — remplace en production le parcours équivalent que
 // src/core/api/tmdb.ts ferait sinon depuis CHAQUE navigateur à CHAQUE
 // session (son propre cache mémoire ne survit pas à un rechargement).
-export async function getTheatricalIndex(env: Env, region: string): Promise<TheatricalIndexResult> {
+export async function getTheatricalIndex(
+  env: TmdbEnv,
+  region: string
+): Promise<TheatricalIndexResult> {
   const [inTheaters, upcoming] = await Promise.all([
     fetchAllPageIds(env, "/movie/now_playing", region, MAX_THEATRICAL_PAGES),
     fetchAllPageIds(env, "/movie/upcoming", region, MAX_THEATRICAL_PAGES),

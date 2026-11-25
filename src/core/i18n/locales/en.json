@@ -33,7 +33,8 @@
   "footer": {
     "tagline": "Discover, follow, and find your movies & shows.",
     "terms": "Terms of use",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "changelog": "What's new"
   },
   "pullToRefresh": {
     "pull": "Pull to reload",
@@ -52,8 +53,6 @@
     "notificationsHint": "Get notified when a title on your watchlist lands on a platform, for your favourite genres and big releases.",
     "recommendations": "Recommendations",
     "display": "Display",
-    "tabAccount": "Account",
-    "tabPreferences": "Preferences",
     "tabMyList": "My list",
     "tabCommunity": "Community",
     "recommendationsLead": "What Seancy suggests to you, and what it should leave out.",
@@ -72,6 +71,42 @@
     "statLists_other": "lists",
     "statFollowers_one": "follower",
     "statFollowers_other": "followers"
+  },
+  "settings": {
+    "title": "Settings",
+    "navLabel": "Settings sections",
+    "backToSummary": "Back to settings",
+    "pickSection": "Choose a section from the list.",
+    "summaryProviders_one": "{{count}} platform selected",
+    "summaryProviders_other": "{{count}} platforms selected",
+    "sections": {
+      "compte": { "title": "Account", "summary": "Name, username, email, sign-in" },
+      "confidentialite": {
+        "title": "Privacy",
+        "summary": "Who can see your profile"
+      },
+      "plateformes": { "title": "My platforms", "summary": "Your streaming services" },
+      "recommandations": {
+        "title": "Recommendations",
+        "summary": "Languages, countries, excluded genres"
+      },
+      "notifications": { "title": "Notifications", "summary": "Release and new content alerts" },
+      "affichage": { "title": "Display", "summary": "Language, region, theme" },
+      "donnees": { "title": "My data", "summary": "Export and delete your account" },
+      "a-propos": { "title": "About", "summary": "Legal notices and contact" }
+    }
+  },
+  "dataSettings": {
+    "groupTitle": "My data",
+    "groupLead": "Export a copy of your data or delete your account."
+  },
+  "aboutPage": {
+    "lead": "Seancy, a personal project to keep track of movies and shows.",
+    "brandLabel": "App",
+    "catalogLabel": "Catalog",
+    "catalogText": "Listings, posters and streaming availability provided by TMDB (The Movie Database) and JustWatch.",
+    "legalLabel": "Legal notices",
+    "contactLabel": "Contact us"
   },
   "providerBadges": {
     "unavailable": "Not available to stream in {{region}} right now.",
@@ -137,7 +172,7 @@
       "expired": "The sign-in has expired or was already used. Please start again.",
       "cancelled": "Sign-in cancelled.",
       "failed": "Sign-in didn't go through. Try again, or get a link by email.",
-      "no-email": "This account didn't share a verified email address with us: sign in with an email link, then link it from Profile → Account.",
+      "no-email": "This account didn't share a verified email address with us: sign in with an email link, then link it from Profile → Settings → Account.",
       "provider-taken": "Your Seancy account is already linked to another account from this provider. Sign in with that one or with an email link."
     }
   },
@@ -190,6 +225,9 @@
     "saving": "Saving…",
     "save": "Save",
     "logout": "Sign out",
+    "admin": "Admin area",
+    "adminHint": "Seancy dashboard, tickets and tools (administrators only).",
+    "adminOpen": "Open the admin area",
     "saved": "Saved",
     "emailChange": {
       "edit": "Change",
@@ -327,6 +365,8 @@
     "searchAriaLabel": "Search",
     "profileAriaLabel": "Profile",
     "profileTitle": "Profile",
+    "admin": "Admin",
+    "adminTitle": "Admin area",
     "login": "Sign in",
     "tabBarAriaLabel": "Tabs"
   },
@@ -596,6 +636,8 @@
   "notificationSettings": {
     "unsupported": "Push notifications are not supported by this browser.",
     "permissionDenied": "Permission denied. Allow notifications in your browser settings for this site.",
+    "pushServiceError": "Your browser's notification service refused the registration. Try again in a moment; if the error persists, open Seancy in Chrome (on Android, push notifications require Google services).",
+    "pushServiceErrorBrave": "Brave is blocking push notification registration. Turn on “Use Google services for push messaging” in Brave settings (Privacy and security), then try again. Otherwise, open Seancy in Chrome.",
     "syncFailed": "Sync failed ({{status}})",
     "keyFetchError": "Unable to retrieve the server key.",
     "incompleteSubscription": "Incomplete push subscription.",
@@ -694,7 +736,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "October 8, 2026",
+    "lastUpdatedValue": "November 25, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -707,7 +749,7 @@
       },
       "library": {
         "label": "Personal library",
-        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
+        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", the ratings you give them (for a show, also per season and per episode), your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
       },
       "preferences": {
         "label": "Preferences",
@@ -724,6 +766,10 @@
       "sharedLists": {
         "label": "Shared lists",
         "text": " (if you choose to share a custom list): its name, its content, your ratings for the titles in it and your display name become visible read-only to anyone who has the link — never your email address. You can stop sharing at any time from the list, which permanently invalidates the link."
+      },
+      "commonLists": {
+        "label": "Shared lists with other members",
+        "text": " (if you create or join one): we store which accounts are members of which list and since when. Members of a list see its name, its content, and the other members' display name, username and — only if their profile is shared — profile picture; never their email address. To be invited, an account must have picked a username: any signed-in member can find it by that username to add it to a list. A privacy setting lets you allow only people you follow to add you. You can leave a shared list at any time; deleting the list or your account deletes these links."
       },
       "follows": {
         "label": "Follows",
@@ -763,7 +809,7 @@
       },
       "cloudflare": {
         "label": "Cloudflare",
-        "text": ": hosts the application and the database (Workers, D1)."
+        "text": ": hosts the application and the database (Workers, D1), and generates the \"For you tonight\" personalized suggestions from your viewing history via Workers AI (processed on Cloudflare's own infrastructure, no data shared with any additional third party)."
       },
       "sentry": {
         "label": "Sentry",
@@ -793,18 +839,23 @@
     },
     "retention": {
       "title": "Retention period",
-      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Account (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
+      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Settings → My data (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
       "textAfter": "."
     },
     "rights": {
       "title": "Your rights",
-      "textBefore": "Under the GDPR, you have the right to access, rectify, erase, restrict, port, and object with regard to your data. You can export a copy of your data at any time from Profile → Account (\"Export my data\" button), or exercise all of these rights ",
+      "textBefore": "Under the GDPR, you have the right to access, rectify, erase, restrict, port, and object with regard to your data. You can export a copy of your data at any time from Profile → Settings → My data (\"Export my data\" button), or exercise all of these rights ",
       "textAfter": ", and lodge a complaint with the CNIL if you believe your rights are not being respected."
     },
     "changes": {
       "title": "Changes to this policy",
       "text": "This policy may evolve along with the service, in particular if new tools (audience measurement, crowdfunding...) are added. The date of the last update is shown at the top of this page."
     }
+  },
+  "changelogPage": {
+    "eyebrow": "What's new",
+    "title": "Changelog",
+    "empty": "No release yet."
   },
   "mediaCard": {
     "inTheaters": "In theaters",
@@ -829,7 +880,8 @@
     "back": "← Back",
     "seasonsCount_one": "{{count}} season",
     "seasonsCount_other": "{{count}} seasons",
-    "episodesCount": "{{count}} episodes",
+    "episodesCount_one": "{{count}} episode",
+    "episodesCount_other": "{{count}} episodes",
     "runtimeMinutes": "{{count}} min",
     "votesCount_one": "{{formattedCount}} vote",
     "votesCount_other": "{{formattedCount}} votes",
@@ -860,6 +912,9 @@
     "whereToWatchSource": "{{region}} · via JustWatch",
     "yourRatingHeading": "Your rating",
     "rateAfterWatched": "Mark it as watched to rate it",
+    "seriesAverage_one": "Average of {{count}} rated season",
+    "seriesAverage_other": "Average of your {{count}} rated seasons",
+    "manualSeriesKept": "Your {{rating}}/10 show rating comes back if you remove the season and episode ratings.",
     "directing": "Directing",
     "mainCast": "Main cast",
     "showFullCast": "Full cast ({{count}})",
@@ -991,7 +1046,15 @@
     "watchedUpToHere": "Watched up to here",
     "markSeason": "Mark season {{number}} as watched",
     "unmarkSeason": "Unmark season",
-    "watchDateAriaLabel": "Choose a watch date for season {{number}}"
+    "watchDateAriaLabel": "Choose a watch date for season {{number}}",
+    "seasonRatingHeading": "Your rating · {{name}}",
+    "seasonAverage_one": "Average of {{count}} rated episode",
+    "seasonAverage_other": "Average of {{count}} rated episodes",
+    "manualSeasonKept": "Your {{rating}}/10 season rating comes back if you remove the episode ratings.",
+    "seasonRateHint": "Mark an episode as watched to rate the season",
+    "specialsNotInSeries": "Specials don't count towards the show's rating.",
+    "rateEpisode": "Rate {{episode}}",
+    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit"
   },
   "profileShare": {
     "title": "Public link",
@@ -1227,7 +1290,13 @@
   "tonightPick": {
     "eyebrow": "For you tonight",
     "seeDetails": "See details",
-    "another": "Another pick"
+    "another": "Another pick",
+    "preparingTitle": "Getting your picks ready…",
+    "preparingText": "Today’s suggestions will be here in a few seconds.",
+    "allSkippedTitle": "That’s all for today",
+    "allSkippedText": "Come back tomorrow for new suggestions, or find something you like in your personalized catalogue below.",
+    "emptyTitle": "No suggestions yet",
+    "emptyText": "Tonight's suggestions aren't available right now. Check back a bit later, or browse your personalized catalogue below."
   },
   "filterPanel": {
     "inTheatersFilter": "In theaters",
@@ -1279,11 +1348,13 @@
     "comingSoon": "Coming soon",
     "random": "Random",
     "profile": "Profile",
+    "settings": "Settings",
     "search": "Search",
     "searchQuery": "Search: {{query}}",
     "login": "Sign in",
     "terms": "Terms of use",
     "privacy": "Privacy policy",
+    "changelog": "Changelog",
     "notFound": "Page not found",
     "withYear": "{{title}} ({{year}})"
   }

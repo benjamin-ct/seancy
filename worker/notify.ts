@@ -157,11 +157,14 @@ async function deliverInApp(
   return delivered > 0;
 }
 
+// Renvoie false si l'abonnement a été supprimé (expiré) : l'appelant ne doit
+// alors plus s'en servir, ni pour un renvoi ultérieur dans la même exécution,
+// ni pour marquer une notification comme envoyée (FK vers `subscriptions`).
 async function deliverPush(
   env: Env,
   subscription: SubscriptionRow,
   notification: AppNotification
-): Promise<void> {
+): Promise<boolean> {
   try {
     await sendPush(
       subscription,
@@ -174,10 +177,11 @@ async function deliverPush(
   } catch (err) {
     if (err instanceof ExpiredSubscriptionError) {
       await deleteSubscriptionById(env.DB, subscription.id);
-    } else {
-      logError(`Push échoué pour l'abonnement ${subscription.id} :`, err);
+      return false;
     }
+    logError(`Push échoué pour l'abonnement ${subscription.id} :`, err);
   }
+  return true;
 }
 
 export async function notifyUser(
@@ -196,8 +200,16 @@ export async function notifyUser(
   ) {
     return "in-app";
   }
+  // `recipient.subscriptions` est partagé avec le reste de l'exécution du
+  // cron (markRecipientNotified, vérifications suivantes pour ce même
+  // destinataire) : un abonnement expiré en est retiré immédiatement pour ne
+  // plus y référencer un abonnement qui vient d'être supprimé en base.
+  const stillValid: SubscriptionRow[] = [];
   for (const subscription of recipient.subscriptions) {
-    await deliverPush(env, subscription, notification);
+    if (await deliverPush(env, subscription, notification)) {
+      stillValid.push(subscription);
+    }
   }
+  recipient.subscriptions = stillValid;
   return "push";
 }

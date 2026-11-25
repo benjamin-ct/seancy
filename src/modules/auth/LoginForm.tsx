@@ -28,7 +28,9 @@ function LegalLine() {
 // membres" (voir MembersOnlyDialog). La suite (redirection, fermeture de la
 // modale) est pilotée par l'appelant via le statut d'auth, qui passe à
 // "authenticated" dès que le code est validé.
-export default function LoginForm() {
+// `oauth` à false : sans les boutons Google / Apple (espace admin, dont le
+// domaine n'est pas déclaré chez ces fournisseurs).
+export default function LoginForm({ oauth = true }: { oauth?: boolean } = {}) {
   const { t } = useTranslation();
   const { requestLink, verifyCode } = useAuth();
   const idPrefix = useId();
@@ -139,7 +141,7 @@ export default function LoginForm() {
 
   return (
     <>
-      <OAuthButtons returnTo={returnTo} />
+      {oauth && <OAuthButtons returnTo={returnTo} />}
       <form className={styles.card} onSubmit={onSubmit}>
         <label htmlFor={`${idPrefix}-email`}>{t("loginPage.emailLabel")}</label>
         <input

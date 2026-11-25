@@ -1,0 +1,827 @@
+/* Espace admin : même fond « salle de cinéma » et mêmes jetons que le site,
+   avec une barre de régie à part (badge doré « Admin ») pour qu'on ne le
+   confonde jamais avec le site public. */
+
+.adminRoot {
+  scroll-padding-top: 72px;
+}
+
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 12px var(--gutter);
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.logo {
+  width: 36px;
+  height: auto;
+}
+/* Ticket doré de l'espace admin (comme son icône, public/admin/) au lieu du corail de Seancy */
+.logo > path:first-of-type {
+  fill: #e3c07a;
+}
+.logo > path:last-of-type {
+  fill: #0c1a30;
+}
+.badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--gold);
+  color: var(--on-gold);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.nav {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+.nav a {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.nav a:hover {
+  color: var(--fg);
+}
+.nav a.active {
+  background: var(--selected-bg);
+  border-color: var(--selected-border);
+  color: var(--fg);
+}
+.side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  font-size: 14px;
+}
+/* Pastille « à regarder » (onglet Accueil : release bloquée ou en attente) */
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--header-bg);
+  vertical-align: 2px;
+}
+.tabIcon {
+  position: relative;
+  display: inline-grid;
+}
+.tabIcon .dot {
+  position: absolute;
+  top: -2px;
+  right: -6px;
+  margin: 0;
+}
+.who {
+  color: var(--muted);
+}
+.siteLink {
+  color: var(--accent-ink);
+}
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.refresh:hover {
+  background: var(--surface-2, var(--surface));
+}
+.refresh:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.main {
+  flex: 1;
+  outline: none;
+}
+/* Téléphone seulement : titre de la page, ses boutons et la barre d'onglets */
+.pageName,
+.actions,
+.tabbar {
+  display: none;
+}
+.main > .card,
+.main > p {
+  max-width: 560px;
+  margin: 48px auto;
+}
+
+.page {
+  width: 100%;
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: 28px var(--gutter) 60px;
+}
+.eyebrow {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.title {
+  margin: 0 0 24px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  line-height: 1.05;
+}
+.section {
+  margin-top: 32px;
+}
+.section h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+}
+.section h2 small {
+  margin-left: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sectionHead h2 {
+  margin: 0;
+}
+
+.card {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.card h1 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+}
+.card h2,
+.card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.muted {
+  color: var(--muted);
+}
+.error {
+  color: var(--accent-ink);
+}
+.okText {
+  color: var(--ok-ink);
+}
+.warnText {
+  color: var(--accent-ink);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.tile {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.tile dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.tile dd {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pipeline li {
+  --col: var(--subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--col);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+.pipeline b {
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.col_idea {
+  --col: var(--gold) !important;
+}
+.col_work {
+  --col: var(--control) !important;
+}
+.col_review {
+  --col: var(--accent-ink) !important;
+}
+.col_done {
+  --col: var(--ok) !important;
+}
+
+.configGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.checks {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.checks li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 6px;
+}
+.checks li > span:first-child {
+  font-weight: 700;
+}
+.checks small {
+  display: block;
+  color: var(--subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.ok > span:first-child {
+  color: var(--ok-ink);
+}
+.ko > span:first-child {
+  color: var(--accent-ink);
+}
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.tools .card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.tools .card p {
+  margin: 0;
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Mise en ligne (Release.tsx) */
+.release {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.release p {
+  margin: 0;
+}
+.releaseList {
+  max-height: 220px;
+  margin: 0;
+  padding-left: 20px;
+  overflow-y: auto;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.releaseNext {
+  font-size: 15px;
+}
+.releaseNotes {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.releaseNotes h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.releaseNotes ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.releaseCommits summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+.releaseCommits[open] summary {
+  margin-bottom: 8px;
+}
+/* Dépendances (Dependencies.tsx) */
+.depList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.depList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 14px;
+}
+.depList a {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--fg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.btnIconEnd {
+  margin-left: 6px;
+  opacity: 0.8;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.btn,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--surface-3);
+}
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.primary:hover {
+  background: var(--accent-strong);
+}
+.btn:disabled,
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn:focus-visible,
+.primary:focus-visible,
+.nav a:focus-visible,
+.brand:focus-visible,
+.siteLink:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+
+/* Quotas Cloudflare (Quotas.tsx) : jauges du forfait gratuit, détails, 7 jours */
+.meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.meter {
+  --level: var(--ok-ink);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.meterWarn {
+  --level: var(--gold);
+}
+/* Quotas qui approchent de leur fin (QuotaAlerts.tsx) : doré comme les jauges, rouge une fois atteints */
+.quotaAlerts {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.quotaAlerts li {
+  padding: 10px 12px;
+  border: 1px solid var(--gold);
+  border-left-width: 4px;
+  border-radius: 10px;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.quotaAlerts li.quotaBad {
+  border-color: var(--accent-ink);
+  font-weight: 600;
+}
+.meterBad {
+  --level: var(--accent-ink);
+  border-color: var(--accent-ink);
+}
+.meterHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.meterHead b {
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.meterBad .meterHead b {
+  color: var(--accent-ink);
+}
+.meterBar {
+  height: 8px;
+  margin: 8px 0 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.meterBar i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--level);
+}
+.meter small {
+  color: var(--subtle);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.cfLink {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.cfLink:hover {
+  text-decoration: underline;
+}
+.cfLink:focus-visible {
+  outline: 2px solid var(--control);
+  outline-offset: 2px;
+}
+.meter .cfLink {
+  display: block;
+  width: fit-content;
+}
+.card h3 .cfLink {
+  margin: 0 0 0 6px;
+}
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.facts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.facts li span {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.facts li b {
+  font-variant-numeric: tabular-nums;
+}
+.card h3 small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+.tableWrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.table th:first-child {
+  text-align: left;
+}
+.table th a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.table thead th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.section > .card + .card,
+.configGrid + .card {
+  margin-top: 12px;
+}
+
+@media (max-width: 860px) {
+  /* <body> garde déjà en bas la place de la barre d'onglets : la page ne
+     prend que le reste de l'écran (sinon elle défile de cette hauteur) */
+  :global(#root):has(> .shell),
+  .shell {
+    min-height: calc(100dvh - var(--tabbar-offset));
+  }
+  /* En-tête compact, comme le panneau de Paddock Live : logo, titre de la
+     page et ses boutons (HeaderActions) ; les onglets passent en bas. */
+  .top {
+    flex-wrap: nowrap;
+    gap: 10px;
+    min-height: 60px;
+    padding: 8px 16px;
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+  .logo {
+    width: 32px;
+  }
+  .brandName,
+  .badge,
+  .nav,
+  .side {
+    display: none;
+  }
+  .pageName {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .actions:empty {
+    display: none;
+  }
+  /* Titre de la page déjà dans l'en-tête : gardé pour les lecteurs d'écran */
+  .pageHead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .pageHead + * {
+    margin-top: 0;
+  }
+
+  /* Barre d'onglets flottante, même verre givré que celle du site
+     (NavBar.module.css) : <body> lui réserve déjà sa place (global.css). */
+  .tabbar {
+    position: fixed;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: max(var(--tabbar-gap), env(safe-area-inset-bottom));
+    z-index: 40;
+    display: flex;
+    max-width: 480px;
+    height: var(--tabbar-height);
+    margin-inline: auto;
+    padding: 6px;
+    border: 1px solid oklch(1 0 0 / 0.14);
+    border-radius: 999px;
+    background:
+      linear-gradient(oklch(1 0 0 / 0.26), oklch(1 0 0 / 0.18)),
+      linear-gradient(
+        color-mix(in oklab, var(--header-bg) 97%, transparent),
+        color-mix(in oklab, var(--header-bg) 97%, transparent)
+      );
+    backdrop-filter: blur(32px) saturate(190%);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.16),
+      inset 0 -1px 0 oklch(0 0 0 / 0.12);
+  }
+  @supports (-webkit-touch-callout: none) {
+    .tabbar {
+      background:
+        linear-gradient(oklch(1 0 0 / 0.12), oklch(1 0 0 / 0.06)),
+        linear-gradient(
+          color-mix(in oklab, var(--header-bg) 68%, transparent),
+          color-mix(in oklab, var(--header-bg) 68%, transparent)
+        );
+    }
+  }
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color 0.18s ease,
+      background-color 0.18s ease,
+      transform 0.18s ease;
+  }
+  .tab:active {
+    transform: scale(0.92);
+  }
+  .tab:focus-visible {
+    outline: 2px solid var(--control);
+    outline-offset: -2px;
+  }
+  .tabActive {
+    color: var(--fg);
+    background: oklch(1 0 0 / 0.13);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.14),
+      0 1px 4px oklch(0 0 0 / 0.18);
+  }
+  .page {
+    padding: 20px 16px 48px;
+  }
+  .tiles {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .tile {
+    padding: 12px;
+  }
+  .tile dd {
+    font-size: 24px;
+  }
+  .pipeline {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .main > .card {
+    margin: 24px 16px;
+  }
+}
+
+/* Thème clair : verre blanc laiteux, pastille sombre discrète (comme le site) */
+@media (max-width: 860px) {
+  [data-theme="light"] .tabbar {
+    background:
+      linear-gradient(oklch(1 0 0 / 0.55), oklch(1 0 0 / 0.4)),
+      linear-gradient(
+        color-mix(in oklab, var(--surface) 96%, transparent),
+        color-mix(in oklab, var(--surface) 96%, transparent)
+      );
+    border-color: oklch(1 0 0 / 0.7);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.8);
+  }
+  [data-theme="light"] .tabActive {
+    background: oklch(0 0 0 / 0.07);
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
+  }
+}

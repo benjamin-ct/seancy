@@ -23,6 +23,10 @@ interface PushNotificationPayload {
   title?: string;
   body?: string;
   url?: string;
+  icon?: string;
+  tag?: string;
+  /** Pastille de l'icône (notifications des tickets de l'espace admin) */
+  count?: number;
 }
 
 precacheAndRoute(self.__WB_MANIFEST);
@@ -89,10 +93,13 @@ registerRoute(
 
 // Navigation : index.html précaché pour toute URL de l'appli (appli
 // monopage), pour qu'un lien profond (fiche, liste…) s'ouvre aussi hors
-// ligne. Les routes servies par le Worker restent sur le réseau.
+// ligne. Les routes servies par le Worker restent sur le réseau, comme le
+// renvoi vers la connexion Cloudflare Access (paramètre reauth, voir
+// src/core/api/accessSession.ts) : servi par le précache, il ne passerait
+// jamais par Access et la page resterait bloquée sur la session expirée.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("index.html"), {
-    denylist: [/^\/api\//, /^\/cdn-cgi\//, /^\/robots\.txt$/, /^\/sitemap\.xml$/],
+    denylist: [/^\/api\//, /^\/cdn-cgi\//, /^\/robots\.txt$/, /^\/sitemap\.xml$/, /[?&]reauth=/],
   })
 );
 
@@ -107,12 +114,20 @@ self.addEventListener("push", (event: PushEvent) => {
   const title = data.title || "Seancy";
   const options: NotificationOptions = {
     body: data.body || "",
-    icon: "/icon-192.png",
+    icon: data.icon || "/icon-192.png",
     badge: "/icon-192.png",
     data: { url: data.url || "/" },
+    ...(data.tag ? { tag: data.tag } : {}),
   };
+  const nav = self.navigator as WorkerNavigator & {
+    setAppBadge?: (n?: number) => Promise<void>;
+  };
+  const badge =
+    typeof data.count === "number" && nav.setAppBadge
+      ? nav.setAppBadge(data.count).catch(() => {})
+      : Promise.resolve();
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(Promise.all([self.registration.showNotification(title, options), badge]));
 });
 
 self.addEventListener("notificationclick", (event: NotificationEvent) => {

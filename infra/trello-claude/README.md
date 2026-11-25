@@ -71,8 +71,8 @@ numéros de migrations D1, limite de sessions Claude) et accepter plusieurs PR e
 En plus de `/trello-webhook`, le listener expose `POST /sentry-webhook?secret=<SENTRY_WEBHOOK_SECRET>` :
 une alerte Sentry déclenche une notification Discord immédiate, puis (si le pipeline n'est pas déjà
 occupé) un `claude -p` dans `seancy-repo` qui suit le skill `sentry-triage` (lecture du détail de
-l'issue via l'API Sentry, correctif direct en PR ou création d'une carte Trello "A faire" selon le
-cas). Voir `.claude/skills/sentry-triage/SKILL.md` à la racine du repo pour le détail du
+l'issue via l'API Sentry, correctif direct en PR rattachée à un ticket « À valider » de la page Tickets,
+ou ticket « À faire » quand une décision humaine est nécessaire). Voir `.claude/skills/sentry-triage/SKILL.md` à la racine du repo pour le détail du
 comportement de Claude une fois déclenché.
 
 La notification Discord immédiate (`🚨 Nouvelle alerte Sentry : ...`, envoyée dès réception du
@@ -176,6 +176,18 @@ pour vérifier son travail. Deux cibles possibles :
    ```
 
 Sans les étapes 1-2, les captures fonctionnent quand même, mais uniquement sur le serveur local.
+
+**Pages connectées avec synchro temps réel (SSE/WebSocket, voir `core/sync/liveSync.ts`)** : par défaut,
+`seancy-screenshot` attend `networkidle` avant de capturer — une page qui ouvre une connexion SSE/WS
+persistante n'atteint jamais cet état, et l'outil la considère comme jamais chargée. Utiliser
+`--ready <sélecteur CSS>` pour attendre un état applicatif précis à la place :
+
+```bash
+# <sélecteur> : un élément CSS présent seulement une fois la page réellement chargée
+# (ex. un élément du contenu principal, absent pendant le spinner/skeleton initial)
+docker exec -u claudeuser seancy-repo seancy-screenshot https://<preview>.dev.seancy.com/profil /tmp/profil.png \
+  --cookie seancy_session=<jeton> --ready '<sélecteur>'
+```
 
 ## Déploiement initial sur le serveur
 

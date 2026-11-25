@@ -41,6 +41,36 @@ function isSupported(): boolean {
   );
 }
 
+// Brave expose `navigator.brave` (absent du typage DOM) : sert seulement à
+// adapter le message d'erreur du service push ci-dessous.
+function isBraveBrowser(): boolean {
+  return typeof navigator !== "undefined" && "brave" in navigator;
+}
+
+// Les erreurs du navigateur (DOMException de `Notification.requestPermission`
+// ou `pushManager.subscribe`) arrivent en anglais brut, par exemple
+// « Registration failed - push service error » : le service push du
+// navigateur (Firebase Cloud Messaging pour les navigateurs Chromium) a refusé
+// l'abonnement. C'est le cas de Brave quand l'option « services Google pour la
+// messagerie push » est désactivée, ou d'un téléphone Android sans services
+// Google. On les traduit en une consigne compréhensible ; nos propres erreurs
+// (déjà traduites) passent telles quelles.
+function describeEnableError(err: unknown): string {
+  if (err instanceof DOMException) {
+    if (err.name === "NotAllowedError") {
+      return i18n.t("notificationSettings.permissionDenied");
+    }
+    if (err.name === "AbortError") {
+      return i18n.t(
+        isBraveBrowser()
+          ? "notificationSettings.pushServiceErrorBrave"
+          : "notificationSettings.pushServiceError"
+      );
+    }
+  }
+  return err instanceof Error ? err.message : i18n.t("common.errorGeneric");
+}
+
 function computeFavoriteGenres(watched: LibraryItem[]): FavoriteGenre[] {
   const counts = new Map<string, number>();
   for (const item of watched) {
@@ -105,7 +135,7 @@ async function syncSubscriptionLocale(endpoint: string, locale: string): Promise
 // Clé publique VAPID actuelle du serveur. Elle peut changer (rotation des
 // clés) : les abonnements créés avec l'ancienne deviennent alors inutilisables.
 async function fetchVapidPublicKey(): Promise<Uint8Array> {
-  const keyRes = await fetch("/api/vapid-public-key");
+  const keyRes = await fetch("/api/vapid-public-key", { cache: "no-store" });
   if (!keyRes.ok) {
     throw new Error(i18n.t("notificationSettings.keyFetchError"));
   }
@@ -425,7 +455,7 @@ export default function NotificationSettings() {
       setEndpoint(subEndpoint);
       setStatus("idle");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.errorGeneric"));
+      setError(describeEnableError(err));
       setStatus("error");
     }
   }

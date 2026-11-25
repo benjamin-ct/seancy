@@ -1,0 +1,146 @@
+.page {
+  max-width: var(--container);
+  margin-inline: auto;
+  padding: 28px var(--gutter) 64px;
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-bottom: 20px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.rowActive {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.rowIcon {
+  flex: none;
+  color: var(--muted);
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rowTitle {
+  font-weight: 700;
+  font-size: 15.5px;
+}
+
+.rowSummary {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.rowChevron {
+  flex: none;
+  color: var(--muted);
+}
+
+.detail {
+  margin-top: 28px;
+}
+
+.placeholder {
+  display: none;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+@media (min-width: 861px) {
+  .placeholder {
+    display: block;
+  }
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--fg);
+}
+
+/* Desktop : vrai panneau maître-détail, sommaire et détail visibles en
+   permanence côte à côte, quelle que soit la sous-page active. */
+@media (min-width: 861px) {
+  .page {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .heading {
+    grid-column: 1 / -1;
+  }
+
+  .nav {
+    position: sticky;
+    top: calc(var(--topnav-height, var(--header-height)) + 28px);
+  }
+
+  .detail {
+    margin-top: 0;
+  }
+
+  .back {
+    display: none;
+  }
+}
+
+/* Mobile : un seul panneau visible à la fois, selon qu'on est sur le
+   sommaire (/reglages) ou une sous-page (/reglages/<id>). */
+@media (max-width: 860px) {
+  .page[data-pane="summary"] .detail {
+    display: none;
+  }
+
+  .page[data-pane="detail"] .nav,
+  .page[data-pane="detail"] .heading {
+    display: none;
+  }
+}
