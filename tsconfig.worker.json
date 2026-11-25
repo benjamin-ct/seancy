@@ -26,6 +26,8 @@
     "src/core/types/social.ts",
     "src/core/api/movieMeta.ts",
     "src/core/api/releaseBadge.ts",
+    "src/core/api/retryAfter.ts",
+    "src/core/api/concurrencyLimiter.ts",
     "src/core/validation/mediaType.ts"
   ]
 }
