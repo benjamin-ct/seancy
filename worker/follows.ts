@@ -20,9 +20,17 @@ export const FEED_LIMIT = 60;
 const LIST_LIMIT = 500;
 const SEARCH_LIMIT = 20;
 
+// Compte en cours de suppression (délai de grâce, migration 0023) : invisible
+// des autres, comme s'il était déjà supprimé. Il n'apparaît plus dans les
+// abonnés, abonnements, compteurs, fil, activité d'un titre ni dans la
+// recherche, et son profil ne peut plus être suivi. Tout revient s'il annule
+// la suppression (ses abonnements sont conservés jusqu'à la suppression).
+const NOT_PENDING_DELETION = "users.pending_deletion_at IS NULL";
+const VISIBLE_PROFILE = `users.share_slug IS NOT NULL AND ${NOT_PENDING_DELETION}`;
+
 export async function getUserIdBySlug(db: D1Database, slug: string): Promise<number | null> {
   const row = await db
-    .prepare("SELECT id FROM users WHERE share_slug = ?")
+    .prepare(`SELECT id FROM users WHERE share_slug = ? AND ${NOT_PENDING_DELETION}`)
     .bind(slug)
     .first<{ id: number }>();
   return row?.id ?? null;
@@ -58,9 +66,10 @@ export async function getFollowCounts(db: D1Database, userId: number): Promise<F
   const row = await db
     .prepare(
       `SELECT
-         (SELECT COUNT(*) FROM follows WHERE followed_id = ?1) AS followers,
+         (SELECT COUNT(*) FROM follows JOIN users ON users.id = follows.follower_id
+            WHERE follows.followed_id = ?1 AND ${NOT_PENDING_DELETION}) AS followers,
          (SELECT COUNT(*) FROM follows JOIN users ON users.id = follows.followed_id
-            WHERE follows.follower_id = ?1 AND users.share_slug IS NOT NULL) AS following`
+            WHERE follows.follower_id = ?1 AND ${VISIBLE_PROFILE}) AS following`
     )
     .bind(userId)
     .first<FollowCounts>();
@@ -79,7 +88,7 @@ export async function getFollowedByViewerFollowing(
 ): Promise<{ profiles: { slug: string; displayName: string | null }[]; total: number }> {
   const from = `FROM follows mine
        JOIN follows theirs ON theirs.follower_id = mine.followed_id AND theirs.followed_id = ?1
-       JOIN users ON users.id = mine.followed_id AND users.share_slug IS NOT NULL
+       JOIN users ON users.id = mine.followed_id AND ${VISIBLE_PROFILE}
        WHERE mine.follower_id = ?2 AND mine.followed_id <> ?1`;
   const [{ results }, count] = await Promise.all([
     db
@@ -148,7 +157,7 @@ export async function getFollowers(
       `SELECT users.id, users.share_slug, users.display_name, ${VIEWER_FOLLOWS} AS viewer_follows,
               ${WATCHED_COUNTS}
        FROM follows JOIN users ON users.id = follows.follower_id
-       WHERE follows.followed_id = ?1
+       WHERE follows.followed_id = ?1 AND ${NOT_PENDING_DELETION}
        ORDER BY follows.created_at DESC LIMIT ${LIST_LIMIT}`
     )
     .bind(userId, viewerId ?? -1)
@@ -166,7 +175,7 @@ export async function getFollowing(
       `SELECT users.id, users.share_slug, users.display_name, ${VIEWER_FOLLOWS} AS viewer_follows,
               ${WATCHED_COUNTS}
        FROM follows JOIN users ON users.id = follows.followed_id
-       WHERE follows.follower_id = ?1 AND users.share_slug IS NOT NULL
+       WHERE follows.follower_id = ?1 AND ${VISIBLE_PROFILE}
        ORDER BY follows.created_at DESC LIMIT ${LIST_LIMIT}`
     )
     .bind(userId, viewerId ?? -1)
@@ -188,7 +197,7 @@ export async function searchProfiles(
       `SELECT users.id, users.share_slug, users.display_name, ${VIEWER_FOLLOWS} AS viewer_follows,
               ${WATCHED_COUNTS}
        FROM users
-       WHERE users.share_slug IS NOT NULL AND users.id <> ?2
+       WHERE ${VISIBLE_PROFILE} AND users.id <> ?2
          AND users.display_name LIKE ?1 ESCAPE '\\'
        ORDER BY users.display_name COLLATE NOCASE LIMIT ${SEARCH_LIMIT}`
     )
@@ -210,7 +219,7 @@ export async function getFeed(db: D1Database, userId: number): Promise<FeedEntry
       `SELECT users.share_slug, users.display_name, library_items.status,
               library_items.data, library_items.updated_at
        FROM follows
-       JOIN users ON users.id = follows.followed_id AND users.share_slug IS NOT NULL
+       JOIN users ON users.id = follows.followed_id AND ${VISIBLE_PROFILE}
        JOIN library_items ON library_items.rowid IN (
          SELECT recent.rowid FROM library_items recent
          WHERE recent.user_id = users.id
@@ -289,7 +298,7 @@ export async function getTitleActivity(
         `SELECT users.share_slug, users.display_name, library_items.status, library_items.data,
                 library_items.updated_at
          FROM follows
-         JOIN users ON users.id = follows.followed_id AND users.share_slug IS NOT NULL
+         JOIN users ON users.id = follows.followed_id AND ${VISIBLE_PROFILE}
          JOIN library_items ON library_items.user_id = users.id
            AND library_items.media_type = ? AND library_items.tmdb_id = ?
          WHERE follows.follower_id = ?

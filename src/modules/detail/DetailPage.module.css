@@ -574,18 +574,37 @@
   font-family: var(--font-mono);
 }
 
-.yourReviewSave {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--fg);
+.yourReviewStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--ok-ink);
   font-size: 13px;
   font-weight: 600;
 }
 
+/* Corail seulement quand il y a quelque chose à enregistrer (les actions
+   gardent la couleur d'accent, voir variables.css). */
+.yourReviewSave {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.yourReviewSave:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 .yourReviewSave:disabled {
-  opacity: 0.5;
+  cursor: default;
 }
 
 /* Série notée par saisons : la note manuelle mise de côté. */

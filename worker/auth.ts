@@ -395,8 +395,9 @@ const ACCOUNT_DELETION_CODE_CONTENT: Record<
         <p>Pour confirmer la suppression de votre compte Seancy, entrez ce code dans
         Réglages → Mes données (valable 15 minutes) :</p>
         <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">${code}</p>
-        <p>Une fois confirmée, la suppression aura lieu dans 7 jours. Vous pouvez
-        l'annuler à tout moment avant cette échéance, simplement en vous reconnectant.</p>
+        <p>Une fois confirmée, votre profil ne sera plus visible des autres membres et
+        la suppression aura lieu dans 7 jours. Vous pouvez l'annuler à tout moment avant
+        cette échéance, simplement en vous reconnectant.</p>
         <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email : rien ne
         sera supprimé sans ce code.</p>
       `,
@@ -407,8 +408,9 @@ const ACCOUNT_DELETION_CODE_CONTENT: Record<
         <p>To confirm deletion of your Seancy account, enter this code in
         Settings → My data (valid for 15 minutes):</p>
         <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">${code}</p>
-        <p>Once confirmed, deletion will happen in 7 days. You can cancel it at any
-        time before then, simply by signing back in.</p>
+        <p>Once confirmed, your profile will be hidden from other members and deletion
+        will happen in 7 days. You can cancel it at any time before then, simply by
+        signing back in.</p>
         <p>If you didn't request this, you can safely ignore this email: nothing will
         be deleted without this code.</p>
       `,

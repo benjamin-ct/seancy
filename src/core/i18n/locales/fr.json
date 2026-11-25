@@ -321,11 +321,11 @@
     "exportDataHint": "Téléchargez une copie de toutes les données de votre compte au format JSON (droit à la portabilité).",
     "exportDataButton": "Télécharger mes données",
     "deleteAccount": "Supprimer le compte",
-    "deleteAccountHint": "Supprime définitivement votre compte et toutes les données associées : bibliothèque, listes, préférences, rappels, abonnements aux notifications et photo de profil. Action irréversible.",
+    "deleteAccountHint": "Supprime votre compte et toutes les données associées : bibliothèque, listes, préférences, rappels, abonnements aux notifications et photo de profil. La suppression a lieu 7 jours après confirmation ; passé ce délai, elle est définitive.",
     "deleteAccountButton": "Supprimer mon compte",
-    "deleteAccountCodeSent": "Un code de confirmation a été envoyé à votre adresse e-mail (valable 15 minutes). Une fois confirmée, la suppression aura lieu dans 7 jours ; vous pourrez l'annuler à tout moment avant cette échéance.",
+    "deleteAccountCodeSent": "Un code de confirmation a été envoyé à votre adresse e-mail (valable 15 minutes). Une fois confirmée, votre profil disparaît aussitôt pour les autres membres et la suppression a lieu dans 7 jours ; vous pourrez l'annuler à tout moment avant cette échéance.",
     "deleteAccountConfirmButton": "Confirmer la suppression",
-    "deleteAccountPending": "Votre compte sera supprimé le {{date}}. Reconnectez-vous avant cette date pour annuler, ou utilisez le bouton ci-dessous.",
+    "deleteAccountPending": "Votre compte sera supprimé le {{date}}. D'ici là, votre profil, vos listes partagées et vos avis ne sont plus visibles des autres membres. Reconnectez-vous avant cette date pour annuler, ou utilisez le bouton ci-dessous.",
     "deleteAccountCancel": "Annuler la suppression",
     "deleteAccountError": "Impossible de supprimer le compte pour le moment. Réessayez.",
     "deleting": "Suppression…"
@@ -730,7 +730,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "20 novembre 2026",
+    "lastUpdatedValue": "25 novembre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -829,7 +829,7 @@
     },
     "retention": {
       "title": "Durée de conservation",
-      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : après confirmation par un code envoyé par email, la suppression a lieu 7 jours plus tard et reste annulable pendant ce délai (automatiquement si vous vous reconnectez, ou via un bouton dédié). Passé ce délai, toutes les données associées sont supprimées définitivement. Vous pouvez aussi en demander la suppression ",
+      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : après confirmation par un code envoyé par email, votre profil, vos listes partagées et vos avis cessent aussitôt d'être visibles des autres membres, et la suppression a lieu 7 jours plus tard ; elle reste annulable pendant ce délai (automatiquement si vous vous reconnectez, ou via un bouton dédié). Passé ce délai, toutes les données associées sont supprimées définitivement. Vous pouvez aussi en demander la suppression ",
       "textAfter": "."
     },
     "rights": {
@@ -905,6 +905,8 @@
     "yourReviewPlaceholder": "Qu'avez-vous pensé de ce titre ?",
     "yourReviewCount": "{{count}}/{{max}}",
     "yourReviewSave": "Enregistrer l'avis",
+    "yourReviewSaved": "Avis enregistré",
+    "yourReviewRemoved": "Avis retiré",
     "seriesAverage_one": "Moyenne de {{count}} saison notée",
     "seriesAverage_other": "Moyenne de vos {{count}} saisons notées",
     "manualSeriesKept": "Votre note de {{rating}}/10 pour la série reviendra si vous retirez les notes de saisons et d'épisodes.",
@@ -1159,6 +1161,8 @@
     "ownerRating": "{{rating}}/10 · note de {{name}}",
     "tabSeen": "Vus",
     "tabWant": "Envie de voir",
+    "tabReviews": "Avis",
+    "emptyReviews": "Aucun avis pour l'instant.",
     "tabLists": "Listes",
     "typeFilter": "Type de titre",
     "filterAll": "Tous",

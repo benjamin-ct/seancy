@@ -231,9 +231,9 @@ function mediaMeta(
 // profil ou toute la liste, inutile pour une balise.
 async function profileMeta(db: D1Database, handle: string, lang: Lang): Promise<PageMeta | null> {
   const query = SHARE_SLUG_PATTERN.test(handle)
-    ? "SELECT display_name, username FROM users WHERE share_slug = ?"
+    ? "SELECT display_name, username FROM users WHERE share_slug = ? AND pending_deletion_at IS NULL"
     : USERNAME_PATTERN.test(handle)
-      ? "SELECT display_name, username FROM users WHERE username = ? AND share_slug IS NOT NULL"
+      ? "SELECT display_name, username FROM users WHERE username = ? AND share_slug IS NOT NULL AND pending_deletion_at IS NULL"
       : null;
   const row = query
     ? await db
@@ -259,7 +259,7 @@ async function listMeta(db: D1Database, slug: string, lang: Lang): Promise<PageM
       `SELECT custom_lists.name, users.display_name, users.username
        FROM list_shares
        JOIN custom_lists ON custom_lists.user_id = list_shares.user_id AND custom_lists.id = list_shares.list_id
-       JOIN users ON users.id = list_shares.user_id
+       JOIN users ON users.id = list_shares.user_id AND users.pending_deletion_at IS NULL
        WHERE list_shares.slug = ?`
     )
     .bind(slug)

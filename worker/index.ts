@@ -1471,9 +1471,19 @@ async function handleFollow(
 async function notifyNewFollower(
   request: Request,
   env: Env,
-  follower: { id: number; displayName: string | null; shareSlug: string | null },
+  follower: {
+    id: number;
+    displayName: string | null;
+    shareSlug: string | null;
+    pendingDeletionAt: number | null;
+  },
   followedId: number
 ): Promise<void> {
+  // Compte en cours de suppression : invisible des autres (voir follows.ts),
+  // donc pas de « X vous suit ».
+  if (follower.pendingDeletionAt !== null) {
+    return;
+  }
   try {
     if (
       !(await checkRateLimit(env.DB, `follow-notify:${follower.id}:${followedId}`, {
