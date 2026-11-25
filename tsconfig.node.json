@@ -46,6 +46,7 @@
     "worker/validate.ts",
     "worker/tickets-logic.ts",
     "worker/release.ts",
+    "worker/release-scope.ts",
     "worker/claude-usage.ts",
     "worker/quota-alerts.ts",
     "worker/admin-split.ts",

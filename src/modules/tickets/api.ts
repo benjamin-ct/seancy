@@ -109,7 +109,10 @@ export interface ReleaseState {
   version: string;
   next: string;
   notes: { bump: "patch" | "minor" | "major"; summary: string }[];
+  /** Changements qui attendent la release. */
   pending: string[];
+  /** Changements pas encore dans main mais déjà en ligne (admin, tickets, outillage). */
+  live?: string[];
   since: number;
   pr: { number: number; url: string; state: "wait" | "fail" | "merged"; why: string } | null;
 }

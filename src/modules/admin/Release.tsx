@@ -68,6 +68,8 @@ export default function Release() {
 
   const pr = state?.pr;
   const n = state?.pending.length ?? 0;
+  // Admin, tickets, outillage : en ligne dès la fusion dans develop (Worker de l'admin), sans release
+  const live = state?.live ?? [];
   return (
     <section aria-labelledby="dash-release" className={styles.section}>
       <div className={styles.sectionHead}>
@@ -108,7 +110,9 @@ export default function Release() {
               <p>
                 {n
                   ? `${n} changement${n > 1 ? "s" : ""} sur develop pas encore en ligne${state.since ? ` (${sinceText(state.since)})` : ""}`
-                  : "Rien de nouveau sur develop : tout est en ligne"}
+                  : live.length
+                    ? "Le site est à jour : rien à mettre en ligne par une release"
+                    : "Rien de nouveau sur develop : tout est en ligne"}
               </p>
               {n > 0 && state.next && (
                 <p className={styles.releaseNext}>
@@ -142,7 +146,7 @@ export default function Release() {
                 ))}
               {n > 0 && (
                 <details className={styles.releaseCommits}>
-                  <summary>Commits ({n})</summary>
+                  <summary>À mettre en ligne ({n})</summary>
                   <ul className={styles.releaseList}>
                     {state.pending.map((t, i) => (
                       <li key={i}>{t}</li>
@@ -185,6 +189,18 @@ export default function Release() {
                     </span>
                   </div>
                 ))}
+              {live.length > 0 && (
+                <details className={styles.releaseCommits}>
+                  <summary>
+                    Déjà en ligne sans release ({live.length}) : admin, tickets, outillage
+                  </summary>
+                  <ul className={styles.releaseList}>
+                    {live.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           )
         )}

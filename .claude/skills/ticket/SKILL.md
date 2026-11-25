@@ -86,7 +86,12 @@ idea`) et réponds sans PR.
 4. **Fragment de changelog** (`.changeset/README.md`) : si la PR touche `src/`, `worker/` ou `migrations/`, ajouter
    `.changeset/<slug>.md` dans le même commit (`bump` patch pour un correctif sans nouveau comportement visible, minor
    pour une nouveauté visible et compatible, major pour un changement cassant ; description courte pour les
-   utilisateurs, pas un résumé technique). PR d'outillage ou de doc seulement : rien à ajouter.
+   utilisateurs, pas un résumé technique). PR d'outillage ou de doc seulement : rien à ajouter. PR qui ne touche
+   que l'espace admin et les tickets (`src/modules/admin/`, `src/modules/tickets/`, fichiers admin de `worker/`,
+   liste dans `worker/release-scope.ts`) et des migrations : rien à ajouter non plus. Le Worker de l'admin est mis
+   en ligne à chaque fusion dans `develop`, sans release, et ce n'est pas une nouveauté du site. Exception : une
+   retouche de ce que le site utilise dans `worker/admin.ts` ou `worker/tickets.ts` (`accessGate`,
+   `isAdminHostname`, `adminEmails`, `siteConfig`, `pushAdmins`) demande un fragment.
 5. **CGU et confidentialité** (`src/modules/legal/`, pages `/conditions-utilisation` et `/confidentialite`) : si le
    ticket change les données personnelles collectées (table, colonne, champ de formulaire), les sous-traitants
    (analytics, e-mail, paiement, hébergement) ou le statut du projet, mettre à jour la page et sa date dans la même
@@ -116,6 +121,8 @@ idea`) et réponds sans PR.
 - `--text` : court, aéré, en français simple, une idée par ligne (vrais retours à la ligne) : une phrase de résumé ;
   « Ce qui a changé : » puis une ligne « - … » par changement ; « Pour vérifier : » puis une ligne « - … » par étape
   (où cliquer, ce qui apparaît) ; « Revue : » le résumé de `reviewer` / `ui-reviewer` ; « CI : » son état ;
+  « En ligne : » quand le changement sera visible (admin et tickets seulement : dès la validation du ticket, sans
+  release ; sinon : à la prochaine release, ou tout de suite pour un hotfix) ;
   « Limites : » seulement si une chose reste impossible à faire ou à vérifier. La page rend le Markdown
   (`**gras**`, listes `- `, `- [ ]`, `code`, liens `[texte](https://…)`, tableaux) : titres des parties en gras
   (`**Pour vérifier :**`), pas de HTML.
