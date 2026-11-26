@@ -1050,7 +1050,9 @@
     "seasonRateHint": "Cochez un épisode vu pour noter la saison",
     "specialsNotInSeries": "Les épisodes spéciaux ne comptent pas dans la note de la série.",
     "rateEpisode": "Noter {{episode}}",
-    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier"
+    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier",
+    "noOverview": "Pas de résumé disponible pour cet épisode.",
+    "tmdbRating": "Note TMDB :"
   },
   "profileShare": {
     "title": "Lien public",
