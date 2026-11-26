@@ -11,6 +11,7 @@ import {
 import { getAvatar } from "./avatars.ts";
 import { getRemindersForUser, type ReminderSummary } from "./reminders.ts";
 import { logError } from "./logger.ts";
+import { notifiedKey } from "./notify-dedup.ts";
 import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
 import type {
   CleanCustomList,
@@ -1304,10 +1305,7 @@ export async function markUserNotified(
 
 // Historique des notifications d'un destinataire (compte + ses abonnements),
 // chargé en une fois par le cron au lieu d'un SELECT par titre et par motif
-// (audit H5). Clés `${mediaType}:${tmdbId}:${reason}`.
-export function notifiedKey(mediaType: string, tmdbId: number, reason: string): string {
-  return `${mediaType}:${tmdbId}:${reason}`;
-}
+// (audit H5). Clés `${mediaType}:${tmdbId}:${reason}` (notifiedKey).
 
 // D1 limite le nombre de paramètres liés par requête : les ids sont découpés.
 const MAX_BOUND_IDS = 90;
