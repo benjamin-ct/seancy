@@ -1050,7 +1050,9 @@
     "seasonRateHint": "Mark an episode as watched to rate the season",
     "specialsNotInSeries": "Specials don't count towards the show's rating.",
     "rateEpisode": "Rate {{episode}}",
-    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit"
+    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit",
+    "noOverview": "No summary available for this episode.",
+    "tmdbRating": "TMDB rating:"
   },
   "profileShare": {
     "title": "Public link",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { dateLocaleTag, formatFullDate, type SeriesEpisodeBadge } from "../../../core/api/tmdb.ts";
 import { isStrictlyFutureDate } from "../../../core/api/releaseBadge.ts";
@@ -11,6 +11,7 @@ import { formatRating, seasonRating } from "../../../core/lib/seriesRatings.ts";
 import { Icon, RatingStars } from "../../../shared/components/index.ts";
 import { pop } from "../../../shared/lib/motion.ts";
 import { STAR_LABEL_KEYS } from "../../../shared/lib/ratingTier.ts";
+import { formatRuntime } from "../formatRuntime.ts";
 import {
   airedEpisodesUpTo,
   isAired,
@@ -81,6 +82,10 @@ export default function EpisodeTracker({
   // Épisode dont les étoiles sont ouvertes (clé "saison-épisode") : une seule
   // ligne de notation à la fois, pour garder la liste lisible sur mobile.
   const [ratingOpen, setRatingOpen] = useState<string | null>(null);
+  // Épisode dont le détail (résumé, durée, note TMDB) est déplié : replié par
+  // défaut, le résumé pouvant dévoiler l'intrigue d'un épisode pas encore vu.
+  const [detailsOpen, setDetailsOpen] = useState<string | null>(null);
+  const detailsIdPrefix = useId();
   const today = todayIso();
 
   const main = mainSeasons(seasons);
@@ -474,6 +479,12 @@ export default function EpisodeTracker({
                     // déjà donnée reste visible et modifiable s'il est décoché.
                     const canRate = watched || epRating != null;
                     const ratingIsOpen = canRate && ratingOpen === epKey;
+                    const detailsIsOpen = detailsOpen === epKey;
+                    const detailsId = `${detailsIdPrefix}-${epKey}`;
+                    // TMDB renvoie 0 (pas null) tant que la durée ou la note
+                    // n'est pas connue : rien à afficher dans ce cas.
+                    const runtime = ep.runtime || null;
+                    const score = ep.vote_count && ep.vote_average ? ep.vote_average : null;
                     return (
                       <li
                         key={ep.id ?? ep.episode_number}
@@ -500,9 +511,17 @@ export default function EpisodeTracker({
                         <span className={styles.epNumber}>
                           {t("episodeTracker.episodeShort", { number: ep.episode_number })}
                         </span>
-                        <span className={styles.epText}>
+                        <button
+                          type="button"
+                          className={styles.epText}
+                          aria-expanded={detailsIsOpen}
+                          aria-controls={detailsIsOpen ? detailsId : undefined}
+                          onClick={() => setDetailsOpen(detailsIsOpen ? null : epKey)}
+                        >
                           <span className={styles.epTitle}>
-                            {ep.name || t("episodeTracker.untitled")}
+                            <span className={styles.epName}>
+                              {ep.name || t("episodeTracker.untitled")}
+                            </span>
                             {badge && (
                               <span
                                 className={`${styles.badge} ${
@@ -514,13 +533,18 @@ export default function EpisodeTracker({
                                   : t("mediaCard.episodeUpcoming")}
                               </span>
                             )}
+                            <Icon
+                              name={detailsIsOpen ? "chevronUp" : "chevronDown"}
+                              size={14}
+                              className={styles.epChevron}
+                            />
                           </span>
                           <span className={`${styles.epMeta} ${watched ? styles.epMetaOn : ""}`}>
                             {aired || !date
                               ? [status, date].filter(Boolean).join(" · ")
                               : t("episodeTracker.airsOn", { date })}
                           </span>
-                        </span>
+                        </button>
                         {canRate && (
                           <button
                             type="button"
@@ -548,6 +572,39 @@ export default function EpisodeTracker({
                           >
                             {t("episodeTracker.watchedUpToHere")}
                           </button>
+                        )}
+                        {detailsIsOpen && (
+                          <div id={detailsId} className={styles.epDetails}>
+                            {(runtime != null || score != null) && (
+                              <p className={styles.epFacts}>
+                                {runtime != null && <span>{formatRuntime(t, runtime)}</span>}
+                                {score != null && (
+                                  <span className={styles.epScore}>
+                                    <span className="visuallyHidden">
+                                      {t("episodeTracker.tmdbRating")}
+                                    </span>
+                                    <Icon name="star" size={14} filled />
+                                    <b>
+                                      {score.toLocaleString(localeTag, {
+                                        maximumFractionDigits: 1,
+                                        minimumFractionDigits: 1,
+                                      })}
+                                    </b>
+                                    /10 ·{" "}
+                                    {t("detailPage.votesCount", {
+                                      count: ep.vote_count,
+                                      formattedCount: (ep.vote_count ?? 0).toLocaleString(
+                                        localeTag
+                                      ),
+                                    })}
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                            <p className={styles.epOverview}>
+                              {ep.overview?.trim() || t("episodeTracker.noOverview")}
+                            </p>
+                          </div>
                         )}
                         {ratingIsOpen && (
                           <div className={styles.epRating}>

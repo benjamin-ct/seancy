@@ -211,23 +211,43 @@
   font-size: 12px;
 }
 
+/* Titre + date : bouton qui déplie le détail de l'épisode (.epDetails). */
 .epText {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 2px;
+  padding: 4px 0;
+  border-radius: 6px;
+  text-align: left;
 }
 
 .epTitle {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: 14.5px;
   font-weight: 600;
+}
+
+.epName {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.epChevron {
+  flex: none;
+  color: var(--subtle);
+}
+
+.epText:hover .epChevron,
+.epText[aria-expanded="true"] .epChevron {
+  color: var(--fg);
 }
 
 .epMeta {
@@ -302,6 +322,46 @@
   border-color: transparent;
   background: var(--accent-soft);
   color: var(--accent-ink);
+}
+
+/* Détail d'un épisode (résumé, durée, note TMDB) : nouvelle ligne sous
+   l'épisode, alignée sur son titre comme les étoiles. */
+.epDetails {
+  flex-basis: 100%;
+  padding: 0 8px 6px 96px;
+}
+
+.epFacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.epScore {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.epScore svg {
+  color: var(--gold);
+}
+
+.epScore b {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.epOverview {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 /* Étoiles d'un épisode : nouvelle ligne sous l'épisode, alignée sur son titre. */
@@ -491,6 +551,10 @@
   }
   .epRating {
     padding-left: 0;
+  }
+
+  .epDetails {
+    padding-left: 4px;
   }
 
   .seasonActions {
