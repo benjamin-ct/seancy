@@ -18,7 +18,7 @@ import { useAuth } from "../../core/context/AuthContext.tsx";
 import { hideInitialLoader } from "../../core/initialLoader.ts";
 import { adminPrefix, isAdminHost } from "../../core/lib/adminHost.ts";
 import Icon, { type IconName } from "../../shared/components/Icon/Icon.tsx";
-import TicketLogo from "../../shared/components/TicketLogo/TicketLogo.tsx";
+import TicketLogo, { DEV_HOSTNAME } from "../../shared/components/TicketLogo/TicketLogo.tsx";
 import { LoginForm, VerifyAuthPage } from "../auth/index.ts";
 import { releaseState } from "../tickets/api.ts";
 import styles from "./Admin.module.css";
@@ -256,6 +256,14 @@ export default function AdminApp() {
           </button>
           <a href={siteUrl} className={styles.siteLink}>
             Voir le site
+          </a>
+          <a
+            href={`https://${DEV_HOSTNAME}/`}
+            className={styles.siteLink}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Site de développement
           </a>
         </div>
       </header>
