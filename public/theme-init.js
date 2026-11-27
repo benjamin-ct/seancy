@@ -39,13 +39,15 @@
 // (clignotement de l'onglet). Les pages admin sont le même index.html que le
 // site (servi sans le Worker) : rien d'autre ne peut les distinguer avant
 // React. Même découpage que src/App.tsx et src/core/lib/adminHost.ts : tout
-// le domaine admin, ou /admin ailleurs (develop, previews, local).
+// le domaine admin, ou /admin ailleurs que sur le site public (develop,
+// previews, local ; seancy.com/admin renvoie vers le domaine admin).
 (function () {
   try {
     var host = window.location.hostname;
     var path = window.location.pathname;
     var adminHost = host === "admin.seancy.com" || host === "admin.localhost";
-    if (!adminHost && path !== "/admin" && path.indexOf("/admin/") !== 0) {
+    var adminPath = path === "/admin" || path.indexOf("/admin/") === 0;
+    if (!adminHost && (host === "seancy.com" || !adminPath)) {
       return;
     }
     var page = (adminHost ? path : path.slice("/admin".length)).replace(/\/+$/, "");
