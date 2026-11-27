@@ -5,7 +5,7 @@
 // confirmation.
 import { useState } from "react";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
-import { DEV_HOSTNAME } from "../../shared/components/TicketLogo/TicketLogo.tsx";
+import { DEV_HOSTNAME } from "../../core/lib/devSite.ts";
 import styles from "./Admin.module.css";
 
 const TOOLS = [
