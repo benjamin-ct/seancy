@@ -131,40 +131,9 @@ export default function AdminApp() {
     document.documentElement.classList.add(styles.adminRoot);
     return () => document.documentElement.classList.remove(styles.adminRoot);
   }, []);
-  // Icônes de l'espace admin (public/admin/ : ticket doré « ADMIN ») : onglet, écran d'accueil et
-  // manifeste, à la place de celles de Seancy (les pages sont servies telles quelles, sans le Worker)
-  useEffect(() => {
-    const swaps: [string, string][] = [
-      ['link[rel="icon"][type="image/svg+xml"]', "/admin/favicon.svg"],
-      ['link[rel="icon"][sizes="32x32"]', "/admin/favicon-32.png"],
-      ['link[rel="apple-touch-icon"]', "/admin/apple-touch-icon.png"],
-      ['link[rel="manifest"]', "/admin/manifest.webmanifest"],
-    ];
-    const undo = swaps.flatMap(([sel, href]) =>
-      [...document.querySelectorAll<HTMLLinkElement>(sel)].map((el) => {
-        const old = el.getAttribute("href") ?? "";
-        el.setAttribute("href", href);
-        return () => el.setAttribute("href", old);
-      })
-    );
-    let title = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
-    const added = !title;
-    const oldTitle = title?.content ?? "";
-    if (!title) {
-      title = document.createElement("meta");
-      title.name = "apple-mobile-web-app-title";
-      document.head.append(title);
-    }
-    title.content = "Seancy Admin";
-    return () => {
-      undo.forEach((f) => f());
-      if (added) {
-        title.remove();
-      } else {
-        title.content = oldTitle;
-      }
-    };
-  }, []);
+  // Icônes de l'espace admin (public/admin/ : ticket doré « ADMIN »), manifeste et titre de
+  // l'onglet : posés avant le premier affichage par public/theme-init.js, pas ici (l'onglet
+  // montrait d'abord ceux du site à chaque rechargement).
 
   const guarded = (el: ReactNode) => {
     if (error) {

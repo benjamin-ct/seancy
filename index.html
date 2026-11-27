@@ -23,16 +23,17 @@
          0. Limite : un changement de thème en cours de session ne repeint la
          barre de statut qu'au relancement de l'appli installée. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- Fichier externe (pas de <script> inline) : la CSP du Worker n'inclut
-         pas 'unsafe-inline' sur script-src, voir public/theme-init.js pour
-         le détail. Bloquant (pas de defer/async/module) pour s'exécuter
-         avant le premier paint du loader ci-dessous. -->
-    <script src="/theme-init.js"></script>
     <meta
       name="description"
       content="Découvrez où regarder vos films et séries en streaming, tirez un titre au hasard, et suivez ce que vous avez déjà vu."
     />
     <title>Seancy — Films &amp; séries à regarder</title>
+    <!-- Fichier externe (pas de <script> inline) : la CSP du Worker n'inclut
+         pas 'unsafe-inline' sur script-src, voir public/theme-init.js pour
+         le détail. Bloquant (pas de defer/async/module) pour s'exécuter
+         avant le premier paint du loader ci-dessous. Après les icônes et le
+         <title> : il les remplace par ceux de l'espace admin sur ses pages. -->
+    <script src="/theme-init.js"></script>
     <!-- Aperçu de lien par défaut. Pour les fiches, profils et listes, le
          Worker remplace ces balises par celles de la page quand c'est un
          robot qui demande (voir worker/page-meta.ts). L'image doit être une
