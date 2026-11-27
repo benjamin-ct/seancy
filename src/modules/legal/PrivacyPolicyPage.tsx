@@ -69,6 +69,10 @@ export default function PrivacyPolicyPage() {
             <strong>{t("privacyPolicyPage.dataCollected.sharedProfile.label")}</strong>
             {t("privacyPolicyPage.dataCollected.sharedProfile.text")}
           </li>
+          <li>
+            <strong>{t("privacyPolicyPage.dataCollected.feedback.label")}</strong>
+            {t("privacyPolicyPage.dataCollected.feedback.text")}
+          </li>
         </ul>
       </LegalSection>
 
@@ -114,6 +118,14 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>{t("privacyPolicyPage.sharing.gravatar.label")}</strong>
             {t("privacyPolicyPage.sharing.gravatar.text")}
+          </li>
+          <li>
+            <strong>{t("privacyPolicyPage.sharing.discord.label")}</strong>
+            {t("privacyPolicyPage.sharing.discord.text")}
+          </li>
+          <li>
+            <strong>{t("privacyPolicyPage.sharing.anthropic.label")}</strong>
+            {t("privacyPolicyPage.sharing.anthropic.text")}
           </li>
         </ul>
         <p>{t("privacyPolicyPage.sharing.outro")}</p>

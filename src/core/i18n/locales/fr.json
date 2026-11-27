@@ -93,12 +93,38 @@
       "notifications": { "title": "Notifications", "summary": "Alertes sorties et nouveautés" },
       "affichage": { "title": "Affichage", "summary": "Langue, région, thème" },
       "donnees": { "title": "Mes données", "summary": "Export et suppression du compte" },
+      "suggestions": { "title": "Suggestions", "summary": "Proposer une idée ou une amélioration" },
       "a-propos": { "title": "À propos", "summary": "Mentions légales et contact" }
     }
   },
   "dataSettings": {
     "groupTitle": "Mes données",
     "groupLead": "Exportez une copie de vos données ou supprimez votre compte."
+  },
+  "feedbackPage": {
+    "lead": "Une fonctionnalité qui vous manque, une amélioration, un souci ? Dites-nous ce que vous aimeriez voir dans Seancy : chaque suggestion est lue.",
+    "kindLabel": "Type de suggestion",
+    "kinds": {
+      "feature": "Nouvelle fonctionnalité",
+      "improvement": "Amélioration",
+      "bug": "Problème rencontré",
+      "other": "Autre"
+    },
+    "messageLabel": "Votre suggestion",
+    "messagePlaceholder": "Par exemple : pouvoir trier ma liste par date de sortie…",
+    "count": "{{count}}/{{max}}",
+    "minHint": "{{min}} caractères minimum.",
+    "anonymous": "Votre suggestion est envoyée sans votre nom ni votre adresse e-mail : n'y mettez pas d'information personnelle.",
+    "send": "Envoyer la suggestion",
+    "sending": "Envoi…",
+    "sentTitle": "Merci pour votre suggestion !",
+    "sentText": "Elle a bien été envoyée à l'équipe de Seancy.",
+    "sendAnother": "Envoyer une autre suggestion",
+    "errors": {
+      "tooShort": "Votre suggestion est trop courte ({{min}} caractères minimum).",
+      "rateLimited": "Vous avez envoyé beaucoup de suggestions aujourd'hui : réessayez demain.",
+      "generic": "Impossible d'envoyer la suggestion pour le moment. Réessayez plus tard."
+    }
   },
   "aboutPage": {
     "lead": "Seancy, un projet personnel pour suivre ses films et séries.",
@@ -730,7 +756,7 @@
   "privacyPolicyPage": {
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : {{date}}",
-    "lastUpdatedValue": "25 novembre 2026",
+    "lastUpdatedValue": "27 novembre 2026",
     "controller": {
       "title": "Responsable du traitement",
       "textBefore": "Seancy est un projet personnel, sans structure commerciale, opéré depuis la France. Le traitement des données décrit ci-dessous relève donc du droit français et du RGPD. Il n'y a pas encore d'adresse de contact publique dédiée : en attendant, vous pouvez nous joindre "
@@ -768,6 +794,10 @@
       "reminders": {
         "label": "Rappels « Me prévenir »",
         "text": " : quand vous activez la cloche d'un titre à venir, nous enregistrons sur votre compte ce titre (identifiant, nom, affiche, date de sortie), la date du rappel et les plateformes de streaming déjà connues pour ce titre. Ils servent uniquement à vous prévenir le jour de la sortie et à l'arrivée du titre sur une plateforme. Désactiver la cloche supprime le rappel."
+      },
+      "feedback": {
+        "label": "Suggestions",
+        "text": " (si vous en envoyez depuis Réglages → Suggestions) : le type et le texte de votre suggestion, transmis à l'équipe de Seancy sans votre nom, votre adresse e-mail ni l'identifiant de votre compte. Elle est lue par l'équipe (qui en est prévenue sur Discord) et peut servir à préparer une évolution de l'application, y compris avec Claude, un outil de développement assisté par IA (voir plus bas). N'étant pas rattachée à votre compte, elle n'est pas supprimée avec lui : n'y mettez pas d'information personnelle. Seul un compteur technique lié à votre compte limite le nombre d'envois par jour ; il est effacé ensuite."
       },
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
@@ -812,6 +842,14 @@
       "gravatar": {
         "label": "Gravatar",
         "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse e-mail. Nous ne transmettons jamais votre e-mail en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
+      },
+      "discord": {
+        "label": "Discord",
+        "text": " : prévient l'équipe de Seancy de chaque nouvelle suggestion par un message qui en reprend le début (premiers mots, sans votre nom, votre adresse e-mail ni l'identifiant de votre compte)."
+      },
+      "anthropic": {
+        "label": "Anthropic (Claude)",
+        "text": " : outil de développement assisté par IA. Quand l'équipe décide de donner suite à une suggestion, son texte peut lui être transmis pour préparer la modification de l'application (traitement lancé depuis GitHub Actions) ; il n'est jamais publié sur le dépôt public du projet."
       },
       "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires.",
       "google": {

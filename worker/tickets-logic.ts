@@ -800,3 +800,46 @@ export function mergeLabels(defs: LabelDef[], incoming: unknown): LabelDef[] {
   }
   return out;
 }
+
+// ---------- Suggestions des utilisateurs ----------
+
+/** Étiquette des suggestions envoyées depuis Réglages › Suggestions, et sa couleur si elle n'existe pas encore. */
+export const FEEDBACK_LABEL: LabelDef = { name: "Suggestion", color: "sky" };
+export const FEEDBACK_KINDS = ["feature", "improvement", "bug", "other"] as const;
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
+export const FEEDBACK_MIN = 10;
+export const FEEDBACK_MAX = 2000;
+const FEEDBACK_KIND_TEXT: Record<FeedbackKind, string> = {
+  feature: "Nouvelle fonctionnalité",
+  improvement: "Amélioration",
+  bug: "Problème rencontré",
+  other: "Autre",
+};
+
+/**
+ * Suggestion d'un utilisateur rangée en idée (colonne Idées, zone humaine) :
+ * titre tiré de son début, type et texte tels quels. Anonyme : ni adresse ni
+ * identifiant de compte (la limite d'envoi est tenue à part, par compte).
+ * `null` si le texte est trop court une fois les espaces retirés.
+ */
+export function feedbackTicket(input: { kind?: unknown; message?: unknown }): TicketData | null {
+  const message = str(input.message, FEEDBACK_MAX)
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (message.replace(/\s+/g, "").length < FEEDBACK_MIN) {
+    return null;
+  }
+  const kind: FeedbackKind = (FEEDBACK_KINDS as readonly string[]).includes(String(input.kind))
+    ? (input.kind as FeedbackKind)
+    : "other";
+  const line = message.split("\n")[0].replace(/\s+/g, " ").trim();
+  const head = line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line;
+  return cleanData({
+    title: `Suggestion : ${head}`,
+    detail: `**Type :** ${FEEDBACK_KIND_TEXT[kind]}\n\n${message}\n\n*Envoyée par un utilisateur depuis Réglages › Suggestions (anonyme).*`,
+    labels: [FEEDBACK_LABEL.name],
+    author: "Utilisateur de Seancy",
+    authorEmail: "",
+  });
+}

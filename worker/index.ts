@@ -57,9 +57,16 @@ import {
 } from "./db.ts";
 import { notifyUser } from "./notify.ts";
 import { runDailyCheck } from "./scheduled.ts";
-import { handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
+import { addFeedback, handleTickets, pushAdmins, runTicketsCron } from "./tickets.ts";
+import { feedbackTicket } from "./tickets-logic.ts";
 import { accessGate, adminEmails, handleAdmin, isAdminHostname, siteConfig } from "./admin.ts";
-import { INTERNAL_HOSTNAME, adminWorkerRoute, forwardToAdmin } from "./admin-split.ts";
+import {
+  FEEDBACK_INTERNAL_PATH,
+  INTERNAL_HOSTNAME,
+  adminWorkerRoute,
+  forwardToAdmin,
+  isInternalCall,
+} from "./admin-split.ts";
 import { searchLocalIndex, syncPopularTitles } from "./search-index.ts";
 import {
   buildTasteContinuation,
@@ -1763,6 +1770,67 @@ async function handleConfirmAccountDeletion(request: Request, env: Env): Promise
   return json({ ok: true, pendingDeletionAt: result.pendingDeletionAt });
 }
 
+// Suggestion envoyée depuis Réglages › Suggestions : rangée en idée sur la
+// page Tickets (worker/tickets.ts, addFeedback), anonyme. Réservée aux
+// membres connectés et plafonnée par compte contre le spam.
+const FEEDBACK_WINDOW_MS = 24 * 60 * 60_000;
+async function handleFeedback(request: Request, env: Env): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (user instanceof Response) {
+    return user;
+  }
+  const body = await readJsonObject(request);
+  if (!body) {
+    return json({ error: "JSON invalide." }, 400);
+  }
+  const data = feedbackTicket({ kind: body.kind, message: body.message });
+  if (!data) {
+    return json({ error: "Suggestion trop courte.", reason: "too-short" }, 400);
+  }
+  if (
+    !(await checkRateLimit(env.DB, `feedback:user:${user.id}`, {
+      limit: 5,
+      windowMs: FEEDBACK_WINDOW_MS,
+    }))
+  ) {
+    const retryAfter = secondsUntilWindowEnd(FEEDBACK_WINDOW_MS);
+    return json({ error: "Trop de suggestions.", reason: "rate-limited", retryAfter }, 429, {
+      "retry-after": String(retryAfter),
+    });
+  }
+  // Production : rangée par le Worker admin (worker/admin-split.ts), qui garde le webhook Discord des
+  // tickets ; preview, develop et local (sans lien vers l'admin) : rangée ici, sur leur propre base
+  if (env.ADMIN) {
+    const res = await env.ADMIN.fetch(`https://${INTERNAL_HOSTNAME}${FEEDBACK_INTERNAL_PATH}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // Texte d'origine : l'admin refait la même mise en forme (feedbackTicket), sans données toutes faites
+      body: JSON.stringify({ kind: body.kind, message: body.message }),
+    });
+    if (!res.ok) {
+      throw new Error(`Suggestion refusée par le Worker admin (${res.status})`);
+    }
+  } else {
+    await addFeedback(env, data);
+  }
+  return json({ ok: true });
+}
+
+/** Côté Worker admin : suggestion déjà validée et comptée par le Worker du site (handleFeedback). */
+async function handleInternalFeedback(request: Request, env: Env): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (pathname !== FEEDBACK_INTERNAL_PATH || request.method !== "POST") {
+    return json({ error: "Introuvable" }, 404);
+  }
+  const body = await readJsonObject(request);
+  const data = body && feedbackTicket({ kind: body.kind, message: body.message });
+  if (!data) {
+    return json({ error: "Suggestion invalide." }, 400);
+  }
+  const id = await addFeedback(env, data);
+  return json({ ok: true, id });
+}
+
 async function handleCancelAccountDeletion(request: Request, env: Env): Promise<Response> {
   const user = await requireUser(request, env);
   if (user instanceof Response) {
@@ -3062,6 +3130,10 @@ export default withSentry({
     const url = new URL(request.url);
     // Espace admin sur son propre Worker (voir worker/admin-split.ts)
     if (env.ADMIN_WORKER && env.SITE) {
+      // Appel interne du site (service binding) : suggestion d'un utilisateur
+      if (isInternalCall(url.hostname)) {
+        return handleInternalFeedback(request, env);
+      }
       const route = adminWorkerRoute(url.pathname);
       if (route === "site") {
         return env.SITE.fetch(request);
@@ -3315,6 +3387,10 @@ async function routeRequest(
   }
   if (url.pathname === "/api/account/delete/cancel" && request.method === "POST") {
     return handleCancelAccountDeletion(request, env);
+  }
+
+  if (url.pathname === "/api/feedback" && request.method === "POST") {
+    return handleFeedback(request, env);
   }
 
   if (url.pathname === "/api/account/export" && request.method === "GET") {

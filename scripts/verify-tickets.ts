@@ -9,6 +9,7 @@ import {
   applyAction,
   cleanData,
   cleanLabelDefs,
+  feedbackTicket,
   issueBody,
   mergeLabels,
   positionBefore,
@@ -842,6 +843,56 @@ const main = async () => {
       "Réécriture : réponse illisible",
       rewriteFrom("Juste un titre", { title: "T", detail: "" }),
       null
+    );
+  }
+
+  // ---------- Suggestions des utilisateurs (Réglages › Suggestions) ----------
+  {
+    const t = feedbackTicket({
+      kind: "feature",
+      message: "  Pouvoir trier ma liste\r\n\n\n\npar date  ",
+    });
+    check(
+      "Suggestion : titre, type, texte nettoyé, étiquette, anonyme",
+      t && {
+        title: t.title,
+        detail: t.detail,
+        labels: t.labels,
+        author: t.author,
+        authorEmail: t.authorEmail,
+      },
+      {
+        title: "Suggestion : Pouvoir trier ma liste",
+        detail:
+          "**Type :** Nouvelle fonctionnalité\n\nPouvoir trier ma liste\n\npar date\n\n*Envoyée par un utilisateur depuis Réglages › Suggestions (anonyme).*",
+        labels: ["Suggestion"],
+        author: "Utilisateur de Seancy",
+        authorEmail: "",
+      }
+    );
+    check(
+      "Suggestion : trop courte (espaces ignorés)",
+      feedbackTicket({ message: "a b c d e f" }),
+      null
+    );
+    check("Suggestion : texte absent", feedbackTicket({ kind: "bug" }), null);
+    check(
+      "Suggestion : type inconnu ramené à « Autre »",
+      feedbackTicket({ kind: "admin", message: "Un texte assez long" })?.detail.startsWith(
+        "**Type :** Autre\n\n"
+      ),
+      true
+    );
+    const long = feedbackTicket({ message: "x".repeat(5000) });
+    check(
+      "Suggestion : titre borné à 80 caractères",
+      long?.title.length,
+      "Suggestion : ".length + 80
+    );
+    check(
+      "Suggestion : texte borné à 2000 caractères",
+      long?.detail.includes("x".repeat(2001)),
+      false
     );
   }
 
