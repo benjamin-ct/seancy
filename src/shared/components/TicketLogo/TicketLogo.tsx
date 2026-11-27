@@ -1,7 +1,7 @@
 import styles from "./TicketLogo.module.css";
 
 // Environnement develop persistant (même adresse que worker/hostnames.ts).
-export const DEV_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+export const DEV_HOSTNAME = "seancy-develop.creusatbenjamin.workers.dev";
 const isDevSite = typeof window !== "undefined" && window.location.hostname === DEV_HOSTNAME;
 
 // « S » italique de Fraunces 500 vectorisé (même placement que le <text>

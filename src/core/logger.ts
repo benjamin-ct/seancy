@@ -25,7 +25,7 @@ const PRODUCTION_HOSTNAME = "seancy.com";
 // les erreurs client de admin.seancy.com retombaient à tort sur "preview"
 // (Sentry SEANCY-LOGS-3T).
 const ADMIN_HOSTNAME = "admin.seancy.com";
-const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+const PREPROD_HOSTNAME = "seancy-develop.creusatbenjamin.workers.dev";
 
 function getEnvironmentName(hostname: string): "production" | "preprod" | "preview" {
   if (hostname === PRODUCTION_HOSTNAME || hostname === ADMIN_HOSTNAME) {

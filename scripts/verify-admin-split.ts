@@ -68,7 +68,7 @@ check(
     ["www.seancy.com", "/api/tickets"],
     ["seancy.creusatbenjamin.workers.dev", "/api/tickets/tick"],
     ["admin.seancy.com", "/api/admin/overview"],
-    ["develop-seancy.creusatbenjamin.workers.dev", "/api/tickets"],
+    ["seancy-develop.creusatbenjamin.workers.dev", "/api/tickets"],
     ["pr-42-seancy.creusatbenjamin.workers.dev", "/api/admin/me"],
     ["admin.localhost", "/api/admin/me"],
     ["seancy.com", "/api/admin/tools/run-check"],
