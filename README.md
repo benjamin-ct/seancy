@@ -361,9 +361,11 @@ l'autre fait l'action de la colonne (envoi à Claude, annulation, validation, re
 
 ### Bascule depuis Trello
 
-1. Ajouter les secrets `TRELLO_KEY` et `TRELLO_TOKEN` au dépôt (les mêmes valeurs que le `.env` du NAS).
-2. Actions → **Import Trello** → _Run workflow_ avec l'adresse du board, d'abord en **essai à blanc** (liste de ce qui
-   serait importé), puis pour de vrai (`scripts/trello-import.ts`, conversion dans `scripts/trelloLib.ts`). Toutes
+1. Avoir `TRELLO_KEY` et `TRELLO_TOKEN` (les mêmes valeurs que le `.env` du NAS) et `SEANCY_TICKETS_KEY` (page
+   Tickets → Réglages).
+2. Lancer l'import en local (le workflow « Import Trello » a été retiré une fois l'import fait) :
+   `TRELLO_KEY=… TRELLO_TOKEN=… SEANCY_TICKETS_KEY=… node scripts/trello-import.ts <board> --dry-run` d'abord en
+   **essai à blanc** (liste de ce qui serait importé), puis sans `--dry-run` (conversion dans `scripts/trelloLib.ts`). Toutes
    les cartes ouvertes sont recopiées avec leur description, leurs checklists, étiquettes, commentaires et pièces
    jointes (fichiers de 1,5 Mo au plus recopiés, les autres gardés en liens). Rien n'est envoyé à Claude : les cartes
    « En cours » arrivent dans **À faire** (étiquette « Était en cours sur Trello »), « To merge » dans **À valider**.
