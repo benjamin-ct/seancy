@@ -23,5 +23,5 @@
     // de forcer une réécriture hors scope.
     "react/set-state-in-effect": "off"
   },
-  "ignorePatterns": ["dist", "dev-dist", "node_modules"]
+  "ignorePatterns": ["dist", "dist-develop", "dev-dist", "node_modules"]
 }

@@ -3,6 +3,9 @@
 // dépendance externe (juste zlib, déjà fourni par Node) : le ticket et sa
 // perforation sont calculés analytiquement, le « S » vectorisé est rempli
 // par balayage de lignes, le tout suréchantillonné 4×4 pour l'anticrénelage.
+// Deux jeux : celui du site (public/, ticket corail) et celui du site de
+// développement (develop-icons/, ticket bleu, copié par-dessus le premier au
+// déploiement de develop, voir scripts/develop-assets.ts).
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -12,6 +15,8 @@ type Rgba = readonly [number, number, number, number];
 const BG_DARK: Rgba = [0x09, 0x16, 0x2b, 0xff]; // #09162B (fond de la maquette « Nouvelle DA »)
 const BG_LIGHT: Rgba = [0xf5, 0xf8, 0xff, 0xff]; // #F5F8FF
 const CORAL: Rgba = [0xaa, 0x38, 0x36, 0xff]; // oklch(0.505 0.15 25) en sRGB
+// Site de développement : même bleu que le logo (TicketLogo.module.css, .dev).
+const DEV_BLUE: Rgba = [0x17, 0x62, 0xb6, 0xff]; // oklch(0.5 0.15 255) en sRGB
 const S_COLOR: Rgba = [0xf5, 0xf8, 0xff, 0xff]; // #F5F8FF
 
 // Même tracé que TICKET_S_PATH (TicketLogo.tsx), repère viewBox 0 0 120 80.
@@ -142,13 +147,16 @@ function blend(dst: number[], src: Rgba, alpha: number): void {
 
 const SUPERSAMPLE = 4;
 
+type IconOptions = {
+  rounded?: boolean;
+  ticketWidthRatio?: number;
+  bg?: Rgba | null;
+  ticketColor?: Rgba;
+};
+
 function drawIcon(
   size: number,
-  {
-    rounded = true,
-    ticketWidthRatio = 0.72,
-    bg = BG_DARK,
-  }: { rounded?: boolean; ticketWidthRatio?: number; bg?: Rgba | null } = {}
+  { rounded = true, ticketWidthRatio = 0.72, bg = BG_DARK, ticketColor = CORAL }: IconOptions = {}
 ): Buffer {
   const cornerR = rounded ? size * 0.18 : 0;
   // Pixels → unités du viewBox du ticket, centré sur le canevas.
@@ -200,10 +208,10 @@ function drawIcon(
         }
       }
       let alpha = mask / samples;
-      const color = [CORAL[0], CORAL[1], CORAL[2]];
+      const color = [ticketColor[0], ticketColor[1], ticketColor[2]];
       if (bg) {
         color.splice(0, 3, bg[0], bg[1], bg[2]);
-        blend(color, CORAL, ticket / samples);
+        blend(color, ticketColor, ticket / samples);
         blend(color, bg, perforation / samples);
       } else {
         // Fond transparent (favicon) : la perforation est découpée dans le
@@ -222,11 +230,7 @@ function drawIcon(
   return raw;
 }
 
-function writePng(
-  filePath: string,
-  size: number,
-  opts?: { rounded?: boolean; ticketWidthRatio?: number; bg?: Rgba | null }
-): void {
+function writePng(filePath: string, size: number, opts?: IconOptions): void {
   const raw = drawIcon(size, opts);
   const idat = zlib.deflateSync(raw, { level: 9 });
 
@@ -251,35 +255,65 @@ function writePng(
   console.log(`Écrit ${filePath} (${size}x${size})`);
 }
 
-const publicDir = path.join(import.meta.dirname, "..", "public");
-// Android (manifest PWA) : le standard `icons` du Web App Manifest ne permet
-// pas de varier selon le thème système, donc un seul jeu, sur le thème
-// sombre (par défaut de l'app).
-writePng(path.join(publicDir, "icon-192.png"), 192, { rounded: true });
-writePng(path.join(publicDir, "icon-512.png"), 512, { rounded: true });
-// Icône maskable : le motif doit rester dans la zone de sécurité (cercle de
-// 80% de diamètre centré) du masque adaptatif Android, qui gère lui-même la
-// forme — donc pas de coins arrondis ici, et un motif plus petit (demi-
-// diagonale du ticket ≈ 0,6 × sa largeur, à garder sous 0,4 × la taille).
-writePng(path.join(publicDir, "icon-maskable-512.png"), 512, {
-  rounded: false,
-  ticketWidthRatio: 0.58,
-});
-// iOS ("Ajouter à l'écran d'accueil") : Safari choisit entre ces deux icônes
-// au moment de l'ajout selon le thème système (voir les deux
-// <link rel="apple-touch-icon"> dans index.html).
-writePng(path.join(publicDir, "apple-touch-icon.png"), 180, {
-  rounded: true,
-  bg: BG_LIGHT,
-});
-writePng(path.join(publicDir, "apple-touch-icon-dark.png"), 180, {
-  rounded: true,
-  bg: BG_DARK,
-});
-// Favicon PNG (repli des navigateurs sans favicon SVG) : ticket seul, sur
-// fond transparent.
-writePng(path.join(publicDir, "favicon-32.png"), 32, {
-  rounded: false,
-  ticketWidthRatio: 1,
-  bg: null,
-});
+const rootDir = path.join(import.meta.dirname, "..");
+const publicDir = path.join(rootDir, "public");
+const developDir = path.join(rootDir, "develop-icons");
+
+function writeIcons(dir: string, ticketColor: Rgba): void {
+  fs.mkdirSync(dir, { recursive: true });
+  // Android (manifest PWA) : le standard `icons` du Web App Manifest ne permet
+  // pas de varier selon le thème système, donc un seul jeu, sur le thème
+  // sombre (par défaut de l'app).
+  writePng(path.join(dir, "icon-192.png"), 192, { rounded: true, ticketColor });
+  writePng(path.join(dir, "icon-512.png"), 512, { rounded: true, ticketColor });
+  // Icône maskable : le motif doit rester dans la zone de sécurité (cercle de
+  // 80% de diamètre centré) du masque adaptatif Android, qui gère lui-même la
+  // forme — donc pas de coins arrondis ici, et un motif plus petit (demi-
+  // diagonale du ticket ≈ 0,6 × sa largeur, à garder sous 0,4 × la taille).
+  writePng(path.join(dir, "icon-maskable-512.png"), 512, {
+    rounded: false,
+    ticketWidthRatio: 0.58,
+    ticketColor,
+  });
+  // iOS ("Ajouter à l'écran d'accueil") : Safari choisit entre ces deux icônes
+  // au moment de l'ajout selon le thème système (voir les deux
+  // <link rel="apple-touch-icon"> dans index.html).
+  writePng(path.join(dir, "apple-touch-icon.png"), 180, {
+    rounded: true,
+    bg: BG_LIGHT,
+    ticketColor,
+  });
+  writePng(path.join(dir, "apple-touch-icon-dark.png"), 180, {
+    rounded: true,
+    bg: BG_DARK,
+    ticketColor,
+  });
+  // Favicon PNG (repli des navigateurs sans favicon SVG) : ticket seul, sur
+  // fond transparent.
+  writePng(path.join(dir, "favicon-32.png"), 32, {
+    rounded: false,
+    ticketWidthRatio: 1,
+    bg: null,
+    ticketColor,
+  });
+}
+
+writeIcons(publicDir, CORAL);
+writeIcons(developDir, DEV_BLUE);
+// Favicon SVG de develop : celui du site (public/favicon.svg, écrit à la main),
+// ticket recoloré en bleu.
+const hex = (c: Rgba) =>
+  "#" +
+  c
+    .slice(0, 3)
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("");
+const faviconSvg = fs.readFileSync(path.join(publicDir, "favicon.svg"), "utf8");
+if (!faviconSvg.includes(`fill="${hex(CORAL)}"`)) {
+  throw new Error(`public/favicon.svg : couleur du ticket (${hex(CORAL)}) introuvable.`);
+}
+fs.writeFileSync(
+  path.join(developDir, "favicon.svg"),
+  faviconSvg.replace(`fill="${hex(CORAL)}"`, `fill="${hex(DEV_BLUE)}"`)
+);
+console.log(`Écrit ${path.join(developDir, "favicon.svg")}`);
