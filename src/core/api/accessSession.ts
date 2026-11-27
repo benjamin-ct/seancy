@@ -11,7 +11,8 @@
 // reconnecter, qui ramène ensuite sur la même page.
 
 // Paramètre ajouté à l'URL pour forcer une vraie navigation réseau : le
-// précache ne sert l'URL que sans paramètre inconnu. Retiré au retour.
+// service worker ne sert pas une URL qui le porte (liste d'exclusion de sa
+// route de navigation, src/sw.ts). Retiré au retour.
 const REAUTH_PARAM = "reauth";
 const LAST_REAUTH_KEY = "seancy.lastAccessReauth";
 // Garde-fou : jamais deux renvois vers Access en moins d'une minute, pour ne

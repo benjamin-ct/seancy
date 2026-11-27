@@ -16,7 +16,7 @@ interface Overview {
     "users" | "usersWeek" | "activeMonth" | "subscriptions" | "libraryItems" | "customLists",
     number
   >;
-  tickets: Partial<Record<"idea" | "todo" | "work" | "review" | "done", number>>;
+  tickets: Partial<Record<"suggestion" | "idea" | "todo" | "work" | "review" | "done", number>>;
   config: { group: string; items: { name: string; ok: boolean; help: string }[] }[];
 }
 
@@ -30,6 +30,7 @@ const STATS: [keyof Overview["stats"], string][] = [
   ["customLists", "Listes perso"],
 ];
 const COLUMNS: [keyof Overview["tickets"], string][] = [
+  ["suggestion", "Suggestions"],
   ["idea", "Idées"],
   ["todo", "À faire"],
   ["work", "En cours"],

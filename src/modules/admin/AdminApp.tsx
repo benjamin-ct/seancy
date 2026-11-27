@@ -13,9 +13,11 @@ import {
   useLocation,
   useSearchParams,
 } from "react-router-dom";
+import { isNetworkError, recoverFromAccessExpiry } from "../../core/api/accessSession.ts";
 import { useAuth } from "../../core/context/AuthContext.tsx";
 import { hideInitialLoader } from "../../core/initialLoader.ts";
 import { adminPrefix, isAdminHost } from "../../core/lib/adminHost.ts";
+import { DEV_HOSTNAME, isDevSite } from "../../core/lib/devSite.ts";
 import Icon, { type IconName } from "../../shared/components/Icon/Icon.tsx";
 import TicketLogo from "../../shared/components/TicketLogo/TicketLogo.tsx";
 import { LoginForm, VerifyAuthPage } from "../auth/index.ts";
@@ -109,7 +111,17 @@ export default function AdminApp() {
           setError("");
         }
       })
-      .catch(() => live && setError("Serveur injoignable"));
+      .catch(async (err: unknown) => {
+        // Session Cloudflare Access expirée (page servie par le service
+        // worker, appel redirigé vers la connexion Access et bloqué) : la
+        // page repart vers Access. Sinon, vraie coupure réseau.
+        if (isNetworkError(err) && (await recoverFromAccessExpiry())) {
+          return;
+        }
+        if (live) {
+          setError("Serveur injoignable");
+        }
+      });
     return () => {
       live = false;
     };
@@ -160,6 +172,9 @@ export default function AdminApp() {
         <div className={styles.card}>
           <h1>Accès refusé</h1>
           <p className={styles.muted}>{error}</p>
+          <button type="button" className={styles.btn} onClick={() => window.location.reload()}>
+            Réessayer
+          </button>
         </div>
       );
     }
@@ -243,6 +258,17 @@ export default function AdminApp() {
           <a href={siteUrl} className={styles.siteLink}>
             Voir le site
           </a>
+          {/* Sur le site de développement lui-même, « Voir le site » y mène déjà */}
+          {!isDevSite && (
+            <a
+              href={`https://${DEV_HOSTNAME}/`}
+              className={styles.siteLink}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Site de développement
+            </a>
+          )}
         </div>
       </header>
       <main id="contenu" className={styles.main} tabIndex={-1}>

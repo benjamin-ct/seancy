@@ -21,9 +21,10 @@ import { libraryItemToMediaItem } from "../../shared/lib/libraryItem.ts";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
 import type { CustomList, LibraryItem, PublicProfile } from "../../core/types/library.ts";
 import PublicTopPicks from "./components/PublicTopPicks.tsx";
+import PublicReviews from "./components/PublicReviews.tsx";
 import styles from "./PublicProfilePage.module.css";
 
-type Tab = "seen" | "want" | "lists";
+type Tab = "seen" | "want" | "reviews" | "lists";
 type TypeFilter = "all" | "movie" | "tv";
 
 type State =
@@ -169,6 +170,12 @@ export default function PublicProfilePage() {
     const byKey = new Map(profile.watched.map((item) => [`${item.mediaType}:${item.id}`, item]));
     return profile.topPicks.flatMap((key) => byKey.get(key) ?? []).slice(0, TOP_COUNT);
   }, [profile]);
+
+  // Titres vus avec un avis texte (onglet « Avis »), dans l'ordre des « Vus ».
+  const reviewed = useMemo(
+    () => (profile?.watched ?? []).filter((item) => item.reviewText),
+    [profile]
+  );
 
   const averageRating = useMemo(() => {
     const ratings = (profile?.watched ?? [])
@@ -319,6 +326,7 @@ export default function PublicProfilePage() {
   const tabs: Array<{ id: Tab; label: string; count: number }> = [
     { id: "seen", label: t("publicProfile.tabSeen"), count: profile.watched.length },
     { id: "want", label: t("publicProfile.tabWant"), count: profile.watchlist.length },
+    { id: "reviews", label: t("publicProfile.tabReviews"), count: reviewed.length },
     { id: "lists", label: t("publicProfile.tabLists"), count: profile.customLists.length },
   ];
 
@@ -448,11 +456,13 @@ export default function PublicProfilePage() {
         </div>
         {(tab !== "lists" || openList) && (
           <>
-            <p className={styles.legend}>
-              <Icon name="star" size={12} filled /> {t("publicProfile.legendOwner", { name })} ·{" "}
-              <Icon name="star" size={12} /> <Icon name="check" size={12} />{" "}
-              {t("publicProfile.legendVisitor")}
-            </p>
+            {tab !== "reviews" && (
+              <p className={styles.legend}>
+                <Icon name="star" size={12} filled /> {t("publicProfile.legendOwner", { name })} ·{" "}
+                <Icon name="star" size={12} /> <Icon name="check" size={12} />{" "}
+                {t("publicProfile.legendVisitor")}
+              </p>
+            )}
             <div
               className={styles.segmented}
               role="group"
@@ -486,6 +496,13 @@ export default function PublicProfilePage() {
           <EmptyState label={t("publicProfile.emptyWant")} />
         ) : (
           <ItemGrid items={byType(profile.watchlist)} genreNames={genreMap} />
+        ))}
+
+      {tab === "reviews" &&
+        (byType(reviewed).length === 0 ? (
+          <EmptyState label={t("publicProfile.emptyReviews")} />
+        ) : (
+          <PublicReviews items={byType(reviewed)} ownerName={name} />
         ))}
 
       {tab === "lists" &&

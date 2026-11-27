@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import { usePosterThumbhash } from "../../shared/lib/thumbhash.ts";
-import type { TFunction } from "i18next";
 import {
   backdropUrl,
   posterUrl,
@@ -28,6 +27,7 @@ import {
   Icon,
 } from "../../shared/components/index.ts";
 import EpisodeTracker from "./components/EpisodeTracker.tsx";
+import { formatRuntime } from "./formatRuntime.ts";
 import CollectionSection from "./components/CollectionSection.tsx";
 import DetailSkeleton, { DETAIL_POSTER_SIZES } from "./components/DetailSkeleton.tsx";
 import WhereToWatch from "./components/WhereToWatch.tsx";
@@ -75,20 +75,6 @@ const TV_STATUS_KEYS: Record<string, string> = {
   Ended: "detailPage.tvStatusEnded",
   Canceled: "detailPage.tvStatusCanceled",
 };
-
-// « 2 h 46 » plutôt que « 166 min » (maquette) ; les durées de moins d'une
-// heure (épisodes) restent en minutes.
-function formatRuntime(t: TFunction, minutes: number): string {
-  if (minutes < 60) {
-    return t("detailPage.runtimeMinutes", { count: minutes });
-  }
-  const m = minutes % 60;
-  return t("detailPage.runtimeHours", {
-    hours: Math.floor(minutes / 60),
-    minutes: String(m).padStart(2, "0"),
-    count: m,
-  });
-}
 
 function languageName(code: string | undefined, localeTag: string): string | null {
   if (!code) {
@@ -150,6 +136,13 @@ export default function DetailPage() {
   const [newListName, setNewListName] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
   const [markingSeries, setMarkingSeries] = useState(false);
+  // Brouillon local de l'avis texte : distinct de la valeur stockée tant que
+  // l'utilisateur n'a pas cliqué "Enregistrer" (pas de synchro à chaque
+  // frappe, contrairement à la note qui s'applique au clic sur une étoile).
+  const [reviewDraft, setReviewDraft] = useState<string | null>(null);
+  // Retour après « Enregistrer l'avis » (avis enregistré ou retiré), effacé
+  // au bout de quelques secondes ou dès que l'avis est de nouveau modifié.
+  const [reviewSaved, setReviewSaved] = useState<"saved" | "removed" | null>(null);
   const { episodesBySeason, loadSeason } = useSeasonEpisodes(Number(id));
   const {
     isWatched,
@@ -159,6 +152,8 @@ export default function DetailPage() {
     markSeriesWatched,
     getRating,
     rateWatched,
+    getReview,
+    reviewWatched,
     getShowEntry,
     customLists,
     isInList,
@@ -188,6 +183,8 @@ export default function DetailPage() {
     }
     let cancelled = false;
     setCastBatches(0);
+    setReviewDraft(null);
+    setReviewSaved(null);
     const ready = peekDetails(mediaType, id);
     if (ready) {
       setDetails(ready);
@@ -237,6 +234,14 @@ export default function DetailPage() {
     const timer = setTimeout(() => setLinkCopied(false), 2500);
     return () => clearTimeout(timer);
   }, [linkCopied]);
+
+  useEffect(() => {
+    if (!reviewSaved) {
+      return;
+    }
+    const timer = setTimeout(() => setReviewSaved(null), 3500);
+    return () => clearTimeout(timer);
+  }, [reviewSaved]);
 
   if (!mediaType || !id) {
     return <NotFoundPage />;
@@ -425,6 +430,21 @@ export default function DetailPage() {
       return;
     }
     rateWatched(mediaType, id, value);
+  }
+
+  // Avis texte libre, même porte que la note (seul un titre vu peut en
+  // recevoir un) : brouillon local tant que non enregistré.
+  const storedReview = watched ? getReview(mediaType, id) : null;
+  const reviewValue = reviewDraft ?? storedReview ?? "";
+  const reviewDirty = reviewDraft !== null && reviewDraft !== (storedReview ?? "");
+
+  function saveReview() {
+    if (!mediaType || !id || !watched || !requireMember()) {
+      return;
+    }
+    reviewWatched(mediaType, id, reviewValue);
+    setReviewDraft(null);
+    setReviewSaved(reviewValue.trim() ? "saved" : "removed");
   }
 
   // « Marquer la série comme vue » coche tous les épisodes diffusés (listes
@@ -899,6 +919,53 @@ export default function DetailPage() {
                 )
               ) : (
                 <RatingStars value={rating} onRate={rate} clearable hideValue disabled={!watched} />
+              )}
+              {watched && (
+                <div className={styles.yourReview}>
+                  <label className={styles.yourReviewLabel} htmlFor="your-review-text">
+                    {t("detailPage.yourReviewLabel")}
+                  </label>
+                  <textarea
+                    id="your-review-text"
+                    className={styles.yourReviewInput}
+                    value={reviewValue}
+                    maxLength={1000}
+                    placeholder={t("detailPage.yourReviewPlaceholder")}
+                    onChange={(e) => {
+                      setReviewDraft(e.target.value);
+                      setReviewSaved(null);
+                    }}
+                  />
+                  <div className={styles.yourReviewFooter}>
+                    {/* Le message de confirmation prend la place du compteur
+                        quelques secondes (place comptée sur mobile). */}
+                    {!reviewSaved && (
+                      <span className={styles.yourReviewCount}>
+                        {t("detailPage.yourReviewCount", { count: reviewValue.length, max: 1000 })}
+                      </span>
+                    )}
+                    <span className={styles.yourReviewStatus} role="status">
+                      {reviewSaved && (
+                        <>
+                          <Icon name="check" strokeWidth={3} />{" "}
+                          {t(
+                            reviewSaved === "saved"
+                              ? "detailPage.yourReviewSaved"
+                              : "detailPage.yourReviewRemoved"
+                          )}
+                        </>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.yourReviewSave}
+                      onClick={saveReview}
+                      disabled={!reviewDirty}
+                    >
+                      {t("detailPage.yourReviewSave")}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

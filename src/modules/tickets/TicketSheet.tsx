@@ -19,11 +19,13 @@ import {
   EFFORT_NAMES,
   STEPS,
   ago,
+  archivable,
   columnName,
   day,
   fresh,
   lines,
   modelName,
+  movedText,
   prNumber,
   stepOf,
   viewable,
@@ -73,6 +75,8 @@ const EVENTS: Record<string, string> = {
   annule: "Envoi annulé",
   file: "Validé : en file pour la fusion",
   valide: "Validé, PR fusionnée",
+  archive: "Archivé",
+  desarchive: "Remis sur le tableau",
 };
 const ACCEPT = "image/*,video/mp4,video/quicktime,video/webm,application/pdf";
 
@@ -181,7 +185,12 @@ export default function TicketSheet({
   ask,
   onClose,
 }: SheetProps) {
-  const editable = t.status === "idea" || t.status === "todo";
+  const editable = t.status === "suggestion" || t.status === "idea" || t.status === "todo";
+  // Pas encore un ticket : suggestion d'un utilisateur ou idée (noms au féminin)
+  const fem = t.status === "suggestion" || t.status === "idea";
+  const kind = t.status === "suggestion" ? "Suggestion" : t.status === "idea" ? "Idée" : "Ticket";
+  const theKind =
+    t.status === "suggestion" ? "la suggestion" : t.status === "idea" ? "l'idée" : "le ticket";
   const me = (useAuth().email ?? "").toLowerCase();
   const mine = !!me && t.authorEmail === me;
   const member = t.members.some((p) => p.email === me);
@@ -313,17 +322,38 @@ export default function TicketSheet({
   const desc = lines(t.detail);
   const long = desc.length > 10 || t.detail.length > 900;
   const head = [
-    t.status === "idea" ? "Idée" : "Ticket",
+    kind,
     columnName(t.status),
     t.author
-      ? `${t.status === "idea" ? "notée" : "créé"} par ${t.author}${t.createdAt ? ` le ${day(t.createdAt)}` : ""}`
+      ? `${t.status === "suggestion" ? "envoyée" : fem ? "notée" : "créé"} par ${t.author}${t.createdAt ? ` le ${day(t.createdAt)}` : ""}`
       : "",
     t.members.length ? `avec ${t.members.map((p) => p.name || p.email).join(", ")}` : "",
     t.status === "done" ? `fait le ${day(t.doneAt)}` : "",
+    t.archived ? `archivé le ${day(t.archived)}` : "",
   ].filter(Boolean);
 
   const actions = (
     <div className={styles.acts}>
+      {t.status === "suggestion" && (
+        <>
+          <button
+            type="button"
+            className={styles.primary}
+            disabled={busy}
+            onClick={() => go(() => moveTicket(t.id, "idea", ""), movedText(t.status, "idea"))}
+          >
+            Garder en idée
+          </button>
+          <button
+            type="button"
+            className={styles.btn}
+            disabled={busy}
+            onClick={() => go(() => moveTicket(t.id, "todo", ""), movedText(t.status, "todo"))}
+          >
+            En faire un ticket
+          </button>
+        </>
+      )}
       {t.status === "idea" && (
         <>
           <button
@@ -390,6 +420,22 @@ export default function TicketSheet({
           }
         >
           {member ? "Me retirer" : "Me rajouter"}
+        </button>
+      )}
+      {archivable(t) && (
+        <button
+          type="button"
+          className={styles.btn}
+          disabled={busy}
+          title="Sortir du tableau sans supprimer : la recherche le retrouve"
+          onClick={() =>
+            go(
+              () => ticketAction(t.id, "archive"),
+              `${kind} ${fem ? "archivée : la recherche la" : "archivé : la recherche le"} retrouve`
+            )
+          }
+        >
+          Archiver
         </button>
       )}
       {t.status === "work" && (
@@ -610,6 +656,27 @@ export default function TicketSheet({
     </section>
   );
 
+  // Aperçu d'une pièce jointe : image ou vidéo ouverte dans la visionneuse, autre fichier dans un onglet
+  const fileView = (f: (typeof t.files)[number]) =>
+    viewable(f) ? (
+      <button
+        type="button"
+        className={styles.thumb}
+        aria-label={`Voir ${f.name}`}
+        onClick={() => setViewing(media.indexOf(f))}
+      >
+        {/^image\//.test(f.type) ? (
+          <img src={fileUrl(f)} alt="" loading="lazy" />
+        ) : (
+          <span>▶ {f.name}</span>
+        )}
+      </button>
+    ) : (
+      <a href={fileUrl(f)} target="_blank" rel="noopener noreferrer">
+        <span>{f.name}</span>
+      </a>
+    );
+
   const attachments = (
     <section className={styles.sec}>
       <h3>
@@ -620,24 +687,7 @@ export default function TicketSheet({
         <div className={styles.files}>
           {t.files.map((f) => (
             <span key={f.id} className={styles.file}>
-              {viewable(f) ? (
-                <button
-                  type="button"
-                  className={styles.thumb}
-                  aria-label={`Voir ${f.name}`}
-                  onClick={() => setViewing(media.indexOf(f))}
-                >
-                  {/^image\//.test(f.type) ? (
-                    <img src={fileUrl(f)} alt="" loading="lazy" />
-                  ) : (
-                    <span>▶ {f.name}</span>
-                  )}
-                </button>
-              ) : (
-                <a href={fileUrl(f)} target="_blank" rel="noopener noreferrer">
-                  <span>{f.name}</span>
-                </a>
-              )}
+              {fileView(f)}
               {editable && (
                 <button
                   type="button"
@@ -831,16 +881,43 @@ export default function TicketSheet({
       ),
     });
   }
+  // Pièces jointes dans le fil, à leur date d'ajout ; celles ajoutées ensemble (2 minutes) dans une seule bulle
+  const added: (typeof t.files)[] = [];
+  for (const f of [...t.files].filter((x) => x.at).sort((a, b) => (a.at ?? 0) - (b.at ?? 0))) {
+    const last = added[added.length - 1];
+    if (last && (f.at ?? 0) - (last[last.length - 1].at ?? 0) < 120_000) {
+      last.push(f);
+    } else {
+      added.push([f]);
+    }
+  }
+  for (const group of added) {
+    const at = group[0].at ?? 0;
+    activity.push({
+      at,
+      node: (
+        <li key={`f${group[0].id}`} className={`${styles.bubble} ${styles.me}`}>
+          <b>
+            {group.length > 1 ? `${group.length} pièces jointes` : "Pièce jointe"}{" "}
+            <small>{when(at)}</small>
+          </b>
+          <div className={styles.files}>
+            {group.map((f) => (
+              <span key={f.id} className={styles.file}>
+                {fileView(f)}
+              </span>
+            ))}
+          </div>
+        </li>
+      ),
+    });
+  }
   activity.sort((x, y) => y.at - x.at);
   const history = (
     <ol className={styles.hist}>
       {activity.map((x) => x.node)}
-      {!t.history.length && t.status !== "idea" && (
-        <li className={styles.event}>Pas encore envoyé à Claude</li>
-      )}
-      {!activity.length && t.status === "idea" && (
-        <li className={styles.event}>Pas encore d'activité</li>
-      )}
+      {!t.history.length && !fem && <li className={styles.event}>Pas encore envoyé à Claude</li>}
+      {!activity.length && fem && <li className={styles.event}>Pas encore d'activité</li>}
     </ol>
   );
 
@@ -928,17 +1005,12 @@ export default function TicketSheet({
     <div className={styles.row}>
       {deleting ? (
         <>
-          <span>Supprimer {t.status === "idea" ? "l'idée" : "le ticket"} et ses fichiers ?</span>
+          <span>Supprimer {theKind} et ses fichiers ?</span>
           <button
             type="button"
             className={styles.danger}
             onClick={async () => {
-              if (
-                await go(
-                  () => deleteTicket(t.id),
-                  t.status === "idea" ? "Idée supprimée" : "Ticket supprimé"
-                )
-              ) {
+              if (await go(() => deleteTicket(t.id), `${kind} ${fem ? "supprimée" : "supprimé"}`)) {
                 onClose();
               }
             }}
@@ -955,7 +1027,7 @@ export default function TicketSheet({
           className={`${styles.link} ${styles.del}`}
           onClick={() => setDeleting(true)}
         >
-          Supprimer {t.status === "idea" ? "l'idée" : "le ticket"}
+          Supprimer {theKind}
         </button>
       )}
     </div>
@@ -1003,6 +1075,23 @@ export default function TicketSheet({
           )}
         </div>
         {actions}
+        {t.archived > 0 && (
+          <div className={styles.prog} role="status">
+            <b>Archivé le {day(t.archived)}</b>
+            <p className={styles.progText}>
+              Hors du tableau : la recherche le retrouve. L'envoyer à Claude ou le changer de
+              colonne le remet aussi sur le tableau.
+            </p>
+            <button
+              type="button"
+              className={styles.link}
+              disabled={busy}
+              onClick={() => go(() => ticketAction(t.id, "unarchive"), "Remis sur le tableau")}
+            >
+              Remettre sur le tableau
+            </button>
+          </div>
+        )}
         {t.status === "work" && (
           <>
             {t.queued > 0 && (

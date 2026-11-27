@@ -12,3 +12,12 @@
 .perforation {
   stroke: var(--bg);
 }
+
+/* Site de développement (develop) : ticket bleu pour ne pas le confondre avec la prod. */
+.dev {
+  filter: drop-shadow(0 0 10px oklch(0.5 0.15 255 / 0.25));
+}
+
+.dev .body {
+  fill: oklch(0.5 0.15 255);
+}

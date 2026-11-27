@@ -205,6 +205,93 @@ export function buildTasteProfile(
   };
 }
 
+// Suite du défilement "Pour toi" une fois le lot épuisé : le pool de
+// candidats est borné aux titres populaires en cache (voir l'en-tête), donc
+// le lot s'épuise vite chez un profil qui a déjà vu ou écarté beaucoup de
+// titres. Le client enchaîne alors sur TMDB /discover filtré sur ces genres
+// préférés (OU), sans les genres ni les décennies écartés par le profil ni
+// les titres "pas intéressé" (voir src/modules/discover/tasteFeed.ts).
+// `excludeIds` n'est pas mis en cache avec le lot : il est relu à chaque
+// réponse (voir handleGetRecommendations), un clic "pas intéressé" ne
+// recalculant pas le lot.
+export interface TasteContinuation {
+  genreIds: number[];
+  excludeGenreIds: number[];
+  excludeDecades: number[];
+}
+
+// Genres TMDB valables pour /discover/movie et /discover/tv : les deux
+// listes ne se recoupent qu'en partie, alors que le profil mélange films et
+// séries.
+const MOVIE_GENRE_IDS = new Set([
+  28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878, 10770, 53, 10752, 37,
+]);
+const TV_GENRE_IDS = new Set([
+  10759, 16, 35, 80, 99, 18, 10751, 10762, 9648, 10763, 10764, 10765, 10766, 10767, 10768, 37,
+]);
+// Côté séries, TMDB regroupe action/aventure, SF/fantastique et
+// guerre/politique (même correspondance que TV_GENRE_EQUIVALENTS dans
+// ai-suggestions.ts).
+const MOVIE_TO_TV_GENRE: Record<number, number> = {
+  28: 10759,
+  12: 10759,
+  878: 10765,
+  14: 10765,
+  10752: 10768,
+};
+const TV_TO_MOVIE_GENRES: Record<number, number[]> = {
+  10759: [28, 12],
+  10765: [878, 14],
+  10768: [10752],
+};
+// Trois genres au plus : au-delà, le OU de /discover couvre presque tout le
+// catalogue et la suite redevient le flux des titres populaires.
+const CONTINUATION_GENRE_COUNT = 3;
+
+function genresForType(genreId: number, mediaType: RecommendationMediaType): number[] {
+  const valid = mediaType === "movie" ? MOVIE_GENRE_IDS : TV_GENRE_IDS;
+  if (valid.has(genreId)) {
+    return [genreId];
+  }
+  if (mediaType === "tv") {
+    const tvGenre = MOVIE_TO_TV_GENRE[genreId];
+    return tvGenre == null ? [] : [tvGenre];
+  }
+  return TV_TO_MOVIE_GENRES[genreId] ?? [];
+}
+
+// Genres préférés du profil (score positif) pour un type, sans les genres
+// écartés. `null` en cold start ou sans genre aimé : le client garde alors
+// le flux "Découvrir" classique.
+export function buildTasteContinuation(
+  profile: TasteProfile,
+  mediaType: RecommendationMediaType
+): TasteContinuation | null {
+  if (profile.isColdStart) {
+    return null;
+  }
+  const excluded = new Set([...profile.excludedGenreIds, ...profile.explicitlyExcludedGenreIds]);
+  const scores = new Map<number, number>();
+  for (const [genreId, score] of profile.genreScore) {
+    for (const target of genresForType(genreId, mediaType)) {
+      scores.set(target, (scores.get(target) ?? 0) + score);
+    }
+  }
+  const genreIds = [...scores.entries()]
+    .filter(([id, score]) => score > 0 && !excluded.has(id))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, CONTINUATION_GENRE_COUNT)
+    .map(([id]) => id);
+  if (genreIds.length === 0) {
+    return null;
+  }
+  return {
+    genreIds,
+    excludeGenreIds: [...excluded].sort((a, b) => a - b),
+    excludeDecades: [...profile.excludedDecades].sort((a, b) => a - b),
+  };
+}
+
 export async function getRecommendationCandidates(
   env: Env,
   mediaType: RecommendationMediaType,

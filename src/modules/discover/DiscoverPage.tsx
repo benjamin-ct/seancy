@@ -17,6 +17,7 @@ import {
   getRecommendations,
   postNotInterested,
   type RecommendationMediaItem,
+  type TasteContinuation,
 } from "../../core/api/recommendations.ts";
 import { logWarn } from "../../core/logger.ts";
 import {
@@ -39,6 +40,7 @@ import type { WatchProviderOption } from "../../core/api/tmdb.ts";
 import gridStyles from "../../shared/styles/mediaGrid.module.css";
 import TonightPick from "./TonightPick.tsx";
 import { useDiscoverFilters } from "./discoverFilters.ts";
+import { toTasteItems } from "./tasteFeed.ts";
 import styles from "./DiscoverPage.module.css";
 
 const GRID_SKELETON_COUNT = 12;
@@ -51,13 +53,21 @@ const GRID_SKELETON_COUNT = 12;
 // items/page TMDB, mais affichés par lots plus gros ici).
 const PERSONALIZED_PAGE_SIZE = 40;
 
+// Flux qui alimente la grille : lot personnalisé "Pour toi", puis sa suite
+// sur les genres préférés du profil (voir tasteFeed.ts), ou "Découvrir"
+// classique (filtre actif, visiteur, profil trop peu fourni ou repli).
+type FeedMode = "personalized" | "taste" | "classic";
+
 // Résultats déjà chargés, par entrée d'historique : au retour arrière, la
 // grille réapparaît tout de suite (sans squelette ni nouvel appel), prête à
-// être replacée à sa position de défilement.
+// être replacée à sa position de défilement, et le défilement reprend sur
+// le même flux.
 interface ResultsSnapshot {
   results: MediaItem[];
   page: number;
   totalPages: number;
+  feedMode: FeedMode;
+  continuation: TasteContinuation | null;
 }
 const resultsMemory = new Map<string, ResultsSnapshot>();
 
@@ -145,16 +155,16 @@ export default function DiscoverPage() {
   const { favoriteProviderIds } = useFavoriteProviders();
   const { excludedGenreIds } = useExcludedGenres();
   const { filterExcluded } = useExcludedTitles();
-  const { watchlist } = useLibrary();
+  const { watchlist, isWatched, isInWatchlist } = useLibrary();
   const { status: authStatus } = useAuth();
   // Grille personnalisée "Pour toi" affichée à la place du discover()
   // classique uniquement quand aucun filtre explicite n'est actif (sinon la
   // personnalisation contredirait le filtre choisi à la main) — voir
   // décision sur le ticket Trello "Recommandations personnalisées « Pour
-  // toi »". Mémorisé par le rendu réellement affiché (`usingPersonalized`
-  // state, pas recalculé ici) : un échec de l'appel /api/recommendations
-  // retombe sur discover() sans que l'utilisateur distingue une grille
-  // "vide" d'un filtre actif.
+  // toi »". Mémorisé par le rendu réellement affiché (`feedMode` state, pas
+  // recalculé ici) : un échec de l'appel /api/recommendations retombe sur
+  // discover() sans que l'utilisateur distingue une grille "vide" d'un
+  // filtre actif.
   const isDefaultFilters =
     genreIds.length === 0 &&
     providerIds.length === 0 &&
@@ -163,7 +173,33 @@ export default function DiscoverPage() {
     sortField === DEFAULT_SORT_FIELD &&
     sortDirection === DEFAULT_SORT_DIRECTION &&
     JSON.stringify(advanced) === JSON.stringify(EMPTY_ADVANCED_FILTERS);
-  const [usingPersonalized, setUsingPersonalized] = useState(false);
+  const personalizedEligible = isDefaultFilters && authStatus === "authenticated";
+  // Session encore en vérification au chargement (cookie compagnon présent,
+  // voir AuthContext) : sans filtre, la grille garde ses squelettes jusqu'à
+  // la réponse, comme TonightPick, au lieu d'afficher le flux classique puis
+  // de le remplacer par la grille "Pour toi" (clignotement au
+  // rafraîchissement). Avec un filtre, la connexion ne change rien à la
+  // grille : elle n'est pas rechargée.
+  const awaitingAuth = isDefaultFilters && authStatus === "loading";
+  // Clés de contenu pour l'effet de chargement : la synchro du compte
+  // remplace ces listes par une copie souvent identique juste après la
+  // connexion, ce qui rechargeait toute la grille pour rien. Les plateformes
+  // favorites ne comptent qu'avec « Mes plateformes ».
+  const excludedGenresKey = [...excludedGenreIds].sort((a, b) => a - b).join(",");
+  const favoriteProvidersKey = useMyPlatforms
+    ? [...favoriteProviderIds].sort((a, b) => a - b).join(",")
+    : "";
+  const [feedMode, setFeedMode] = useState<FeedMode>(restoredResults?.feedMode ?? "classic");
+  // Genres préférés du profil (et exclusions) pour la suite du lot "Pour
+  // toi", reçus avec sa dernière page.
+  const [continuation, setContinuation] = useState<TasteContinuation | null>(
+    restoredResults?.continuation ?? null
+  );
+  // Incrémenté à chaque rechargement de la grille (filtre, connexion
+  // établie...) : une page suivante encore en vol pour l'ancienne grille est
+  // ignorée, au lieu d'être ajoutée à la nouvelle et d'en fausser la
+  // pagination (flux, page courante).
+  const gridGenerationRef = useRef(0);
 
   const advancedKey = JSON.stringify(advanced);
   const advancedError = getAdvancedFiltersRangeError(advanced);
@@ -219,6 +255,44 @@ export default function DiscoverPage() {
       : a.badge.date.localeCompare(b.badge.date);
   });
 
+  // Suite "genres préférés" du lot "Pour toi" : jamais combinée à un filtre
+  // actif, comme la grille personnalisée qu'elle prolonge.
+  const fetchTastePage = (cont: TasteContinuation, pageNumber: number, signal?: AbortSignal) =>
+    discover(mediaType, {
+      signal,
+      page: pageNumber,
+      genreId: cont.genreIds,
+      excludeGenreIds: [...new Set([...cont.excludeGenreIds, ...excludedGenreIds])],
+      region,
+      excludeUpcoming: true,
+      includeRegionReleaseDate: true,
+    });
+  const isInLibrary = (id: number) => isWatched(mediaType, id) || isInWatchlist(mediaType, id);
+
+  // Lot "Pour toi" épuisé : le défilement continue sur les genres préférés
+  // du profil, ou sur le flux classique sans profil assez fourni. Page 0 :
+  // le prochain loadMore() charge la page 1 de ce flux.
+  const continueAfterLot = useCallback((next: TasteContinuation | null) => {
+    setContinuation(next);
+    setFeedMode(next ? "taste" : "classic");
+    setPage(0);
+    setTotalPages(1);
+  }, []);
+
+  // Fin de la suite "genres préférés" : le flux classique prend le relais
+  // (dès sa page 1), pour ne jamais couper le défilement.
+  const afterTastePage = useCallback((pageNumber: number, tmdbTotalPages: number) => {
+    const last = Math.min(tmdbTotalPages || 0, 500);
+    if (pageNumber >= last) {
+      setFeedMode("classic");
+      setPage(0);
+      setTotalPages(1);
+      return;
+    }
+    setPage(pageNumber);
+    setTotalPages(last);
+  }, []);
+
   useEffect(() => {
     if (keepRestoredResultsRef.current) {
       return;
@@ -252,6 +326,7 @@ export default function DiscoverPage() {
   }, [mediaType, region, i18n.language]);
 
   useEffect(() => {
+    gridGenerationRef.current += 1;
     if (advancedError) {
       // Plage min/max incohérente (ex. note min > note max) : on n'appelle
       // pas l'API, qui retomberait silencieusement sur 0 résultat.
@@ -261,6 +336,11 @@ export default function DiscoverPage() {
     }
     if (keepRestoredResultsRef.current) {
       keepRestoredResultsRef.current = false;
+      return;
+    }
+    if (awaitingAuth) {
+      setStatus("loading");
+      setLoadMoreError(null);
       return;
     }
     let cancelled = false;
@@ -292,8 +372,10 @@ export default function DiscoverPage() {
             inTheatersOnly,
             mediaType
           );
-          setUsingPersonalized(false);
+          setFeedMode("classic");
+          setContinuation(null);
           setResults(kept.map((r) => ({ ...r, mediaType })));
+          setPage(1);
           setTotalPages(Math.min(data.total_pages || 1, 500));
           setStatus("success");
         })
@@ -306,11 +388,43 @@ export default function DiscoverPage() {
         });
     };
 
+    // Lot "Pour toi" vide (tout déjà vu ou écarté) : la grille commence
+    // directement par sa suite sur les genres préférés.
+    const runTasteDiscover = (cont: TasteContinuation) => {
+      fetchTastePage(cont, 1, controller.signal)
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          const kept = toTasteItems(
+            filterExcluded(data.results, mediaType),
+            mediaType,
+            cont,
+            isInLibrary
+          );
+          if (kept.length === 0) {
+            runClassicDiscover();
+            return;
+          }
+          setFeedMode("taste");
+          setContinuation(cont);
+          setResults(kept);
+          afterTastePage(1, data.total_pages);
+          setStatus("success");
+        })
+        .catch((err) => {
+          if (cancelled || err?.name === "AbortError") {
+            return;
+          }
+          runClassicDiscover();
+        });
+    };
+
     // Grille "Pour toi" réservée aux comptes connectés sans filtre actif
     // (voir isDefaultFilters) : repli immédiat et silencieux sur discover()
     // dans tous les autres cas, y compris un échec ou une liste vide de
     // /api/recommendations (cold start non applicable, erreur réseau...).
-    if (authStatus === "authenticated" && isDefaultFilters) {
+    if (personalizedEligible) {
       getRecommendations(mediaType, PERSONALIZED_PAGE_SIZE, controller.signal, 0)
         .then((data) => {
           if (cancelled) {
@@ -318,13 +432,23 @@ export default function DiscoverPage() {
           }
           const items = filterExcluded(data.items, mediaType);
           if (items.length === 0) {
-            runClassicDiscover();
+            if (data.continuation) {
+              runTasteDiscover(data.continuation);
+            } else {
+              runClassicDiscover();
+            }
             return;
           }
-          setUsingPersonalized(true);
           setResults(items);
-          setPage(1);
-          setTotalPages(data.hasMore ? 2 : 1);
+          if (data.hasMore) {
+            setFeedMode("personalized");
+            setPage(1);
+            setTotalPages(2);
+          } else {
+            // Lot tenu en une seule page : la suite enchaîne dès le prochain
+            // chargement, au lieu de couper le scroll infini.
+            continueAfterLot(data.continuation);
+          }
           setStatus("success");
         })
         .catch((err) => {
@@ -349,13 +473,13 @@ export default function DiscoverPage() {
   }, [
     mediaType,
     genreIds,
-    excludedGenreIds,
+    excludedGenresKey,
     providerIds,
     useMyPlatforms,
-    favoriteProviderIds,
+    favoriteProvidersKey,
     region,
-    authStatus,
-    isDefaultFilters,
+    personalizedEligible,
+    awaitingAuth,
     sortField,
     sortDirection,
     advancedKey,
@@ -370,91 +494,88 @@ export default function DiscoverPage() {
     }
     const nextPage = page + 1;
     setLoadingMore(true);
+    const generation = gridGenerationRef.current;
+    const isStale = () => generation !== gridGenerationRef.current;
+    // TMDB peut renvoyer un même titre sur deux pages consécutives, et chaque
+    // flux qui prend le relais repart de sa page 1 : on déduplique pour
+    // éviter les doublons à l'écran.
+    const appendFresh = (toItems: (isShown: (id: number) => boolean) => MediaItem[]) =>
+      setResults((prev) => {
+        const shownIds = new Set(prev.map((item) => item.id));
+        return [...prev, ...toItems((id) => shownIds.has(id))];
+      });
 
-    if (usingPersonalized) {
-      getRecommendations(
+    let request: Promise<void>;
+    if (feedMode === "personalized") {
+      request = getRecommendations(
         mediaType,
         PERSONALIZED_PAGE_SIZE,
         undefined,
         (nextPage - 1) * PERSONALIZED_PAGE_SIZE
-      )
-        .then((data) => {
-          setResults((prev) => {
-            const seenIds = new Set(prev.map((item) => item.id));
-            const fresh = filterExcluded(data.items, mediaType).filter(
-              (item) => !seenIds.has(item.id)
-            );
-            return [...prev, ...fresh];
-          });
-          if (data.hasMore) {
-            setPage(nextPage);
-            setTotalPages(nextPage + 1);
-            return;
-          }
-          // Lot personnalisé épuisé (plafond de calcul côté Worker, voir
-          // RECOMMENDATION_CACHE_SIZE) : le scroll infini continue avec le
-          // flux "Découvrir" classique plutôt que de s'arrêter net — mêmes
-          // filtres par défaut, même pagination que les autres grilles.
-          setUsingPersonalized(false);
-          return discover(mediaType, {
-            page: nextPage,
-            genreId: genreIds,
-            excludeGenreIds: excludedGenreIds,
-            providerIds: activeProviderIds,
-            region,
-            sortField,
-            sortDirection,
-            excludeUpcoming: true,
-            includeRegionReleaseDate: true,
-            ...toDiscoverParams(advanced),
-          }).then((discoverData) => {
-            setResults((prev) => {
-              const seenIds = new Set(prev.map((item) => item.id));
-              const fresh = keepTheatricalOnly(
-                filterExcluded(discoverData.results, mediaType).filter(
-                  (item) => !seenIds.has(item.id)
-                ),
-                inTheatersOnly,
-                mediaType
-              ).map((r) => ({ ...r, mediaType }));
-              return [...prev, ...fresh];
-            });
-            setPage(nextPage);
-            setTotalPages(Math.min(discoverData.total_pages || 1, 500));
-          });
-        })
-        .catch((err) => setLoadMoreError(err))
-        .finally(() => setLoadingMore(false));
-      return;
-    }
-
-    discover(mediaType, {
-      page: nextPage,
-      genreId: genreIds,
-      excludeGenreIds: excludedGenreIds,
-      providerIds: activeProviderIds,
-      region,
-      sortField,
-      sortDirection,
-      excludeUpcoming: true,
-      includeRegionReleaseDate: true,
-      ...toDiscoverParams(advanced),
-    })
-      .then((data) => {
-        // TMDB peut renvoyer un même titre sur deux pages consécutives : on
-        // déduplique pour éviter les doublons à l'écran.
-        setResults((prev) => {
-          const seenIds = new Set(prev.map((item) => item.id));
-          const fresh = keepTheatricalOnly(
-            filterExcluded(data.results, mediaType).filter((item) => !seenIds.has(item.id)),
+      ).then((data) => {
+        if (isStale()) {
+          return;
+        }
+        appendFresh((isShown) =>
+          filterExcluded(data.items, mediaType).filter((item) => !isShown(item.id))
+        );
+        if (data.hasMore) {
+          setPage(nextPage);
+          setTotalPages(nextPage + 1);
+          return;
+        }
+        // Lot personnalisé épuisé (plafond de calcul côté Worker, voir
+        // RECOMMENDATION_CACHE_SIZE) : le scroll infini continue plutôt que
+        // de s'arrêter net.
+        continueAfterLot(data.continuation);
+      });
+    } else if (feedMode === "taste" && continuation) {
+      const cont = continuation;
+      request = fetchTastePage(cont, nextPage).then((data) => {
+        if (isStale()) {
+          return;
+        }
+        appendFresh((isShown) =>
+          toTasteItems(
+            filterExcluded(data.results, mediaType),
+            mediaType,
+            cont,
+            (id) => isShown(id) || isInLibrary(id)
+          )
+        );
+        afterTastePage(nextPage, data.total_pages);
+      });
+    } else {
+      request = discover(mediaType, {
+        page: nextPage,
+        genreId: genreIds,
+        excludeGenreIds: excludedGenreIds,
+        providerIds: activeProviderIds,
+        region,
+        sortField,
+        sortDirection,
+        excludeUpcoming: true,
+        includeRegionReleaseDate: true,
+        ...toDiscoverParams(advanced),
+      }).then((data) => {
+        if (isStale()) {
+          return;
+        }
+        appendFresh((isShown) =>
+          keepTheatricalOnly(
+            filterExcluded(data.results, mediaType).filter((item) => !isShown(item.id)),
             inTheatersOnly,
             mediaType
-          ).map((r) => ({ ...r, mediaType }));
-          return [...prev, ...fresh];
-        });
+          ).map((r) => ({ ...r, mediaType }))
+        );
         setPage(nextPage);
-      })
-      .catch((err) => setLoadMoreError(err))
+        // Utile quand ce flux prend le relais d'un autre (page 0, voir
+        // continueAfterLot/afterTastePage).
+        setTotalPages(Math.min(data.total_pages || 1, 500));
+      });
+    }
+    request
+      .catch((err) => !isStale() && setLoadMoreError(err))
       .finally(() => setLoadingMore(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -463,7 +584,8 @@ export default function DiscoverPage() {
     page,
     totalPages,
     advancedError,
-    usingPersonalized,
+    feedMode,
+    continuation,
     mediaType,
     genreIds,
     excludedGenreIds,
@@ -476,13 +598,16 @@ export default function DiscoverPage() {
     advancedKey,
     inTheatersOnly,
     i18n.language,
+    filterExcluded,
+    isWatched,
+    isInWatchlist,
   ]);
 
   useEffect(() => {
     if (status === "success") {
-      resultsMemory.set(location.key, { results, page, totalPages });
+      resultsMemory.set(location.key, { results, page, totalPages, feedMode, continuation });
     }
-  }, [location.key, status, results, page, totalPages]);
+  }, [location.key, status, results, page, totalPages, feedMode, continuation]);
 
   // Sentinelle observée pour déclencher le chargement de la page suivante
   // dès qu'elle approche du bas de l'écran (scroll infini, plus de bouton).
@@ -518,6 +643,9 @@ export default function DiscoverPage() {
   // une action que l'utilisateur considère déjà faite.
   const handleNotInterested = useCallback((item: MediaItem) => {
     setResults((prev) => prev.filter((r) => r.id !== item.id));
+    // Ni la suite du défilement : sa liste de titres écartés n'est relue
+    // côté Worker qu'à la fin du lot.
+    setContinuation((prev) => prev && { ...prev, excludeIds: [...prev.excludeIds, item.id] });
     postNotInterested(item).catch((err) =>
       logWarn('Seancy : signal "pas intéressé" non enregistré.', err)
     );

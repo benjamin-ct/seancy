@@ -2,7 +2,7 @@
 // Même origine que l'app : le cookie de session part automatiquement ; le
 // serveur vérifie que le compte fait partie des administrateurs.
 
-export type TicketStatus = "idea" | "todo" | "work" | "review" | "done";
+export type TicketStatus = "suggestion" | "idea" | "todo" | "work" | "review" | "done";
 export type Model = "opus" | "sonnet";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -19,6 +19,8 @@ export interface TicketFile {
   name: string;
   type: string;
   size: number;
+  /** Date d'ajout (ms) : place la pièce jointe dans le fil de la conversation. */
+  at?: number;
 }
 export interface Ticket {
   id: string;
@@ -51,6 +53,8 @@ export interface Ticket {
   queued: number;
   preview: string;
   doneAt: number;
+  /** Archivé (ms) : hors du tableau, retrouvé par la recherche ; 0 : sur le tableau. */
+  archived: number;
   history: HistoryEvent[];
   trello: {
     url: string;
@@ -163,7 +167,8 @@ export const joinTicket = (id: string, join: boolean) =>
 export const deleteTicket = (id: string) => request<{ ok: true }>(`/${id}`, { method: "DELETE" });
 export const moveTicket = (id: string, to: TicketStatus | undefined, before: string) =>
   post<{ ticket: Ticket }>(`/${id}/move`, { to, before });
-export type TicketAction = "send" | "unsend" | "validate" | "unqueue" | "retouch" | "reopen";
+export type TicketAction =
+  "send" | "unsend" | "validate" | "unqueue" | "retouch" | "reopen" | "archive" | "unarchive";
 export const ticketAction = (id: string, action: TicketAction, text = "") =>
   post<{ ok: true; queued?: boolean; merged?: number; position?: number; why?: string }>(
     `/${id}/action`,

@@ -93,6 +93,8 @@ interface LibraryContextValue {
   isInWatchlist: (mediaType: MediaType, id: number | string) => boolean;
   getRating: (mediaType: MediaType, id: number | string) => number | null;
   rateWatched: (mediaType: MediaType, id: number | string, rating: number | null) => void;
+  getReview: (mediaType: MediaType, id: number | string) => string | null;
+  reviewWatched: (mediaType: MediaType, id: number | string, reviewText: string | null) => void;
   /** Entrée de bibliothèque d'une série (vue ou en cours), pour lire ses notes
    * d'épisode/saison (voir core/lib/seriesRatings.ts). */
   getShowEntry: (mediaType: MediaType, id: number | string) => LibraryItem | null;
@@ -867,6 +869,40 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const getReview = useCallback(
+    (mediaType: MediaType, id: number | string) =>
+      state.watched[makeKey(mediaType, id)]?.reviewText ?? null,
+    [state.watched]
+  );
+
+  // Avis texte libre, même principe que rateWatched : uniquement pour un
+  // titre déjà marqué comme vu, chaîne vide traitée comme "pas d'avis".
+  const reviewWatched = useCallback(
+    (mediaType: MediaType, id: number | string, reviewText: string | null) => {
+      const key = makeKey(mediaType, id);
+      const cleaned = reviewText?.trim() || null;
+      setState((prev) => {
+        if (!prev.watched[key]) {
+          return prev;
+        }
+        const updated: LibraryItem = {
+          ...prev.watched[key],
+          reviewText: cleaned,
+          updatedAt: Date.now(),
+        };
+        pendingOpsRef.current.set(key, {
+          action: "upsert",
+          mediaType,
+          id: Number(id),
+          status: "watched",
+          item: updated,
+        });
+        return { ...prev, watched: { ...prev.watched, [key]: updated } };
+      });
+    },
+    []
+  );
+
   const getShowEntry = useCallback(
     (mediaType: MediaType, id: number | string) => findShowEntry(state, mediaType, id),
     [state]
@@ -1328,6 +1364,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isInWatchlist,
       getRating,
       rateWatched: gated(rateWatched, undefined),
+      getReview,
+      reviewWatched: gated(reviewWatched, undefined),
       getShowEntry,
       rateEpisode: gated(rateEpisode, undefined),
       rateSeason: gated(rateSeason, undefined),
@@ -1358,6 +1396,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     isInWatchlist,
     getRating,
     rateWatched,
+    getReview,
+    reviewWatched,
     getShowEntry,
     rateEpisode,
     rateSeason,

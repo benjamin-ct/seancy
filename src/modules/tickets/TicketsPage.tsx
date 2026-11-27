@@ -1,5 +1,6 @@
 // Page Tickets (/tickets) : demandes de développement envoyées à Claude, sur
-// un tableau façon Trello (Idées, À faire, En cours, À valider, Faits).
+// un tableau façon Trello (Suggestions des utilisateurs, Idées, À faire, En
+// cours, À valider, Faits).
 // Réservée aux administrateurs (le serveur refuse les autres comptes) et non
 // référencée. Une carte glissée d'une colonne à l'autre fait l'action de la
 // colonne : envoi à Claude, annulation, validation (fusion de la PR),
@@ -46,8 +47,10 @@ import {
   columns,
   day,
   LabelsContext,
+  SUGGESTION_LABEL,
   fresh,
   modelName,
+  movedText,
   prNumber,
   refusal,
   stepOf,
@@ -95,6 +98,10 @@ function Mini({
   const live = fresh(t);
   const cover = t.status !== "done" ? t.files.find((f) => /^image\//.test(f.type)) : undefined;
   const labs: { text: string; tone?: string }[] = [];
+  // Carte archivée : montrée seulement dans les résultats d'une recherche
+  if (t.archived) {
+    labs.push({ text: "Archivé" });
+  }
   if (t.urgent) {
     labs.push({ text: "Hotfix", tone: styles.labHot });
   }
@@ -119,13 +126,18 @@ function Mini({
           : { text: "CI en cours", tone: styles.labWait }
     );
   }
-  if (t.status !== "done" && t.status !== "idea") {
+  if (t.status !== "done" && t.status !== "idea" && t.status !== "suggestion") {
     labs.push({
       text: `${t.auto ? "Auto · " : ""}${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}`,
     });
   }
   const blocked = t.labels.some(isBlocked);
-  const shown = t.labels.filter((l) => !isBlocked(l));
+  // Colonne Suggestions : son étiquette « Suggestion » n'apprend rien (gardée quand la carte en sort)
+  const shown = t.labels.filter(
+    (l) =>
+      !isBlocked(l) &&
+      !(t.status === "suggestion" && l.toLowerCase() === SUGGESTION_LABEL.toLowerCase())
+  );
   const cur = stepOf(t);
   const bar = t.status === "work" && !(live && (t.stage === "fail" || t.stage === "quota"));
   const prNo = prNumber(t.pr);
@@ -712,6 +724,8 @@ export default function TicketsPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   // Tickets d'une personne (adresse de l'auteur) ; « » : tous (les administrateurs partagent le tableau)
   const [who, setWho] = useState("");
+  // Vue des cartes archivées (bouton « Archivés ») : elles seules, dans leur colonne
+  const [archives, setArchives] = useState(false);
   // Fiche ouverte : son adresse est /tickets/<id> (lien à partager, bouton Retour qui la ferme) ;
   // mode : zone de réponse ouverte d'office (retouche, réouverture)
   const { ticketId = "" } = useParams();
@@ -892,16 +906,15 @@ export default function TicketsPage() {
   );
   const ask: Ask = useCallback((text, ok, job) => setConfirm({ text, ok, job }), []);
 
-  const cols = useMemo(
+  const mine = useMemo(
     () =>
-      columns(
-        (tickets ?? []).filter(
-          (t) => !who || t.authorEmail === who || t.members.some((p) => p.email === who)
-        ),
-        query
+      (tickets ?? []).filter(
+        (t) => !who || t.authorEmail === who || t.members.some((p) => p.email === who)
       ),
-    [tickets, query, who]
+    [tickets, who]
   );
+  const cols = useMemo(() => columns(mine, query, archives), [mine, query, archives]);
+  const archivedCount = useMemo(() => mine.filter((t) => t.archived).length, [mine]);
   // Auteurs et membres des tickets, le compte connecté d'abord ; nom de la page Tickets plutôt que celui de Trello
   const people = useMemo(() => {
     const names = new Map<string, string>();
@@ -972,12 +985,9 @@ export default function TicketsPage() {
         return;
       }
       const key = `${t.status}>${to}`;
-      if (key === "idea>todo" || key === "todo>idea") {
-        void run(
-          () => moveTicket(t.id, to, before),
-          to === "todo" ? "Idée passée dans « À faire »" : "Remise dans les idées"
-        );
-      } else if (to === "work" && (t.status === "idea" || t.status === "todo")) {
+      if (SORTABLE.has(t.status) && SORTABLE.has(to)) {
+        void run(() => moveTicket(t.id, to, before), movedText(t.status, to));
+      } else if (to === "work" && SORTABLE.has(t.status)) {
         ask(
           `Envoyer « ${t.title} » à Claude (${t.auto ? "choix automatique, revu à l'envoi : " : ""}${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
           "Envoyer",
@@ -1246,6 +1256,17 @@ export default function TicketsPage() {
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.archivesBtn}`}
+              aria-pressed={archives}
+              title={archives ? "Revenir au tableau" : "Voir les cartes archivées"}
+              onClick={() => setArchives(!archives)}
+            >
+              <Icon name="archive" size={20} className={styles.archivesIcon} />
+              <span className={styles.archivesText}>Archivés</span>
+              <span className={styles.count}>{archivedCount}</span>
+            </button>
             {/* Téléphone : zoom au bout du choix des personnes, plus en bas de l'écran */}
             {tickets && zoomButton(`${styles.zoom} ${styles.zoomInline}`)}
             <button
@@ -1270,6 +1291,17 @@ export default function TicketsPage() {
             du Worker. Les tickets se notent et se rangent quand même.
           </p>
         )}
+        {archives && (
+          <div className={styles.archivesBar}>
+            <p>
+              <strong>Cartes archivées</strong> : hors du tableau. Ouvre une carte pour la remettre
+              sur le tableau.
+            </p>
+            <button type="button" className={styles.btn} onClick={() => setArchives(false)}>
+              Revenir au tableau
+            </button>
+          </div>
+        )}
         {!tickets ? (
           <p className={styles.muted}>Chargement…</p>
         ) : (
@@ -1283,8 +1315,8 @@ export default function TicketsPage() {
               const off = dragged && !canMove(dragged, c.key);
               const over = target?.col === c.key && !off;
               const total =
-                c.key === "done"
-                  ? (tickets ?? []).filter((t) => t.status === "done").length
+                c.key === "done" && !archives
+                  ? (tickets ?? []).filter((t) => t.status === "done" && !t.archived).length
                   : list.length;
               return (
                 <section
@@ -1327,7 +1359,13 @@ export default function TicketsPage() {
                       <div className={styles.dropEnd} />
                     )}
                     {!list.length && (
-                      <p className={styles.empty}>{query ? "Aucun ticket trouvé." : c.empty}</p>
+                      <p className={styles.empty}>
+                        {query
+                          ? "Aucun ticket trouvé."
+                          : archives
+                            ? "Aucune carte archivée."
+                            : c.empty}
+                      </p>
                     )}
                     {c.key === "done" && !query && total > list.length && (
                       <p className={styles.empty}>
@@ -1335,8 +1373,8 @@ export default function TicketsPage() {
                       </p>
                     )}
                   </div>
-                  {c.key === "idea" && <IdeaCompose run={run} />}
-                  {c.key === "todo" && (
+                  {c.key === "idea" && !archives && <IdeaCompose run={run} />}
+                  {c.key === "todo" && !archives && (
                     <button type="button" className={styles.add} onClick={() => setCreating(true)}>
                       + Nouveau ticket
                     </button>

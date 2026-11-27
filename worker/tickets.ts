@@ -43,6 +43,7 @@ import {
   FIX_TEXT,
   RETRY_EVERY,
   RETRY_MAX,
+  FEEDBACK_LABEL,
   STATUSES,
   TicketError,
   applyAction,
@@ -187,16 +188,16 @@ function toTicket(row: Row, files: TicketFile[] = []): Ticket {
 async function filesOf(env: Env, ids?: string[]): Promise<Map<string, TicketFile[]>> {
   const q = ids?.length
     ? env.DB.prepare(
-        `SELECT id, ticket_id, name, type, size FROM ticket_files WHERE ticket_id IN (${ids.map(() => "?").join(",")}) ORDER BY created_at`
+        `SELECT id, ticket_id, name, type, size, created_at FROM ticket_files WHERE ticket_id IN (${ids.map(() => "?").join(",")}) ORDER BY created_at`
       ).bind(...ids)
     : env.DB.prepare(
-        "SELECT id, ticket_id, name, type, size FROM ticket_files ORDER BY created_at"
+        "SELECT id, ticket_id, name, type, size, created_at FROM ticket_files ORDER BY created_at"
       );
-  const { results } = await q.all<TicketFile & { ticket_id: string }>();
+  const { results } = await q.all<TicketFile & { ticket_id: string; created_at: number }>();
   const map = new Map<string, TicketFile[]>();
   for (const f of results) {
     const list = map.get(f.ticket_id) ?? [];
-    list.push({ id: f.id, name: f.name, type: f.type, size: f.size });
+    list.push({ id: f.id, name: f.name, type: f.type, size: f.size, at: f.created_at });
     map.set(f.ticket_id, list);
   }
   return map;
@@ -407,6 +408,23 @@ async function notify(env: Env, text: string, id: string, tag?: string): Promise
       allowed_mentions: { parse: [] },
     }),
   }).catch(() => {});
+}
+
+/**
+ * Suggestion d'un utilisateur (POST /api/feedback, Réglages › Suggestions,
+ * données préparées par feedbackTicket) : rangée en haut de la colonne
+ * Suggestions, à part des idées de l'équipe, avec l'étiquette « Suggestion »
+ * (créée au besoin, gardée quand la carte passe en idée ou à faire), puis
+ * notifiée aux administrateurs.
+ */
+export async function addFeedback(env: Env, data: TicketData, now = Date.now()): Promise<string> {
+  const defs = await labelDefs(env);
+  if (!defs.some((d) => d.name.toLowerCase() === FEEDBACK_LABEL.name.toLowerCase())) {
+    await setMeta(env, "labels", JSON.stringify([...defs, FEEDBACK_LABEL]));
+  }
+  const id = await insert(env, data, "suggestion", { top: true }, now);
+  await notify(env, `**Nouvelle suggestion** : ${data.title}`, id);
+  return id;
 }
 
 /** Issues encore ouvertes du ticket (une par envoi) fermées : avant d'en ouvrir une autre, et à la fusion. */
@@ -1325,10 +1343,10 @@ export async function handleTickets(
         }
         return json({ ok: true, ticket: next });
       }
-      if (action === "unqueue") {
+      if (action === "unqueue" || action === "archive" || action === "unarchive") {
         return json({
           ok: true,
-          ticket: await act(env, id, { type: "unqueue" }, now, access.name),
+          ticket: await act(env, id, { type: action }, now, access.name),
         });
       }
       requireGitHub(env);

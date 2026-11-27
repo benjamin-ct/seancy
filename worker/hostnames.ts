@@ -21,8 +21,6 @@ export function isProductionHostname(hostname: string): boolean {
   return hostname === PRODUCTION_HOSTNAME || hostname === ADMIN_HOSTNAME;
 }
 
-// Hostname de l'environnement `develop` persistant (voir ticket Trello
-// "Avenir du développement", PR #282) : même mécanisme de nommage que les
-// previews de PR (slug de branche + nom du Worker), nom de branche "develop"
-// donnant ce slug stable.
-export const PREPROD_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+// Hostname de l'environnement `develop` persistant : le Worker dédié
+// `seancy-develop`, déployé par le job deploy-develop de la CI (voir README).
+export const PREPROD_HOSTNAME = "seancy-develop.creusatbenjamin.workers.dev";

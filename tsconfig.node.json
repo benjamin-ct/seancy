@@ -41,6 +41,7 @@
     "worker/rate-limit-memory.ts",
     "worker/tmdb-proxy-policy.ts",
     "worker/tmdb-edge-cache.ts",
+    "worker/tmdb.ts",
     "worker/security-headers.ts",
     "worker/validate.ts",
     "worker/tickets-logic.ts",
@@ -53,6 +54,7 @@
     "worker/ticket-level.ts",
     "worker/access.ts",
     "worker/cloudflare-usage.ts",
-    "worker/vapid.ts"
+    "worker/vapid.ts",
+    "worker/notify-dedup.ts"
   ]
 }

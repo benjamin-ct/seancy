@@ -13,7 +13,9 @@
 // - `seancy` (env.ADMIN) renvoie au Worker admin l'API de l'admin et des
 //   tickets reçue sur ses adresses de production (forwardToAdmin) : le NAS,
 //   les workflows et les scripts gardent leurs adresses. Les previews de PR
-//   gardent leur propre admin, sur leur base de preview.
+//   gardent leur propre admin, sur leur base de preview. Les suggestions des
+//   utilisateurs (Réglages › Suggestions) lui sont passées par l'adresse
+//   interne (FEEDBACK_INTERNAL_PATH), pour partir avec le webhook Discord.
 // Jamais de boucle : le site ne renvoie que ce que l'admin traite, l'admin ne
 // renvoie que le reste.
 // Logique pure : vérifiée par scripts/verify-admin-split.ts.
@@ -29,6 +31,18 @@ import {
  * n'achemine vers le Worker que ses propres domaines.
  */
 export const INTERNAL_HOSTNAME = "seancy.internal";
+
+/**
+ * Appel interne du site au Worker admin (service binding ADMIN) : suggestion
+ * d'un utilisateur (Réglages › Suggestions) rangée en idée par l'admin, qui
+ * garde le webhook Discord des tickets. Sous /api/tickets : traitée par l'admin.
+ */
+export const FEEDBACK_INTERNAL_PATH = "/api/tickets/internal/feedback";
+
+/** Côté Worker admin : appel interne du site (nom d'hôte que seul le service binding peut porter). */
+export function isInternalCall(hostname: string): boolean {
+  return hostname === INTERNAL_HOSTNAME;
+}
 
 /** Routes traitées par le Worker admin : API de l'admin (sauf les outils, qui lancent les traitements du site) et des tickets. */
 export function adminOwned(pathname: string): boolean {

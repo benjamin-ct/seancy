@@ -68,6 +68,35 @@
   width: 200px;
 }
 
+/* Bouton « Archivés » : bascule entre le tableau et la vue des cartes archivées */
+.archivesBtn {
+  --col: var(--muted);
+}
+.archivesBtn[aria-pressed="true"] {
+  background: var(--selected-bg);
+  border-color: var(--selected-border);
+}
+.archivesIcon {
+  display: none;
+}
+.archivesBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+}
+.archivesBar p {
+  margin: 0;
+}
+
 .banner {
   margin: 0 0 16px;
   padding: 10px 14px;
@@ -157,9 +186,14 @@
 .danger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   min-height: 38px;
-  padding: 8px 14px;
+  padding: 8px 16px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
   border-radius: 999px;
   border: 1px solid var(--border-2);
   background: var(--surface-2);
@@ -234,7 +268,8 @@
 .board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(232px, 1fr);
+  /* Six colonnes dans la largeur d'un écran de 1440 px ; au-delà de la place, le tableau défile */
+  grid-auto-columns: minmax(208px, 1fr);
   gap: 12px;
   align-items: start;
   overflow-x: auto;
@@ -259,6 +294,10 @@
     opacity 0.15s,
     border-color 0.15s,
     background 0.15s;
+}
+/* Bleu ciel de l'étiquette « Suggestion » (Labels.tsx) */
+.col_suggestion {
+  --col: #6cc3e0;
 }
 .col_idea {
   --col: var(--gold);
@@ -713,6 +752,7 @@
 .acts {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin: 12px 0 4px;
 }
@@ -1181,8 +1221,7 @@
 .btnIcon {
   width: 16px;
   height: 16px;
-  margin-right: 6px;
-  vertical-align: -3px;
+  flex: none;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -1190,8 +1229,6 @@
 }
 /* Lien qui ouvre un nouvel onglet (Preview, PR) : flèche après le texte */
 .btnIconEnd {
-  margin-left: 6px;
-  vertical-align: -3px;
   opacity: 0.8;
 }
 /* « Partager » qui vient de copier le lien */
@@ -1697,8 +1734,44 @@
     position: static;
     width: 42px;
     height: 42px;
-    margin-left: auto;
     box-shadow: none;
+  }
+  /* Une seule ligne avec le choix des personnes (qui défile de côté s'il manque de place) ;
+     la recherche ouverte garde sa propre ligne */
+  .tools:not(:has(.searchOpen)) {
+    flex-wrap: nowrap;
+  }
+  /* « Archivés » : bouton rond à icône, le nombre en pastille, à côté du zoom */
+  .archivesBtn {
+    position: relative;
+    flex: none;
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
+    margin-left: auto;
+    padding: 0;
+    background: var(--surface);
+  }
+  .archivesIcon {
+    display: block;
+  }
+  .archivesText {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .archivesBtn .count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 20px;
+    padding: 1px 5px;
+    border: 1px solid var(--border-2);
+    background: var(--surface-2);
+    font-size: 11px;
   }
   .dialog,
   .dialogWide {
