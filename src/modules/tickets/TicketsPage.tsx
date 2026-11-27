@@ -1,5 +1,6 @@
 // Page Tickets (/tickets) : demandes de développement envoyées à Claude, sur
-// un tableau façon Trello (Idées, À faire, En cours, À valider, Faits).
+// un tableau façon Trello (Suggestions des utilisateurs, Idées, À faire, En
+// cours, À valider, Faits).
 // Réservée aux administrateurs (le serveur refuse les autres comptes) et non
 // référencée. Une carte glissée d'une colonne à l'autre fait l'action de la
 // colonne : envoi à Claude, annulation, validation (fusion de la PR),
@@ -46,8 +47,10 @@ import {
   columns,
   day,
   LabelsContext,
+  SUGGESTION_LABEL,
   fresh,
   modelName,
+  movedText,
   prNumber,
   refusal,
   stepOf,
@@ -123,13 +126,18 @@ function Mini({
           : { text: "CI en cours", tone: styles.labWait }
     );
   }
-  if (t.status !== "done" && t.status !== "idea") {
+  if (t.status !== "done" && t.status !== "idea" && t.status !== "suggestion") {
     labs.push({
       text: `${t.auto ? "Auto · " : ""}${modelName(t.model)} · ${EFFORT_NAMES[t.effort]}`,
     });
   }
   const blocked = t.labels.some(isBlocked);
-  const shown = t.labels.filter((l) => !isBlocked(l));
+  // Colonne Suggestions : son étiquette « Suggestion » n'apprend rien (gardée quand la carte en sort)
+  const shown = t.labels.filter(
+    (l) =>
+      !isBlocked(l) &&
+      !(t.status === "suggestion" && l.toLowerCase() === SUGGESTION_LABEL.toLowerCase())
+  );
   const cur = stepOf(t);
   const bar = t.status === "work" && !(live && (t.stage === "fail" || t.stage === "quota"));
   const prNo = prNumber(t.pr);
@@ -977,12 +985,9 @@ export default function TicketsPage() {
         return;
       }
       const key = `${t.status}>${to}`;
-      if (key === "idea>todo" || key === "todo>idea") {
-        void run(
-          () => moveTicket(t.id, to, before),
-          to === "todo" ? "Idée passée dans « À faire »" : "Remise dans les idées"
-        );
-      } else if (to === "work" && (t.status === "idea" || t.status === "todo")) {
+      if (SORTABLE.has(t.status) && SORTABLE.has(to)) {
+        void run(() => moveTicket(t.id, to, before), movedText(t.status, to));
+      } else if (to === "work" && SORTABLE.has(t.status)) {
         ask(
           `Envoyer « ${t.title} » à Claude (${t.auto ? "choix automatique, revu à l'envoi : " : ""}${modelName(t.model)}, effort ${EFFORT_NAMES[t.effort].toLowerCase()}${t.urgent ? ", hotfix depuis main" : ""}) ?`,
           "Envoyer",

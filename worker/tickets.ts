@@ -412,16 +412,18 @@ async function notify(env: Env, text: string, id: string, tag?: string): Promise
 
 /**
  * Suggestion d'un utilisateur (POST /api/feedback, Réglages › Suggestions,
- * données préparées par feedbackTicket) : rangée en haut de la colonne Idées
- * avec l'étiquette « Suggestion » (créée au besoin), puis notifiée aux administrateurs.
+ * données préparées par feedbackTicket) : rangée en haut de la colonne
+ * Suggestions, à part des idées de l'équipe, avec l'étiquette « Suggestion »
+ * (créée au besoin, gardée quand la carte passe en idée ou à faire), puis
+ * notifiée aux administrateurs.
  */
 export async function addFeedback(env: Env, data: TicketData, now = Date.now()): Promise<string> {
   const defs = await labelDefs(env);
   if (!defs.some((d) => d.name.toLowerCase() === FEEDBACK_LABEL.name.toLowerCase())) {
     await setMeta(env, "labels", JSON.stringify([...defs, FEEDBACK_LABEL]));
   }
-  const id = await insert(env, data, "idea", { top: true }, now);
-  await notify(env, `**Nouvelle suggestion** : ${data.title.replace(/^Suggestion : /, "")}`, id);
+  const id = await insert(env, data, "suggestion", { top: true }, now);
+  await notify(env, `**Nouvelle suggestion** : ${data.title}`, id);
   return id;
 }
 

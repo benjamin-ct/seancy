@@ -2,7 +2,7 @@
 // Même origine que l'app : le cookie de session part automatiquement ; le
 // serveur vérifie que le compte fait partie des administrateurs.
 
-export type TicketStatus = "idea" | "todo" | "work" | "review" | "done";
+export type TicketStatus = "suggestion" | "idea" | "todo" | "work" | "review" | "done";
 export type Model = "opus" | "sonnet";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 

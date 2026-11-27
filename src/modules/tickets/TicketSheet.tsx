@@ -25,6 +25,7 @@ import {
   fresh,
   lines,
   modelName,
+  movedText,
   prNumber,
   stepOf,
   viewable,
@@ -184,7 +185,12 @@ export default function TicketSheet({
   ask,
   onClose,
 }: SheetProps) {
-  const editable = t.status === "idea" || t.status === "todo";
+  const editable = t.status === "suggestion" || t.status === "idea" || t.status === "todo";
+  // Pas encore un ticket : suggestion d'un utilisateur ou idée (noms au féminin)
+  const fem = t.status === "suggestion" || t.status === "idea";
+  const kind = t.status === "suggestion" ? "Suggestion" : t.status === "idea" ? "Idée" : "Ticket";
+  const theKind =
+    t.status === "suggestion" ? "la suggestion" : t.status === "idea" ? "l'idée" : "le ticket";
   const me = (useAuth().email ?? "").toLowerCase();
   const mine = !!me && t.authorEmail === me;
   const member = t.members.some((p) => p.email === me);
@@ -316,10 +322,10 @@ export default function TicketSheet({
   const desc = lines(t.detail);
   const long = desc.length > 10 || t.detail.length > 900;
   const head = [
-    t.status === "idea" ? "Idée" : "Ticket",
+    kind,
     columnName(t.status),
     t.author
-      ? `${t.status === "idea" ? "notée" : "créé"} par ${t.author}${t.createdAt ? ` le ${day(t.createdAt)}` : ""}`
+      ? `${t.status === "suggestion" ? "envoyée" : fem ? "notée" : "créé"} par ${t.author}${t.createdAt ? ` le ${day(t.createdAt)}` : ""}`
       : "",
     t.members.length ? `avec ${t.members.map((p) => p.name || p.email).join(", ")}` : "",
     t.status === "done" ? `fait le ${day(t.doneAt)}` : "",
@@ -328,6 +334,26 @@ export default function TicketSheet({
 
   const actions = (
     <div className={styles.acts}>
+      {t.status === "suggestion" && (
+        <>
+          <button
+            type="button"
+            className={styles.primary}
+            disabled={busy}
+            onClick={() => go(() => moveTicket(t.id, "idea", ""), movedText(t.status, "idea"))}
+          >
+            Garder en idée
+          </button>
+          <button
+            type="button"
+            className={styles.btn}
+            disabled={busy}
+            onClick={() => go(() => moveTicket(t.id, "todo", ""), movedText(t.status, "todo"))}
+          >
+            En faire un ticket
+          </button>
+        </>
+      )}
       {t.status === "idea" && (
         <>
           <button
@@ -405,7 +431,7 @@ export default function TicketSheet({
           onClick={() =>
             go(
               () => ticketAction(t.id, "archive"),
-              `${t.status === "idea" ? "Idée archivée" : "Ticket archivé"} : la recherche le retrouve`
+              `${kind} ${fem ? "archivée : la recherche la" : "archivé : la recherche le"} retrouve`
             )
           }
         >
@@ -890,12 +916,8 @@ export default function TicketSheet({
   const history = (
     <ol className={styles.hist}>
       {activity.map((x) => x.node)}
-      {!t.history.length && t.status !== "idea" && (
-        <li className={styles.event}>Pas encore envoyé à Claude</li>
-      )}
-      {!activity.length && t.status === "idea" && (
-        <li className={styles.event}>Pas encore d'activité</li>
-      )}
+      {!t.history.length && !fem && <li className={styles.event}>Pas encore envoyé à Claude</li>}
+      {!activity.length && fem && <li className={styles.event}>Pas encore d'activité</li>}
     </ol>
   );
 
@@ -983,17 +1005,12 @@ export default function TicketSheet({
     <div className={styles.row}>
       {deleting ? (
         <>
-          <span>Supprimer {t.status === "idea" ? "l'idée" : "le ticket"} et ses fichiers ?</span>
+          <span>Supprimer {theKind} et ses fichiers ?</span>
           <button
             type="button"
             className={styles.danger}
             onClick={async () => {
-              if (
-                await go(
-                  () => deleteTicket(t.id),
-                  t.status === "idea" ? "Idée supprimée" : "Ticket supprimé"
-                )
-              ) {
+              if (await go(() => deleteTicket(t.id), `${kind} ${fem ? "supprimée" : "supprimé"}`)) {
                 onClose();
               }
             }}
@@ -1010,7 +1027,7 @@ export default function TicketSheet({
           className={`${styles.link} ${styles.del}`}
           onClick={() => setDeleting(true)}
         >
-          Supprimer {t.status === "idea" ? "l'idée" : "le ticket"}
+          Supprimer {theKind}
         </button>
       )}
     </div>
