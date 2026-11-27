@@ -797,7 +797,7 @@
       },
       "feedback": {
         "label": "Suggestions",
-        "text": " (si vous en envoyez depuis Réglages → Suggestions) : le type et le texte de votre suggestion, transmis à l'équipe de Seancy sans votre nom, votre adresse e-mail ni l'identifiant de votre compte. Elle est lue par l'équipe et peut servir à préparer une évolution de l'application, y compris avec des outils de développement assistés par IA. N'étant pas rattachée à votre compte, elle n'est pas supprimée avec lui : n'y mettez pas d'information personnelle. Seul un compteur technique lié à votre compte limite le nombre d'envois par jour ; il est effacé ensuite."
+        "text": " (si vous en envoyez depuis Réglages → Suggestions) : le type et le texte de votre suggestion, transmis à l'équipe de Seancy sans votre nom, votre adresse e-mail ni l'identifiant de votre compte. Elle est lue par l'équipe (qui en est prévenue sur Discord) et peut servir à préparer une évolution de l'application, y compris avec Claude, un outil de développement assisté par IA (voir plus bas). N'étant pas rattachée à votre compte, elle n'est pas supprimée avec lui : n'y mettez pas d'information personnelle. Seul un compteur technique lié à votre compte limite le nombre d'envois par jour ; il est effacé ensuite."
       },
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
@@ -842,6 +842,14 @@
       "gravatar": {
         "label": "Gravatar",
         "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse e-mail. Nous ne transmettons jamais votre e-mail en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
+      },
+      "discord": {
+        "label": "Discord",
+        "text": " : prévient l'équipe de Seancy de chaque nouvelle suggestion par un message qui en reprend le début (premiers mots, sans votre nom, votre adresse e-mail ni l'identifiant de votre compte)."
+      },
+      "anthropic": {
+        "label": "Anthropic (Claude)",
+        "text": " : outil de développement assisté par IA. Quand l'équipe décide de donner suite à une suggestion, son texte peut lui être transmis pour préparer la modification de l'application (traitement lancé depuis GitHub Actions) ; il n'est jamais publié sur le dépôt public du projet."
       },
       "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires.",
       "google": {

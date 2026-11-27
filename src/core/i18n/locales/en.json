@@ -797,7 +797,7 @@
       },
       "feedback": {
         "label": "Suggestions",
-        "text": " (if you send any from Settings → Suggestions): the type and text of your suggestion, sent to the Seancy team without your name, your email address or your account identifier. It is read by the team and may be used to prepare a change to the app, including with AI-assisted development tools. As it is not linked to your account, it is not deleted with it: please don't include personal information. Only a technical counter linked to your account limits the number of submissions per day; it is deleted afterwards."
+        "text": " (if you send any from Settings → Suggestions): the type and text of your suggestion, sent to the Seancy team without your name, your email address or your account identifier. It is read by the team (notified on Discord) and may be used to prepare a change to the app, including with Claude, an AI-assisted development tool (see below). As it is not linked to your account, it is not deleted with it: please don't include personal information. Only a technical counter linked to your account limits the number of submissions per day; it is deleted afterwards."
       },
       "sharedProfile": {
         "label": "Shared profile and username",
@@ -842,6 +842,14 @@
       "gravatar": {
         "label": "Gravatar",
         "text": " (Automattic): displays your profile picture if you've set one up linked to your email address. We never send your email address in clear text to Gravatar, only its fingerprint (MD5 hash), in line with how this service works."
+      },
+      "discord": {
+        "label": "Discord",
+        "text": ": notifies the Seancy team of each new suggestion with a message that quotes its beginning (first words, without your name, your email address or your account identifier)."
+      },
+      "anthropic": {
+        "label": "Anthropic (Claude)",
+        "text": ": AI-assisted development tool. When the team decides to act on a suggestion, its text may be sent to it to prepare the change to the app (run from GitHub Actions); it is never published on the project's public repository."
       },
       "outro": "None of this data is sold or used for advertising purposes.",
       "google": {

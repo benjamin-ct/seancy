@@ -119,6 +119,14 @@ export default function PrivacyPolicyPage() {
             <strong>{t("privacyPolicyPage.sharing.gravatar.label")}</strong>
             {t("privacyPolicyPage.sharing.gravatar.text")}
           </li>
+          <li>
+            <strong>{t("privacyPolicyPage.sharing.discord.label")}</strong>
+            {t("privacyPolicyPage.sharing.discord.text")}
+          </li>
+          <li>
+            <strong>{t("privacyPolicyPage.sharing.anthropic.label")}</strong>
+            {t("privacyPolicyPage.sharing.anthropic.text")}
+          </li>
         </ul>
         <p>{t("privacyPolicyPage.sharing.outro")}</p>
       </LegalSection>
