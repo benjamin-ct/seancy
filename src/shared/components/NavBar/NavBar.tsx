@@ -1,5 +1,5 @@
 import { NavLink, Link, matchPath, useLocation, useNavigate } from "react-router-dom";
-import { ADMIN_ORIGIN } from "../../../core/lib/adminHost.ts";
+import { adminHomeUrl } from "../../../core/lib/adminHost.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { searchMultiRanked, posterUrl } from "../../../core/api/tmdb.ts";
@@ -449,7 +449,7 @@ export default function NavBar() {
           {/* Administrateur : lien vers l'espace admin (téléphone : dans Profil › Compte) */}
           {authenticated && admin && (
             <a
-              href={ADMIN_ORIGIN}
+              href={adminHomeUrl()}
               className={`${styles.adminBtn} ${styles.desktopOnly}`}
               title={t("navBar.adminTitle")}
             >
