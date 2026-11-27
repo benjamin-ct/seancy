@@ -19,5 +19,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "notifications", icon: "bell" },
   { id: "affichage", icon: "sliders" },
   { id: "donnees", icon: "download" },
+  { id: "suggestions", icon: "sparkle" },
   { id: "a-propos", icon: "help" },
 ];
