@@ -1,5 +1,9 @@
 import styles from "./TicketLogo.module.css";
 
+// Environnement develop persistant (même adresse que worker/hostnames.ts).
+export const DEV_HOSTNAME = "develop-seancy.creusatbenjamin.workers.dev";
+const isDevSite = typeof window !== "undefined" && window.location.hostname === DEV_HOSTNAME;
+
 // « S » italique de Fraunces 500 vectorisé (même placement que le <text>
 // x=44 y=56 font-size=46 de la maquette), pour ne pas dépendre du
 // chargement de la police. Même tracé dans public/favicon.svg et
@@ -11,7 +15,11 @@ export const TICKET_S_PATH =
 // perforation couleur du fond (effet découpe, suit le thème) et « S » clair.
 export default function TicketLogo({ className }: { className?: string }) {
   return (
-    <svg className={`${styles.ticket} ${className ?? ""}`} viewBox="0 0 120 80" aria-hidden="true">
+    <svg
+      className={`${styles.ticket} ${isDevSite ? styles.dev : ""} ${className ?? ""}`}
+      viewBox="0 0 120 80"
+      aria-hidden="true"
+    >
       <path
         d="M0 0 H120 V30 A10 10 0 0 0 120 50 V80 H0 V50 A10 10 0 0 0 0 30 Z"
         className={styles.body}
