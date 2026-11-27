@@ -3,7 +3,14 @@
 // renvois du site, et jamais de boucle entre les deux. Script autonome, même
 // principe que verify-tickets.ts.
 
-import { adminOwned, adminWorkerRoute, forwardToAdmin } from "../worker/admin-split.ts";
+import {
+  FEEDBACK_INTERNAL_PATH,
+  INTERNAL_HOSTNAME,
+  adminOwned,
+  adminWorkerRoute,
+  forwardToAdmin,
+  isInternalCall,
+} from "../worker/admin-split.ts";
 
 let passed = 0;
 let failed = 0;
@@ -81,5 +88,19 @@ check(
   true
 );
 
+// Suggestions des utilisateurs (Réglages › Suggestions) : le site les passe à l'admin par l'adresse
+// interne, que seul le service binding peut porter ; jamais depuis une adresse publique
+check(
+  "Suggestion : adresse interne reconnue par l'admin, adresses publiques refusées",
+  [INTERNAL_HOSTNAME, "admin.seancy.com", "seancy.com", "seancy.creusatbenjamin.workers.dev"].map(
+    isInternalCall
+  ),
+  [true, false, false, false]
+);
+check(
+  "Suggestion : chemin interne traité par l'admin, jamais renvoyé au site",
+  adminWorkerRoute(FEEDBACK_INTERNAL_PATH),
+  "self"
+);
 console.log(`\n${passed} OK, ${failed} en échec`);
 process.exit(failed ? 1 : 0);
