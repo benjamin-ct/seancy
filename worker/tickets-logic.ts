@@ -3,19 +3,23 @@
 // vérifications (scripts/verify-tickets.ts). Reprise du système de tickets de
 // Paddock Live, adaptée à Seancy (develop / main, hotfix, Discord).
 //
-// Colonnes (status) : idea (Idées), todo (À faire), work (En cours, chez
-// Claude), review (À valider), done (Faits). Le passage d'une colonne à
-// l'autre est toujours une action (applyAction) : envoi à Claude, compte
-// rendu, retouche, validation… qui note aussi l'historique du ticket.
+// Colonnes (status) : suggestion (Suggestions, envoyées par les utilisateurs
+// depuis Réglages › Suggestions), idea (Idées), todo (À faire), work (En
+// cours, chez Claude), review (À valider), done (Faits). Le passage d'une
+// colonne à l'autre est toujours une action (applyAction) : envoi à Claude,
+// compte rendu, retouche, validation… qui note aussi l'historique du ticket.
 //
-// Archivage : une idée, un ticket à faire ou un ticket fait peut sortir du
-// tableau sans être supprimé (`archived`, date en ms) ; il reste dans sa
+// Archivage : une suggestion, une idée, un ticket à faire ou un ticket fait
+// peut sortir du tableau sans être supprimé (`archived`, date en ms) ; il reste dans sa
 // colonne en base et revient dans les résultats de la recherche (page et
 // `node scripts/tickets.ts search`). Tout changement de colonne le remet sur
 // le tableau.
 
-export const STATUSES = ["idea", "todo", "work", "review", "done"] as const;
+export const STATUSES = ["suggestion", "idea", "todo", "work", "review", "done"] as const;
 export type TicketStatus = (typeof STATUSES)[number];
+/** Colonnes rangées à la main (ordre gardé), d'où un ticket peut partir chez Claude ou être archivé. */
+const SORTED: readonly TicketStatus[] = ["suggestion", "idea", "todo"];
+const sorted = (s: TicketStatus) => SORTED.includes(s);
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
 export const STAGES = ["start", "work", "fail", "quota", "retry"] as const;
@@ -390,14 +394,14 @@ export function applyAction(
     }
     case "move":
       need(
-        (from === "idea" || from === "todo") && (a.to === "idea" || a.to === "todo"),
-        "Seules les idées et les tickets à faire se rangent ainsi"
+        sorted(from) && sorted(a.to),
+        "Seules les suggestions, les idées et les tickets à faire se rangent ainsi"
       );
       status = a.to;
       break;
     case "send": {
       const relaunch = from === "work" && (d.stage === "fail" || d.stage === "quota");
-      need(from === "idea" || from === "todo" || relaunch, "Ticket déjà chez Claude ou à valider");
+      need(sorted(from) || relaunch, "Ticket déjà chez Claude ou à valider");
       status = "work";
       patch = { sent: now, stage: "", progress: "", progressAt: 0, retries: 0 };
       ev.push({ at: now, who: "moi", kind: d.sent || d.answer || relaunch ? "relance" : "envoi" });
@@ -545,8 +549,8 @@ export function applyAction(
       break;
     case "archive":
       need(
-        from === "idea" || from === "todo" || from === "done",
-        "Seuls les idées, les tickets à faire et les tickets faits s'archivent"
+        sorted(from) || from === "done",
+        "Seuls les suggestions, les idées, les tickets à faire et les tickets faits s'archivent"
       );
       need(!d.archived, "Ticket déjà archivé");
       patch = { archived: now };
@@ -817,9 +821,11 @@ const FEEDBACK_KIND_TEXT: Record<FeedbackKind, string> = {
 };
 
 /**
- * Suggestion d'un utilisateur rangée en idée (colonne Idées, zone humaine) :
- * titre tiré de son début, type et texte tels quels. Anonyme : ni adresse ni
- * identifiant de compte (la limite d'envoi est tenue à part, par compte).
+ * Suggestion d'un utilisateur, rangée dans sa propre colonne (Suggestions,
+ * zone humaine : à garder en idée, passer à faire ou archiver) : titre tiré
+ * de son début (première lettre en majuscule), type et texte tels quels.
+ * Anonyme : ni adresse ni identifiant de compte (la limite d'envoi est tenue
+ * à part, par compte).
  * `null` si le texte est trop court une fois les espaces retirés.
  */
 export function feedbackTicket(input: { kind?: unknown; message?: unknown }): TicketData | null {
@@ -835,8 +841,9 @@ export function feedbackTicket(input: { kind?: unknown; message?: unknown }): Ti
     : "other";
   const line = message.split("\n")[0].replace(/\s+/g, " ").trim();
   const head = line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line;
+  // Titre sans « Suggestion : » devant : la colonne Suggestions et l'étiquette disent déjà d'où il vient
   return cleanData({
-    title: `Suggestion : ${head}`,
+    title: head.charAt(0).toUpperCase() + head.slice(1),
     detail: `**Type :** ${FEEDBACK_KIND_TEXT[kind]}\n\n${message}\n\n*Envoyée par un utilisateur depuis Réglages › Suggestions (anonyme).*`,
     labels: [FEEDBACK_LABEL.name],
     author: "Utilisateur de Seancy",

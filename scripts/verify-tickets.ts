@@ -211,6 +211,35 @@ check(
   applyAction(ticket("idea"), { type: "move", to: "todo" }, T0).status,
   "todo"
 );
+// Suggestions des utilisateurs : leur propre colonne, triée à la main comme Idées et À faire
+check(
+  "Suggestion → Idées, → À faire, et remise dans les suggestions",
+  [
+    applyAction(ticket("suggestion"), { type: "move", to: "idea" }, T0).status,
+    applyAction(ticket("suggestion"), { type: "move", to: "todo" }, T0).status,
+    applyAction(ticket("idea"), { type: "move", to: "suggestion" }, T0).status,
+    applyAction(ticket("todo"), { type: "move", to: "suggestion" }, T0).status,
+  ],
+  ["idea", "todo", "suggestion", "suggestion"]
+);
+check(
+  "Suggestion envoyée à Claude",
+  applyAction(ticket("suggestion"), { type: "send" }, T0).status,
+  "work"
+);
+check(
+  "Suggestion archivée : reste dans sa colonne",
+  (({ status, data }) => [status, data.archived])(
+    applyAction(ticket("suggestion"), { type: "archive" }, T0)
+  ),
+  ["suggestion", T0]
+);
+refused("Rangement refusé d'une suggestion vers À valider", () =>
+  applyAction(ticket("suggestion"), { type: "move", to: "review" }, T0)
+);
+refused("Rangement refusé d'un ticket en cours vers Suggestions", () =>
+  applyAction(ticket("work"), { type: "move", to: "suggestion" }, T0)
+);
 // Archivage : hors du tableau sans être supprimé, remis dessus à la demande ou en changeant de colonne
 const archived = applyAction(ticket("idea"), { type: "archive" }, T0, "Ben");
 check(
@@ -862,7 +891,7 @@ const main = async () => {
         authorEmail: t.authorEmail,
       },
       {
-        title: "Suggestion : Pouvoir trier ma liste",
+        title: "Pouvoir trier ma liste",
         detail:
           "**Type :** Nouvelle fonctionnalité\n\nPouvoir trier ma liste\n\npar date\n\n*Envoyée par un utilisateur depuis Réglages › Suggestions (anonyme).*",
         labels: ["Suggestion"],
@@ -884,10 +913,11 @@ const main = async () => {
       true
     );
     const long = feedbackTicket({ message: "x".repeat(5000) });
+    check("Suggestion : titre borné à 80 caractères", long?.title.length, 80);
     check(
-      "Suggestion : titre borné à 80 caractères",
-      long?.title.length,
-      "Suggestion : ".length + 80
+      "Suggestion : titre commencé par une majuscule",
+      feedbackTicket({ message: "pouvoir trier ma liste" })?.title,
+      "Pouvoir trier ma liste"
     );
     check(
       "Suggestion : texte borné à 2000 caractères",

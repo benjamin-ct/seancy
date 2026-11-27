@@ -268,7 +268,8 @@
 .board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(232px, 1fr);
+  /* Six colonnes dans la largeur d'un écran de 1440 px ; au-delà de la place, le tableau défile */
+  grid-auto-columns: minmax(208px, 1fr);
   gap: 12px;
   align-items: start;
   overflow-x: auto;
@@ -293,6 +294,10 @@
     opacity 0.15s,
     border-color 0.15s,
     background 0.15s;
+}
+/* Bleu ciel de l'étiquette « Suggestion » (Labels.tsx) */
+.col_suggestion {
+  --col: #6cc3e0;
 }
 .col_idea {
   --col: var(--gold);

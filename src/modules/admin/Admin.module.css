@@ -251,7 +251,7 @@
 
 .pipeline {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -275,6 +275,10 @@
   font-family: var(--font-display);
   font-size: 24px;
   font-variant-numeric: tabular-nums;
+}
+/* Bleu ciel de l'étiquette « Suggestion » (page Tickets) */
+.col_suggestion {
+  --col: #6cc3e0 !important;
 }
 .col_idea {
   --col: var(--gold) !important;
