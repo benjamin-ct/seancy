@@ -8,5 +8,6 @@ export const DEV_HOSTNAME = "seancy-develop.creusatbenjamin.workers.dev";
 export const isDevSite = typeof window !== "undefined" && window.location.hostname === DEV_HOSTNAME;
 
 // Préfixe du titre d'onglet sur develop (même texte que scripts/develop-assets.ts
-// met dans le <title> de index.html, avant le chargement de React).
+// met dans le <title> de index.html, avant le chargement de React, et que
+// public/theme-init.js garde sur les pages de l'espace admin).
 export const DEV_TITLE_PREFIX = "[Dev] ";
