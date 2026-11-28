@@ -25,6 +25,7 @@ const DIRECTOR_NAME_MAX_LENGTH = 150;
 // utilisateur ») : volontairement court (pas un article), largeur choisie
 // pour rester nettement sous la limite "pas du 5000 chars" demandée.
 const MAX_REVIEW_LENGTH = 1000;
+const ISO_DATE_PREFIX = /^\d{4}-\d{2}-\d{2}/;
 
 const HTML_ENTITY_DECODES: Record<string, string> = {
   "&amp;": "&",
@@ -165,7 +166,10 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
     typeof r.posterPath === "string" && r.posterPath.startsWith("/")
       ? r.posterPath.slice(0, 200)
       : null;
-  const date = cleanString(r.date, 20) ?? undefined;
+  // Toujours une date TMDB (AAAA-MM-JJ, sortie mondiale ou en salle dans la
+  // région) : plus de texte libre ici.
+  const date =
+    typeof r.date === "string" && ISO_DATE_PREFIX.test(r.date) ? r.date.slice(0, 10) : undefined;
   const genreIds = Array.isArray(r.genreIds)
     ? r.genreIds
         .map(cleanNumber)

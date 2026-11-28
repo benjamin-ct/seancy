@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "./AuthContext.tsx";
 import { useMembersOnly } from "./MembersOnlyContext.tsx";
 import { getDetails } from "../api/tmdb.ts";
+import { currentTmdbLanguage } from "../api/tmdbClient.ts";
 import { withSeriesRating } from "../lib/seriesRatings.ts";
 import { logWarn } from "../logger.ts";
 import { syncClientHeaders, useLiveSyncEvent } from "../sync/liveSync.ts";
@@ -43,6 +44,18 @@ import type { MediaType } from "../types/tmdb.ts";
 // sur CET appareil (voir l'effet de synchronisation plus bas).
 const SYNCED_FOR_KEY = "seancy.library.syncedFor";
 const SYNC_DEBOUNCE_MS = 1200;
+
+// En-têtes des envois de la bibliothèque et des listes perso. La langue TMDB
+// des titres envoyés sert au serveur à relire la fiche TMDB de chaque titre
+// dans la même langue : il en reprend le titre, l'affiche et les genres
+// plutôt que de croire ceux envoyés (voir worker/tmdb-titles.ts).
+function libraryWriteHeaders(): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    "x-seancy-tmdb-language": currentTmdbLanguage(),
+    ...syncClientHeaders(),
+  };
+}
 // Listes personnalisées ("Soirée avec X", "Halloween"...) — synchronisées par
 // compte comme watched/watchlist ci-dessus (voir l'effet de synchronisation
 // plus bas), avec ce stockage local comme cache/repli hors connexion.
@@ -465,7 +478,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         storageSet(SYNCED_FOR_KEY, email);
         return fetch("/api/library", {
           method: "PUT",
-          headers: { "content-type": "application/json", ...syncClientHeaders() },
+          headers: libraryWriteHeaders(),
           body: JSON.stringify(merged),
         });
       })
@@ -513,7 +526,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       }
       fetch("/api/library/sync", {
         method: "POST",
-        headers: { "content-type": "application/json", ...syncClientHeaders() },
+        headers: libraryWriteHeaders(),
         body: JSON.stringify({ upserts, deletes }),
       })
         .then((res) => {
@@ -572,7 +585,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         storageSet(CUSTOM_LISTS_SYNCED_FOR_KEY, email);
         return fetch("/api/custom-lists", {
           method: "PUT",
-          headers: { "content-type": "application/json", ...syncClientHeaders() },
+          headers: libraryWriteHeaders(),
           body: JSON.stringify(merged),
         });
       })
@@ -616,7 +629,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
               })
             : fetch(`/api/custom-lists/${encodeURIComponent(listId)}`, {
                 method: "PUT",
-                headers: { "content-type": "application/json", ...syncClientHeaders() },
+                headers: libraryWriteHeaders(),
                 // Lu au moment de l'envoi (pas au moment du toggle) : si la
                 // liste a encore changé depuis la mise en file, c'est bien
                 // sa dernière version qui part.

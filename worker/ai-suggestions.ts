@@ -142,7 +142,7 @@ interface TitleLabel {
   releaseYear: number | null;
 }
 
-interface ListedTitle extends TitleLabel {
+export interface ListedTitle extends TitleLabel {
   mediaType: MediaType;
   tmdbId: number;
 }
@@ -391,7 +391,13 @@ async function getLabels(
   return labels;
 }
 
-function upsertLabelStatement(env: Env, title: ListedTitle, now: number): D1PreparedStatement {
+// Aussi rempli à l'écriture de la bibliothèque (worker/tmdb-titles.ts) : les
+// titres cités dans le prompt y ont alors déjà leur libellé TMDB.
+export function upsertLabelStatement(
+  env: Env,
+  title: ListedTitle,
+  now: number
+): D1PreparedStatement {
   return env.DB.prepare(
     `INSERT INTO tmdb_title_labels
          (media_type, tmdb_id, title, original_title, original_language, release_year, updated_at)
@@ -514,16 +520,37 @@ function promptTitle(
   return year ? `${name} (${year})` : name;
 }
 
+// Titre d'un item de la bibliothèque cité au modèle : uniquement son libellé
+// TMDB (tmdb_title_labels), jamais le titre stocké avec l'item, qui a pu être
+// écrit par le client (ticket « Réhydrater la bibliothèque depuis TMDB ») —
+// un item sans libellé n'est pas cité. Les libellés manquants sont complétés
+// avant le prompt (fetchMissingLabels) et à l'écriture de la bibliothèque
+// (worker/tmdb-titles.ts).
 function libraryPromptTitle(item: LibraryItem, labels: Map<string, TitleLabel>): string | null {
-  return promptTitle(item.title, yearOf(item.date), labels.get(keyOf(item.mediaType, item.id)));
+  const label = labels.get(keyOf(item.mediaType, item.id));
+  return label ? promptTitle(label.title, yearOf(item.date) ?? label.releaseYear, label) : null;
 }
 
 function listedPromptTitle(title: ListedTitle): string | null {
   return promptTitle(title.title, title.releaseYear, title);
 }
 
+// Coups de cœur récents cités dans le résumé des goûts (historique trié du
+// plus récent au plus ancien).
+function recentFavorites(history: LibraryItem[], now: number): LibraryItem[] {
+  return history
+    .filter(
+      (item) =>
+        typeof item.rating === "number" &&
+        item.rating >= 9 &&
+        now - watchedAtOf(item) <= 180 * DAY_MS
+    )
+    .slice(0, 5);
+}
+
 function tasteSummary(
   watched: LibraryItem[],
+  favoriteItems: LibraryItem[],
   labels: Map<string, TitleLabel>,
   now: number
 ): string[] {
@@ -554,14 +581,7 @@ function tasteSummary(
   const faded = ranked
     .filter(([name, w]) => w < 0.15 && (rawCount.get(name) ?? 0) >= 8)
     .slice(0, 3);
-  const favorites = watched
-    .filter(
-      (item) =>
-        typeof item.rating === "number" &&
-        item.rating >= 9 &&
-        now - watchedAtOf(item) <= 180 * DAY_MS
-    )
-    .slice(0, 5)
+  const favorites = favoriteItems
     .map((item) => libraryPromptTitle(item, labels))
     .filter((title): title is string => !!title);
 
@@ -615,6 +635,7 @@ function topGenreIds(watched: LibraryItem[], now: number): number[] {
 interface PromptLists {
   recent: LibraryItem[];
   recentWindowCount: number;
+  favorites: LibraryItem[];
   older: LibraryItem[];
   skips: ListedTitle[];
 }
@@ -639,6 +660,7 @@ function selectPromptLists(signals: UserSignals, now: number): PromptLists {
   return {
     recent,
     recentWindowCount: window.length,
+    favorites: recentFavorites(history, now),
     older,
     skips: signals.skips.slice(0, SKIPS_PROMPT_CAP),
   };
@@ -673,7 +695,7 @@ function buildPrompt(
     .filter((title): title is string => !!title);
 
   const lines = [
-    ...tasteSummary(history, labels, now),
+    ...tasteSummary(history, lists.favorites, labels, now),
     "",
     `Tous les titres vus sur les ${RECENT_WINDOW_DAYS} derniers jours (${recentEntries.length}${truncated}) (titre (annee) note/10) : ${recentEntries.join("; ") || "aucun"}`,
     "",
@@ -861,6 +883,7 @@ async function generateSuggestions(
     const lists = selectPromptLists(signals, now);
     const labelKeys = [
       ...lists.recent.map((item) => ({ mediaType: item.mediaType, tmdbId: item.id })),
+      ...lists.favorites.map((item) => ({ mediaType: item.mediaType, tmdbId: item.id })),
       ...lists.skips,
       ...lists.older.map((item) => ({ mediaType: item.mediaType, tmdbId: item.id })),
       ...signals.previous,
