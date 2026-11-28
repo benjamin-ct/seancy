@@ -25,6 +25,10 @@ export default function AboutPage() {
         </div>
       </SettingsRow>
 
+      <SettingsRow label={t("settings.sections.suggestions.title")}>
+        <Link to="/reglages/suggestions">{t("settings.sections.suggestions.summary")}</Link>
+      </SettingsRow>
+
       <SettingsRow label={t("aboutPage.contactLabel")}>
         <a href={LEGAL_CONTACT_URL} target="_blank" rel="noreferrer" className={styles.links}>
           {t("legal.contactLabel")}

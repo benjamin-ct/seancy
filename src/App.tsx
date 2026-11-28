@@ -53,12 +53,11 @@ const ADMIN_HOST = isAdminHost();
 
 // Ancienne adresse de la page Tickets, et /admin sur le site public : vers
 // l'espace admin (son domaine en prod, /admin sur les previews et en local).
+// Page rechargée dans les deux cas : les icônes et le titre de l'onglet de
+// l'admin sont posés au chargement par public/theme-init.js.
 function ToAdmin({ path = "" }: { path?: string }) {
-  if (isPublicHost()) {
-    window.location.replace(`${ADMIN_ORIGIN}${path}`);
-    return null;
-  }
-  return <Navigate to={`/admin${path}`} replace />;
+  window.location.replace(isPublicHost() ? `${ADMIN_ORIGIN}${path}` : `/admin${path}`);
+  return null;
 }
 const NotFound = lazy(() => import("./modules/not-found/index.ts"));
 

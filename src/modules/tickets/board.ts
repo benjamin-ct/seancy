@@ -15,6 +15,12 @@ export const viewable = (f: TicketFile) => /^(image|video)\//.test(f.type);
 
 export const COLUMNS: { key: TicketStatus; name: string; empty: string }[] = [
   {
+    key: "suggestion",
+    name: "Suggestions",
+    empty:
+      "Les suggestions des utilisateurs (Réglages › Suggestions) arrivent ici ; glisse-les dans « Idées » ou « À faire ».",
+  },
+  {
     key: "idea",
     name: "Idées",
     empty: "Note une idée ici ; glisse-la dans « À faire » pour en faire un ticket.",
@@ -31,14 +37,20 @@ export const COLUMNS: { key: TicketStatus; name: string; empty: string }[] = [
 export const columnName = (k: TicketStatus) => COLUMNS.find((c) => c.key === k)?.name ?? "";
 
 const MOVES: Record<TicketStatus, TicketStatus[]> = {
-  idea: ["todo", "work"],
-  todo: ["idea", "work"],
+  suggestion: ["idea", "todo", "work"],
+  idea: ["suggestion", "todo", "work"],
+  todo: ["suggestion", "idea", "work"],
   work: ["todo"],
   review: ["done", "work"],
   done: ["work"],
 };
 /** Colonnes où l'on range les cartes à la main (ordre gardé par le serveur). */
-export const SORTABLE = new Set<TicketStatus>(["idea", "todo"]);
+export const SORTABLE = new Set<TicketStatus>(["suggestion", "idea", "todo"]);
+/**
+ * Étiquette des suggestions des utilisateurs (FEEDBACK_LABEL, worker/tickets-logic.ts) : pas
+ * montrée sur les cartes de la colonne Suggestions, gardée quand la carte en sort.
+ */
+export const SUGGESTION_LABEL = "Suggestion";
 export const canMove = (t: Ticket, to: TicketStatus) =>
   t.status === to
     ? SORTABLE.has(to)
@@ -99,30 +111,53 @@ export const day = (ms: number) =>
 
 export const DONE_SHOWN = 60;
 
-/** Carte qu'on peut archiver (sortir du tableau sans la supprimer) : idée, à faire ou faite. */
+/** Carte qu'on peut archiver (sortir du tableau sans la supprimer) : suggestion, idée, à faire ou faite. */
 export const archivable = (t: Ticket) =>
-  !t.archived && (t.status === "idea" || t.status === "todo" || t.status === "done");
+  !t.archived && (SORTABLE.has(t.status) || t.status === "done");
+/** Message après le passage d'une carte d'une colonne rangée à la main à une autre. */
+export function movedText(from: TicketStatus, to: TicketStatus): string {
+  if (to === "suggestion") {
+    return "Remise dans les suggestions";
+  }
+  if (to === "idea") {
+    return from === "suggestion" ? "Suggestion gardée dans les idées" : "Remise dans les idées";
+  }
+  return `${from === "suggestion" ? "Suggestion" : "Idée"} passée dans « À faire »`;
+}
 
 /**
  * Cartes de chaque colonne, dans leur ordre (faits : les plus récents d'abord, 60 au plus).
- * Les cartes archivées n'y sont que pendant une recherche.
+ * Tableau : les cartes archivées n'y sont que pendant une recherche.
+ * Vue des archives (bouton « Archivés ») : seulement elles, recherche comprise.
  */
-export function columns(tickets: Ticket[], query = ""): Record<TicketStatus, Ticket[]> {
+export function columns(
+  tickets: Ticket[],
+  query = "",
+  archives = false
+): Record<TicketStatus, Ticket[]> {
   const q = plain(query.trim());
-  const by: Record<TicketStatus, Ticket[]> = { idea: [], todo: [], work: [], review: [], done: [] };
+  const by: Record<TicketStatus, Ticket[]> = {
+    suggestion: [],
+    idea: [],
+    todo: [],
+    work: [],
+    review: [],
+    done: [],
+  };
   for (const t of tickets) {
-    if (q ? plain(`${t.title} ${t.detail} ${t.labels.join(" ")}`).includes(q) : !t.archived) {
+    const found = !q || plain(`${t.title} ${t.detail} ${t.labels.join(" ")}`).includes(q);
+    if (archives ? t.archived && found : q ? found : !t.archived) {
       by[t.status].push(t);
     }
   }
-  for (const k of ["idea", "todo"] as const) {
+  for (const k of SORTABLE) {
     by[k].sort((a, b) => a.position - b.position);
   }
   by.work.sort((a, b) => a.sent - b.sent);
   by.review.sort(
     (a, b) => (a.queued || Infinity) - (b.queued || Infinity) || b.progressAt - a.progressAt
   );
-  by.done = by.done.sort((a, b) => b.doneAt - a.doneAt).slice(0, q ? 200 : DONE_SHOWN);
+  by.done = by.done.sort((a, b) => b.doneAt - a.doneAt).slice(0, q || archives ? 200 : DONE_SHOWN);
   return by;
 }
 export const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();

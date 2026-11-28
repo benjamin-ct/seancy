@@ -1,3 +1,4 @@
+import { isDevSite } from "../../../core/lib/devSite.ts";
 import styles from "./TicketLogo.module.css";
 
 // « S » italique de Fraunces 500 vectorisé (même placement que le <text>
@@ -11,7 +12,11 @@ export const TICKET_S_PATH =
 // perforation couleur du fond (effet découpe, suit le thème) et « S » clair.
 export default function TicketLogo({ className }: { className?: string }) {
   return (
-    <svg className={`${styles.ticket} ${className ?? ""}`} viewBox="0 0 120 80" aria-hidden="true">
+    <svg
+      className={`${styles.ticket} ${isDevSite ? styles.dev : ""} ${className ?? ""}`}
+      viewBox="0 0 120 80"
+      aria-hidden="true"
+    >
       <path
         d="M0 0 H120 V30 A10 10 0 0 0 120 50 V80 H0 V50 A10 10 0 0 0 0 30 Z"
         className={styles.body}

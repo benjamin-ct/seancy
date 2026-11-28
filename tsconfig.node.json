@@ -55,6 +55,7 @@
     "worker/ticket-level.ts",
     "worker/access.ts",
     "worker/cloudflare-usage.ts",
-    "worker/vapid.ts"
+    "worker/vapid.ts",
+    "worker/notify-dedup.ts"
   ]
 }

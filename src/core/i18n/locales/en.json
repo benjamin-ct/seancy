@@ -93,12 +93,38 @@
       "notifications": { "title": "Notifications", "summary": "Release and new content alerts" },
       "affichage": { "title": "Display", "summary": "Language, region, theme" },
       "donnees": { "title": "My data", "summary": "Export and delete your account" },
+      "suggestions": { "title": "Suggestions", "summary": "Suggest an idea or an improvement" },
       "a-propos": { "title": "About", "summary": "Legal notices and contact" }
     }
   },
   "dataSettings": {
     "groupTitle": "My data",
     "groupLead": "Export a copy of your data or delete your account."
+  },
+  "feedbackPage": {
+    "lead": "A missing feature, an improvement, a problem? Tell us what you would like to see in Seancy: every suggestion is read.",
+    "kindLabel": "Type of suggestion",
+    "kinds": {
+      "feature": "New feature",
+      "improvement": "Improvement",
+      "bug": "Problem",
+      "other": "Other"
+    },
+    "messageLabel": "Your suggestion",
+    "messagePlaceholder": "For example: sort my list by release date…",
+    "count": "{{count}}/{{max}}",
+    "minHint": "At least {{min}} characters.",
+    "anonymous": "Your suggestion is sent without your name or email address: please don't include personal information.",
+    "send": "Send suggestion",
+    "sending": "Sending…",
+    "sentTitle": "Thanks for your suggestion!",
+    "sentText": "It has been sent to the Seancy team.",
+    "sendAnother": "Send another suggestion",
+    "errors": {
+      "tooShort": "Your suggestion is too short (at least {{min}} characters).",
+      "rateLimited": "You have sent a lot of suggestions today: please try again tomorrow.",
+      "generic": "Unable to send your suggestion right now. Please try again later."
+    }
   },
   "aboutPage": {
     "lead": "Seancy, a personal project to keep track of movies and shows.",
@@ -730,7 +756,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "November 25, 2026",
+    "lastUpdatedValue": "November 27, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -768,6 +794,10 @@
       "reminders": {
         "label": "“Notify me” reminders",
         "text": ": when you turn on the bell for an upcoming title, we store on your account that title (identifier, name, poster, release date), the date of the reminder and the streaming services already known for it. They are only used to notify you on release day and when the title arrives on a streaming service. Turning the bell off deletes the reminder."
+      },
+      "feedback": {
+        "label": "Suggestions",
+        "text": " (if you send any from Settings → Suggestions): the type and text of your suggestion, sent to the Seancy team without your name, your email address or your account identifier. It is read by the team (notified on Discord) and may be used to prepare a change to the app, including with Claude, an AI-assisted development tool (see below). As it is not linked to your account, it is not deleted with it: please don't include personal information. Only a technical counter linked to your account limits the number of submissions per day; it is deleted afterwards."
       },
       "sharedProfile": {
         "label": "Shared profile and username",
@@ -812,6 +842,14 @@
       "gravatar": {
         "label": "Gravatar",
         "text": " (Automattic): displays your profile picture if you've set one up linked to your email address. We never send your email address in clear text to Gravatar, only its fingerprint (MD5 hash), in line with how this service works."
+      },
+      "discord": {
+        "label": "Discord",
+        "text": ": notifies the Seancy team of each new suggestion with a message that quotes its beginning (first words, without your name, your email address or your account identifier)."
+      },
+      "anthropic": {
+        "label": "Anthropic (Claude)",
+        "text": ": AI-assisted development tool. When the team decides to act on a suggestion, its text may be sent to it to prepare the change to the app (run from GitHub Actions); it is never published on the project's public repository."
       },
       "outro": "None of this data is sold or used for advertising purposes.",
       "google": {
@@ -1050,7 +1088,9 @@
     "seasonRateHint": "Mark an episode as watched to rate the season",
     "specialsNotInSeries": "Specials don't count towards the show's rating.",
     "rateEpisode": "Rate {{episode}}",
-    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit"
+    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit",
+    "noOverview": "No summary available for this episode.",
+    "tmdbRating": "TMDB rating:"
   },
   "profileShare": {
     "title": "Public link",

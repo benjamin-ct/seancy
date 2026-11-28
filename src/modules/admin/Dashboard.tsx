@@ -16,7 +16,7 @@ interface Overview {
     "users" | "usersWeek" | "activeMonth" | "subscriptions" | "libraryItems" | "customLists",
     number
   >;
-  tickets: Partial<Record<"idea" | "todo" | "work" | "review" | "done", number>>;
+  tickets: Partial<Record<"suggestion" | "idea" | "todo" | "work" | "review" | "done", number>>;
   config: { group: string; items: { name: string; ok: boolean; help: string }[] }[];
 }
 
@@ -30,6 +30,7 @@ const STATS: [keyof Overview["stats"], string][] = [
   ["customLists", "Listes perso"],
 ];
 const COLUMNS: [keyof Overview["tickets"], string][] = [
+  ["suggestion", "Suggestions"],
   ["idea", "Idées"],
   ["todo", "À faire"],
   ["work", "En cours"],
@@ -41,6 +42,7 @@ const COLUMNS: [keyof Overview["tickets"], string][] = [
 let lastOverview: Overview | null = null;
 
 export default function Dashboard() {
+  // Même titre posé dès le chargement par public/theme-init.js
   useDocumentTitle("Admin");
   const [data, setData] = useState<Overview | null>(lastOverview);
   const [error, setError] = useState("");

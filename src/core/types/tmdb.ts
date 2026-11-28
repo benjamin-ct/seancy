@@ -148,6 +148,9 @@ export interface Episode {
   overview?: string;
   air_date?: string;
   runtime?: number | null;
+  /** Note moyenne TMDB (0 tant que personne n'a voté). */
+  vote_average?: number;
+  vote_count?: number;
 }
 
 export interface SeasonDetails {

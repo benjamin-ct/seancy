@@ -11,3 +11,9 @@ export const isAdminHost = (hostname = window.location.hostname) =>
 /** Début des adresses de l'espace admin : « » sur son domaine, « /admin » ailleurs. */
 export const adminPrefix = () => (isAdminHost() ? "" : "/admin");
 export const isPublicHost = (hostname = window.location.hostname) => hostname === PUBLIC_HOSTNAME;
+/**
+ * Lien du site vers l'espace admin (Profil › Compte, barre du haut) : son domaine depuis
+ * le site public, sinon /admin du même site (develop, previews, local), pour rester sur
+ * l'admin de l'environnement où l'on est, avec sa propre base.
+ */
+export const adminHomeUrl = () => (isPublicHost() ? ADMIN_ORIGIN : "/admin");

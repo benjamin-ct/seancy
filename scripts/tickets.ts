@@ -13,7 +13,7 @@
 //   node scripts/tickets.ts usage <id> --file <execution.json> [--run URL]   jetons et quota d'un passage de Claude (workflow)
 //   node scripts/tickets.ts file <id> capture.png …         pièces jointes (images, PDF, vidéos ; 1,5 Mo au plus)
 //   node scripts/tickets.ts add --title "…" [--detail "…"] [--status idea|todo] [--labels "Bug,Sentry"]
-//   node scripts/tickets.ts list [idea|todo|work|review|done|archived]   tableau (archivés : seulement avec archived)
+//   node scripts/tickets.ts list [suggestion|idea|todo|work|review|done|archived]   tableau (archivés : seulement avec archived)
 //   node scripts/tickets.ts search <texte>                  tickets dont le titre, la description ou les étiquettes
 //                                                          contiennent le texte, archivés compris
 //   node scripts/tickets.ts get <id>                        ticket complet (JSON)

@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
 import { usePosterThumbhash } from "../../shared/lib/thumbhash.ts";
-import type { TFunction } from "i18next";
 import {
   backdropUrl,
   posterUrl,
@@ -28,6 +27,7 @@ import {
   Icon,
 } from "../../shared/components/index.ts";
 import EpisodeTracker from "./components/EpisodeTracker.tsx";
+import { formatRuntime } from "./formatRuntime.ts";
 import CollectionSection from "./components/CollectionSection.tsx";
 import DetailSkeleton, { DETAIL_POSTER_SIZES } from "./components/DetailSkeleton.tsx";
 import WhereToWatch from "./components/WhereToWatch.tsx";
@@ -75,20 +75,6 @@ const TV_STATUS_KEYS: Record<string, string> = {
   Ended: "detailPage.tvStatusEnded",
   Canceled: "detailPage.tvStatusCanceled",
 };
-
-// « 2 h 46 » plutôt que « 166 min » (maquette) ; les durées de moins d'une
-// heure (épisodes) restent en minutes.
-function formatRuntime(t: TFunction, minutes: number): string {
-  if (minutes < 60) {
-    return t("detailPage.runtimeMinutes", { count: minutes });
-  }
-  const m = minutes % 60;
-  return t("detailPage.runtimeHours", {
-    hours: Math.floor(minutes / 60),
-    minutes: String(m).padStart(2, "0"),
-    count: m,
-  });
-}
 
 function languageName(code: string | undefined, localeTag: string): string | null {
   if (!code) {

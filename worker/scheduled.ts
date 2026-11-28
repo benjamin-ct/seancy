@@ -6,7 +6,6 @@ import {
   markUserNotified,
   getRegionsByUser,
   getNotifiedKeys,
-  notifiedKey,
   providersChanged,
   knownProvidersUpdate,
   purgeAccountsPendingDeletion,
@@ -21,7 +20,13 @@ import {
   type TmdbRunCache,
 } from "./tmdb.ts";
 import { getAllReminders, updateReminderProviders, type ReminderRow } from "./reminders.ts";
-import { notifyUser, type NotificationRecipient } from "./notify.ts";
+import { notifyUser, type AppNotification, type NotificationRecipient } from "./notify.ts";
+import {
+  hasNewProvider,
+  mergeKnownProviders,
+  notifiedKey,
+  releaseAlreadyAnnounced,
+} from "./notify-dedup.ts";
 import { logError } from "./logger.ts";
 import { purgeExpiredRows } from "./purge.ts";
 import type { Env, SubscriptionRow } from "./types.ts";
@@ -72,6 +77,44 @@ async function markRecipientNotified(
   }
 }
 
+// Titres déjà annoncés à chaque destinataire pendant l'exécution, tous motifs
+// confondus : un titre à la fois dans la watchlist, un rappel, un genre
+// favori ou les tendances ne donne qu'une notification par jour. Clé du
+// destinataire : le compte, sinon l'abonnement anonyme (les rappels, vérifiés
+// avant le reste, construisent leur propre destinataire pour le même compte).
+type RunAnnouncements = Map<string, Set<string>>;
+
+function recipientKey(recipient: NotificationRecipient): string {
+  return recipient.userId !== null
+    ? `user:${recipient.userId}`
+    : `subscription:${recipient.subscriptions[0]?.id}`;
+}
+
+// Notifie sauf si le titre a déjà été annoncé à ce destinataire pendant
+// l'exécution ; renvoie false dans ce cas.
+async function announce(
+  env: Env,
+  run: RunAnnouncements,
+  recipient: NotificationRecipient,
+  mediaType: string,
+  tmdbId: number,
+  notification: AppNotification
+): Promise<boolean> {
+  const key = recipientKey(recipient);
+  let titles = run.get(key);
+  if (!titles) {
+    titles = new Set();
+    run.set(key, titles);
+  }
+  const title = `${mediaType}:${tmdbId}`;
+  if (titles.has(title)) {
+    return false;
+  }
+  titles.add(title);
+  await notifyUser(env, recipient, notification);
+  return true;
+}
+
 // 1. Titres de la watchlist qui viennent d'apparaître en streaming. La
 // watchlist et la référence des plateformes connues restent propres à chaque
 // abonnement ; seule la notification est dédupliquée pour le destinataire
@@ -80,11 +123,11 @@ async function markRecipientNotified(
 async function checkWatchlistAvailability(
   env: Env,
   db: D1Database,
+  run: RunAnnouncements,
   recipient: NotificationRecipient,
   region: string,
   tmdbCache: TmdbRunCache
 ): Promise<void> {
-  const notifiedThisRun = new Set<string>();
   // Références mises à jour en un seul batch, et seulement si elles ont
   // changé : avant, une écriture par titre et par jour (audit H5).
   const updates: D1PreparedStatement[] = [];
@@ -108,26 +151,22 @@ async function checkWatchlistAvailability(
       const knownProviders: number[] | null = item.known_providers
         ? JSON.parse(item.known_providers)
         : null;
-      const newlyAvailable =
-        knownProviders !== null && currentProviders.some((id) => !knownProviders.includes(id));
-      const key = `${item.media_type}:${item.tmdb_id}`;
-
-      if (newlyAvailable && !notifiedThisRun.has(key)) {
-        notifiedThisRun.add(key);
-        await notifyUser(env, recipient, {
+      if (hasNewProvider(knownProviders, currentProviders)) {
+        // Un même titre dans la watchlist de plusieurs appareils du compte
+        // n'est annoncé qu'une fois (announce).
+        await announce(env, run, recipient, item.media_type, item.tmdb_id, {
           kind: "watchlistAvailable",
           mediaTitle: item.title,
           url: `/media/${item.media_type}/${item.tmdb_id}`,
         });
       }
 
-      // Sert de référence pour la prochaine vérification. La première fois
-      // (knownProviders === null), on se contente d'enregistrer sans notifier,
-      // sinon tout ce qui était déjà là au moment de l'ajout déclencherait une
-      // notification.
-      if (providersChanged(item.known_providers, currentProviders)) {
+      // Référence pour la prochaine vérification : plateformes déjà vues,
+      // jamais retirées (voir mergeKnownProviders).
+      const merged = mergeKnownProviders(knownProviders, currentProviders);
+      if (providersChanged(item.known_providers, merged)) {
         updates.push(
-          knownProvidersUpdate(db, subscription.id, item.media_type, item.tmdb_id, currentProviders)
+          knownProvidersUpdate(db, subscription.id, item.media_type, item.tmdb_id, merged)
         );
       }
     }
@@ -141,6 +180,7 @@ async function checkWatchlistAvailability(
 async function checkFavoriteGenreReleases(
   env: Env,
   db: D1Database,
+  run: RunAnnouncements,
   recipient: NotificationRecipient,
   history: NotifiedHistory,
   tmdbCache: TmdbRunCache
@@ -171,10 +211,10 @@ async function checkFavoriteGenreReleases(
       }
 
       for (const item of results.slice(0, 5)) {
-        if (history.has(notifiedKey(media_type, item.id, "genre"))) {
+        if (releaseAlreadyAnnounced(history, media_type, item.id)) {
           continue;
         }
-        await notifyUser(env, recipient, {
+        await announce(env, run, recipient, media_type, item.id, {
           kind: "favoriteGenreRelease",
           mediaTitle: item.title || item.name || "",
           url: `/media/${media_type}/${item.id}`,
@@ -189,6 +229,7 @@ async function checkFavoriteGenreReleases(
 async function checkTrendingReleases(
   env: Env,
   db: D1Database,
+  run: RunAnnouncements,
   recipient: NotificationRecipient,
   history: NotifiedHistory,
   trending: TmdbListItem[]
@@ -202,17 +243,21 @@ async function checkTrendingReleases(
     if (!mediaType) {
       continue;
     }
-    if (history.has(notifiedKey(mediaType, item.id, "trending"))) {
+    // Déjà annoncé (genre favori, rappel, tendance d'un jour précédent) :
+    // une sortie ne fait l'objet que d'une notification.
+    if (releaseAlreadyAnnounced(history, mediaType, item.id)) {
       continue;
     }
 
-    await notifyUser(env, recipient, {
+    const sent = await announce(env, run, recipient, mediaType, item.id, {
       kind: "trendingRelease",
       mediaTitle: item.title || item.name || "",
       url: `/media/${mediaType}/${item.id}`,
     });
     await markRecipientNotified(db, recipient, history, mediaType, item.id, "trending");
-    sentThisRun += 1;
+    if (sent) {
+      sentThisRun += 1;
+    }
   }
 }
 
@@ -233,6 +278,7 @@ function isReleaseDue(releaseDate: string | null): boolean {
 async function checkReminder(
   env: Env,
   db: D1Database,
+  run: RunAnnouncements,
   recipient: NotificationRecipient,
   history: NotifiedHistory,
   reminder: ReminderRow,
@@ -262,32 +308,33 @@ async function checkReminder(
     isReleaseDue(reminder.release_date) &&
     !history.has(notifiedKey(mediaType, tmdbId, "reminder-release"))
   ) {
-    await notifyUser(env, recipient, {
+    await announce(env, run, recipient, mediaType, tmdbId, {
       kind: "reminderReleased",
       mediaTitle: reminder.title,
       url,
     });
     await markRecipientNotified(db, recipient, history, mediaType, tmdbId, "reminder-release");
-  } else if (
-    currentProviders !== null &&
-    knownProviders !== null &&
-    currentProviders.some((id) => !knownProviders.includes(id))
-  ) {
-    await notifyUser(env, recipient, {
+  } else if (currentProviders !== null && hasNewProvider(knownProviders, currentProviders)) {
+    await announce(env, run, recipient, mediaType, tmdbId, {
       kind: "reminderAvailable",
       mediaTitle: reminder.title,
       url,
     });
   }
 
-  if (currentProviders !== null && providersChanged(reminder.known_providers, currentProviders)) {
-    await updateReminderProviders(db, reminder.user_id, mediaType, tmdbId, currentProviders);
+  if (currentProviders !== null) {
+    // Plateformes déjà vues, jamais retirées (voir mergeKnownProviders).
+    const merged = mergeKnownProviders(knownProviders, currentProviders);
+    if (providersChanged(reminder.known_providers, merged)) {
+      await updateReminderProviders(db, reminder.user_id, mediaType, tmdbId, merged);
+    }
   }
 }
 
 async function checkReminders(
   env: Env,
   db: D1Database,
+  run: RunAnnouncements,
   subscriptions: SubscriptionRow[],
   regions: Map<number, string>,
   tmdbCache: TmdbRunCache
@@ -318,6 +365,7 @@ async function checkReminders(
         await checkReminder(
           env,
           db,
+          run,
           recipient,
           history,
           reminder,
@@ -376,8 +424,9 @@ export async function runDailyCheck(env: Env): Promise<void> {
   const subscriptions = await getAllSubscriptions(db);
   const tmdbCache = createTmdbRunCache();
   const regions = await getRegionsByUser(db);
+  const run: RunAnnouncements = new Map();
   try {
-    await checkReminders(env, db, subscriptions, regions, tmdbCache);
+    await checkReminders(env, db, run, subscriptions, regions, tmdbCache);
   } catch (err) {
     logError("Cron : rappels en échec :", err);
   }
@@ -413,9 +462,9 @@ export async function runDailyCheck(env: Env): Promise<void> {
     const region =
       (recipient.userId !== null ? regions.get(recipient.userId) : undefined) ?? DEFAULT_REGION;
     const checks: [string, () => Promise<void>][] = [
-      ["watchlist", () => checkWatchlistAvailability(env, db, recipient, region, tmdbCache)],
-      ["genres", () => checkFavoriteGenreReleases(env, db, recipient, history, tmdbCache)],
-      ["tendances", () => checkTrendingReleases(env, db, recipient, history, trending)],
+      ["watchlist", () => checkWatchlistAvailability(env, db, run, recipient, region, tmdbCache)],
+      ["genres", () => checkFavoriteGenreReleases(env, db, run, recipient, history, tmdbCache)],
+      ["tendances", () => checkTrendingReleases(env, db, run, recipient, history, trending)],
     ];
     for (const [name, check] of checks) {
       try {

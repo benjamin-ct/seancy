@@ -43,6 +43,7 @@ import {
   FIX_TEXT,
   RETRY_EVERY,
   RETRY_MAX,
+  FEEDBACK_LABEL,
   STATUSES,
   TicketError,
   applyAction,
@@ -407,6 +408,23 @@ async function notify(env: Env, text: string, id: string, tag?: string): Promise
       allowed_mentions: { parse: [] },
     }),
   }).catch(() => {});
+}
+
+/**
+ * Suggestion d'un utilisateur (POST /api/feedback, Réglages › Suggestions,
+ * données préparées par feedbackTicket) : rangée en haut de la colonne
+ * Suggestions, à part des idées de l'équipe, avec l'étiquette « Suggestion »
+ * (créée au besoin, gardée quand la carte passe en idée ou à faire), puis
+ * notifiée aux administrateurs.
+ */
+export async function addFeedback(env: Env, data: TicketData, now = Date.now()): Promise<string> {
+  const defs = await labelDefs(env);
+  if (!defs.some((d) => d.name.toLowerCase() === FEEDBACK_LABEL.name.toLowerCase())) {
+    await setMeta(env, "labels", JSON.stringify([...defs, FEEDBACK_LABEL]));
+  }
+  const id = await insert(env, data, "suggestion", { top: true }, now);
+  await notify(env, `**Nouvelle suggestion** : ${data.title}`, id);
+  return id;
 }
 
 /** Issues encore ouvertes du ticket (une par envoi) fermées : avant d'en ouvrir une autre, et à la fusion. */

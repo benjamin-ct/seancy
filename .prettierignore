@@ -1,5 +1,6 @@
 # Artefacts de build et dépendances : jamais formatés.
 dist
+dist-develop
 dev-dist
 node_modules
 
@@ -8,3 +9,4 @@ package-lock.json
 
 # Icônes/manifest générés (voir scripts/generate-icons.ts).
 public
+develop-icons

@@ -9,6 +9,7 @@ import {
   applyAction,
   cleanData,
   cleanLabelDefs,
+  feedbackTicket,
   issueBody,
   mergeLabels,
   positionBefore,
@@ -209,6 +210,35 @@ check(
   "Idée → À faire",
   applyAction(ticket("idea"), { type: "move", to: "todo" }, T0).status,
   "todo"
+);
+// Suggestions des utilisateurs : leur propre colonne, triée à la main comme Idées et À faire
+check(
+  "Suggestion → Idées, → À faire, et remise dans les suggestions",
+  [
+    applyAction(ticket("suggestion"), { type: "move", to: "idea" }, T0).status,
+    applyAction(ticket("suggestion"), { type: "move", to: "todo" }, T0).status,
+    applyAction(ticket("idea"), { type: "move", to: "suggestion" }, T0).status,
+    applyAction(ticket("todo"), { type: "move", to: "suggestion" }, T0).status,
+  ],
+  ["idea", "todo", "suggestion", "suggestion"]
+);
+check(
+  "Suggestion envoyée à Claude",
+  applyAction(ticket("suggestion"), { type: "send" }, T0).status,
+  "work"
+);
+check(
+  "Suggestion archivée : reste dans sa colonne",
+  (({ status, data }) => [status, data.archived])(
+    applyAction(ticket("suggestion"), { type: "archive" }, T0)
+  ),
+  ["suggestion", T0]
+);
+refused("Rangement refusé d'une suggestion vers À valider", () =>
+  applyAction(ticket("suggestion"), { type: "move", to: "review" }, T0)
+);
+refused("Rangement refusé d'un ticket en cours vers Suggestions", () =>
+  applyAction(ticket("work"), { type: "move", to: "suggestion" }, T0)
 );
 // Archivage : hors du tableau sans être supprimé, remis dessus à la demande ou en changeant de colonne
 const archived = applyAction(ticket("idea"), { type: "archive" }, T0, "Ben");
@@ -842,6 +872,57 @@ const main = async () => {
       "Réécriture : réponse illisible",
       rewriteFrom("Juste un titre", { title: "T", detail: "" }),
       null
+    );
+  }
+
+  // ---------- Suggestions des utilisateurs (Réglages › Suggestions) ----------
+  {
+    const t = feedbackTicket({
+      kind: "feature",
+      message: "  Pouvoir trier ma liste\r\n\n\n\npar date  ",
+    });
+    check(
+      "Suggestion : titre, type, texte nettoyé, étiquette, anonyme",
+      t && {
+        title: t.title,
+        detail: t.detail,
+        labels: t.labels,
+        author: t.author,
+        authorEmail: t.authorEmail,
+      },
+      {
+        title: "Pouvoir trier ma liste",
+        detail:
+          "**Type :** Nouvelle fonctionnalité\n\nPouvoir trier ma liste\n\npar date\n\n*Envoyée par un utilisateur depuis Réglages › Suggestions (anonyme).*",
+        labels: ["Suggestion"],
+        author: "Utilisateur de Seancy",
+        authorEmail: "",
+      }
+    );
+    check(
+      "Suggestion : trop courte (espaces ignorés)",
+      feedbackTicket({ message: "a b c d e f" }),
+      null
+    );
+    check("Suggestion : texte absent", feedbackTicket({ kind: "bug" }), null);
+    check(
+      "Suggestion : type inconnu ramené à « Autre »",
+      feedbackTicket({ kind: "admin", message: "Un texte assez long" })?.detail.startsWith(
+        "**Type :** Autre\n\n"
+      ),
+      true
+    );
+    const long = feedbackTicket({ message: "x".repeat(5000) });
+    check("Suggestion : titre borné à 80 caractères", long?.title.length, 80);
+    check(
+      "Suggestion : titre commencé par une majuscule",
+      feedbackTicket({ message: "pouvoir trier ma liste" })?.title,
+      "Pouvoir trier ma liste"
+    );
+    check(
+      "Suggestion : texte borné à 2000 caractères",
+      long?.detail.includes("x".repeat(2001)),
+      false
     );
   }
 

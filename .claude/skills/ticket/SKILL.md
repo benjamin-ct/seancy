@@ -11,6 +11,7 @@ Trello, le label « Bloqué », le listener du NAS et le résumé Discord est ma
 
 | Trello (avant)                       | Page Tickets (maintenant)                                                                    |
 | ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| (nouveau)                            | **Suggestions** : envoyées par les utilisateurs (Réglages › Suggestions) ; zone humaine      |
 | `Idées`                              | **Idées** : zone humaine, Claude n'y touche pas (sauf pour noter une idée qu'on lui demande) |
 | `A faire` (pris par Claude)          | **À faire** ; « Envoyer à Claude » ouvre une issue `Ticket <id>` → une exécution du workflow |
 | `En cours`                           | **En cours** : avancement noté par `progress`, arrêt sur erreur et pause de quota montrés    |
@@ -33,7 +34,7 @@ L'outil est `node scripts/tickets.ts` (clé `SEANCY_TICKETS_KEY` déjà dans l'e
 - `file <id> capture.png …` : captures jointes au ticket (réduites toutes seules au-delà de 150 Ko) ;
 - `add --title "…" --detail "…" --status idea|todo --labels "Bug,Sentry"` : noter une idée ou un ticket (sans le
   coder) ;
-- `list [idea|todo|work|review|done|archived]`, `get <id>` : état du tableau (sans les tickets archivés, sauf
+- `list [suggestion|idea|todo|work|review|done|archived]`, `get <id>` : état du tableau (sans les tickets archivés, sauf
   `list archived`), ticket complet ;
 - `search <texte>` : tickets dont le titre, la description ou les étiquettes contiennent le texte, **archivés
   compris** (un ticket archivé est sorti du tableau sans être supprimé : chercher là un ticket déjà noté).
