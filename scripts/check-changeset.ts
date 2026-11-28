@@ -2,7 +2,9 @@
 // du code produit (src/, worker/ ou migrations/) — voir ticket Trello
 // "Épique git-flow : changelog par PR" et .changeset/README.md. Les PR
 // purement infra/outillage/doc n'ont rien à fournir : leur impact
-// utilisateur est nul, donc rien à annoncer dans le changelog.
+// utilisateur est nul, donc rien à annoncer dans le changelog. Les PR qui ne
+// touchent que l'espace admin et les tickets non plus : leur Worker est mis en
+// ligne à chaque fusion dans develop, sans release (worker/release-scope.ts).
 //
 // BASE_REF doit pointer vers une réf déjà fetchée localement (voir le job
 // CI, qui checkout avec fetch-depth: 0) — absent, on considère qu'il n'y a
@@ -10,6 +12,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { needsRelease } from "../worker/release-scope.ts";
 import { isChangesetError, listChangesetFiles, parseChangeset } from "./changesetLib.ts";
 
 const baseRef = process.env.BASE_REF;
@@ -32,6 +35,14 @@ const touchesProductCode = files.some(
 
 if (!touchesProductCode) {
   console.log("Aucun fichier src/, worker/ ou migrations/ modifié : fragment non requis.");
+  process.exit(0);
+}
+
+if (!files.some(needsRelease)) {
+  console.log(
+    "Seuls l'espace admin, les tickets, les migrations ou l'outillage sont modifiés : en ligne " +
+      "dès la fusion dans develop, fragment non requis."
+  );
   process.exit(0);
 }
 

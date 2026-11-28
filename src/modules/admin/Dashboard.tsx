@@ -42,6 +42,7 @@ const COLUMNS: [keyof Overview["tickets"], string][] = [
 let lastOverview: Overview | null = null;
 
 export default function Dashboard() {
+  // Même titre posé dès le chargement par public/theme-init.js
   useDocumentTitle("Admin");
   const [data, setData] = useState<Overview | null>(lastOverview);
   const [error, setError] = useState("");

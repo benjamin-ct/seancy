@@ -22,7 +22,7 @@ const SORTED: readonly TicketStatus[] = ["suggestion", "idea", "todo"];
 const sorted = (s: TicketStatus) => SORTED.includes(s);
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
-export const STAGES = ["start", "work", "fail", "quota", "retry"] as const;
+export const STAGES = ["start", "work", "fail", "quota", "crash", "retry"] as const;
 export type Stage = (typeof STAGES)[number] | "";
 export type Model = "opus" | "sonnet";
 
@@ -343,7 +343,7 @@ export type Action =
   | { type: "done" }
   | { type: "followup" }
   | { type: "autofix"; text: string }
-  | { type: "retry"; n: number }
+  | { type: "retry"; n: number; text?: string }
   | { type: "preview"; url: string }
   /** Sorti du tableau sans être supprimé (idée, à faire, fait), ou remis dessus */
   | { type: "archive" }
@@ -400,7 +400,8 @@ export function applyAction(
       status = a.to;
       break;
     case "send": {
-      const relaunch = from === "work" && (d.stage === "fail" || d.stage === "quota");
+      const relaunch =
+        from === "work" && (d.stage === "fail" || d.stage === "quota" || d.stage === "crash");
       need(sorted(from) || relaunch, "Ticket déjà chez Claude ou à valider");
       status = "work";
       patch = { sent: now, stage: "", progress: "", progressAt: 0, retries: 0 };
@@ -539,7 +540,7 @@ export function applyAction(
     case "retry":
       patch = {
         stage: "retry",
-        progress: `Relance automatique ${a.n}/${RETRY_MAX} envoyée`,
+        progress: a.text ?? `Relance automatique ${a.n}/${RETRY_MAX} envoyée`,
         progressAt: now,
         retries: a.n,
       };
@@ -601,6 +602,12 @@ export function applyAction(
 
 export const RETRY_EVERY = 60 * 60_000;
 export const RETRY_MAX = 8;
+/**
+ * Claude coupé net en plein travail (processus arrêté sans erreur ni compte rendu, signalé par le
+ * workflow) : relancé une seule fois, 2 minutes après, s'il n'a pas déjà été relancé automatiquement
+ * pendant cet envoi. Sinon le ticket est arrêté.
+ */
+export const CRASH_RETRY_AFTER = 2 * 60_000;
 export const AUTOFIX_MAX = 2;
 
 /** Base du ticket : main pour un hotfix, develop sinon. */
@@ -724,6 +731,9 @@ export function noticeFor(a: Action, title: string): string | null {
   }
   if (a.type === "progress" && a.stage === "quota") {
     return `⏸️ Ticket en pause : **${title}** — quota de Claude atteint, relance automatique dans 1 h`;
+  }
+  if (a.type === "progress" && a.stage === "crash") {
+    return `🔁 Claude coupé net : **${title}** — relance automatique dans 2 minutes`;
   }
   return null;
 }

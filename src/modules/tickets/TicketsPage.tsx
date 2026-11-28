@@ -710,6 +710,7 @@ function Toast({ text, bad }: { text: string; bad: boolean }) {
 }
 
 export default function TicketsPage() {
+  // Même titre posé dès le chargement par public/theme-init.js
   useDocumentTitle("Tickets");
   const { status: authStatus, email } = useAuth();
   const [tickets, setTickets] = useState<Ticket[] | null>(lastList?.data.tickets ?? null);

@@ -42,6 +42,7 @@ const TOOLS = [
 ] as const;
 
 export default function Tools() {
+  // Même titre posé dès le chargement par public/theme-init.js
   useDocumentTitle("Outils · Admin");
   const [busy, setBusy] = useState("");
   const [asking, setAsking] = useState("");
