@@ -130,20 +130,30 @@ self.addEventListener("push", (event: PushEvent) => {
   event.waitUntil(Promise.all([self.registration.showNotification(title, options), badge]));
 });
 
+// Clic sur une notification : ouvre sa page (ex. fiche du ticket, /tickets/<id>). App déjà ouverte :
+// ramenée au premier plan, puis la page lui est envoyée (core/notificationNavigation.ts) ; ouvrir
+// une nouvelle fenêtre ne suffit pas, iOS se contentant alors souvent de ramener l'app installée
+// au premier plan, sur la page où elle était.
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
-  const targetUrl: string = event.notification.data?.url || "/";
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(targetUrl) && "focus" in client) {
-          return client.focus();
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then(async (clientList) => {
+        const open = clientList.filter((c) => new URL(c.url).origin === self.location.origin);
+        const client = open.find((c) => c.url === target) ?? open.find((c) => c.focused) ?? open[0];
+        if (client) {
+          const focused = await client.focus().catch(() => client);
+          if (focused.url !== target) {
+            focused.postMessage({ type: "open-url", url: target });
+          }
+          return;
         }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
-      }
-    })
+        if (self.clients.openWindow) {
+          await self.clients.openWindow(target);
+        }
+      })
   );
 });

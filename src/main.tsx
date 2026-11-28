@@ -38,6 +38,7 @@ import ErrorBoundary from "./shared/components/ErrorBoundary/ErrorBoundary.tsx";
 import { injectWebAnalytics } from "./core/webAnalytics.ts";
 import { isLikelyAutomatedClient } from "./core/botDetection.ts";
 import { setupPwaAutoUpdate, setupStaleChunkReload } from "./core/pwaUpdate.ts";
+import { setupNotificationNavigation } from "./core/notificationNavigation.ts";
 import { hideInitialLoader } from "./core/initialLoader.ts";
 import { stripReauthParam } from "./core/api/accessSession.ts";
 import { clearAccountDataFromDevice, hasAccountDataOnDevice } from "./core/lib/accountStorage.ts";
@@ -62,6 +63,9 @@ if (!isLikelyAutomatedClient(navigator)) {
 // de garder l'ancien bundle jusqu'à une relance complète (voir pwaUpdate.ts).
 setupPwaAutoUpdate();
 setupStaleChunkReload();
+
+// Clic sur une notification, app déjà ouverte : sa page (ex. fiche du ticket) ouverte dans l'app.
+setupNotificationNavigation();
 
 // Retour de la page de connexion Cloudflare Access (voir accessSession.ts).
 stripReauthParam();
