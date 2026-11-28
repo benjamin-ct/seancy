@@ -13,6 +13,7 @@ import { getRemindersForUser, type ReminderSummary } from "./reminders.ts";
 import { logError } from "./logger.ts";
 import { notifiedKey } from "./notify-dedup.ts";
 import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
+import { canonicalItem, titleKeyOf, type TitleResolver } from "./title-metadata.ts";
 import type {
   CleanCustomList,
   CleanCustomListMap,
@@ -553,22 +554,52 @@ function mergeLibraryList(
 // celui qui écrit en second efface intégralement ce que le premier venait
 // d'envoyer (perte de données constatée en test — voir carte Trello
 // Au5Ses9w).
+//
+// `resolveTitles` (voir worker/title-metadata.ts) : seuls les items qui
+// l'emportent sur la version en base (nouveaux, ou plus récents) viennent du
+// client, et sont donc vérifiés auprès de TMDB. Un titre que TMDB ne connaît
+// pas garde la version déjà en base s'il y en a une, sinon il est écarté.
 export async function replaceLibraryForUser(
   db: D1Database,
   userId: number,
-  { watched, watchlist }: LibraryState
+  { watched, watchlist }: LibraryState,
+  resolveTitles?: TitleResolver
 ): Promise<void> {
   const current = await getLibraryForUser(db, userId);
+  const stored = {
+    watched: current.watched as unknown as Record<string, CleanLibraryItem>,
+    watchlist: current.watchlist as unknown as Record<string, CleanLibraryItem>,
+  };
   const merged = {
     watched: mergeLibraryList(
-      current.watched as unknown as Record<string, CleanLibraryItem>,
+      stored.watched,
       (watched || {}) as unknown as Record<string, CleanLibraryItem>
     ),
     watchlist: mergeLibraryList(
-      current.watchlist as unknown as Record<string, CleanLibraryItem>,
+      stored.watchlist,
       (watchlist || {}) as unknown as Record<string, CleanLibraryItem>
     ),
   };
+  if (resolveTitles) {
+    const fromClient = (["watched", "watchlist"] as const).flatMap((status) =>
+      Object.entries(merged[status])
+        .filter(([key, item]) => item !== stored[status][key])
+        .map(([key, item]) => ({ status, key, item }))
+    );
+    if (fromClient.length > 0) {
+      const resolutions = await resolveTitles(fromClient.map(({ item }) => item));
+      for (const { status, key, item } of fromClient) {
+        const canonical = canonicalItem(item, resolutions.get(titleKeyOf(item)));
+        if (canonical) {
+          merged[status][key] = canonical;
+        } else if (stored[status][key]) {
+          merged[status][key] = stored[status][key];
+        } else {
+          delete merged[status][key];
+        }
+      }
+    }
+  }
 
   const rows: Array<{
     mediaType: string;

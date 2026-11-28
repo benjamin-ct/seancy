@@ -153,6 +153,8 @@ import {
 } from "./validate.ts";
 import { verifyRecaptcha } from "./recaptcha.ts";
 import { getTheatricalIndex } from "./tmdb.ts";
+import { canonicalItem, canonicalItems, titleKeyOf } from "./title-metadata.ts";
+import { titleResolverFor } from "./tmdb-titles.ts";
 import {
   PRODUCTION_HOSTNAME,
   REDIRECTED_TO_PRODUCTION_HOSTNAMES,
@@ -1917,7 +1919,12 @@ async function handlePutLibrary(request: Request, env: Env): Promise<Response> {
   // (voir LibraryContext, SYNCED_FOR_KEY) — un vrai remplacement complet y
   // est correct et rare. Chaque toggle/notation/case cochée régulier passe
   // désormais par handleLibrarySync ci-dessous (delta uniquement).
-  await replaceLibraryForUser(env.DB, user.id, sanitizeLibraryPayload(body));
+  await replaceLibraryForUser(
+    env.DB,
+    user.id,
+    sanitizeLibraryPayload(body),
+    await titleResolverFor(request, env, user.id)
+  );
   // Remplacement complet (fusion initiale d'un nouvel appareil) : pas de
   // delta à transmettre, les autres appareils rechargent la bibliothèque.
   publishToUser(request, user.id, { type: "library" });
@@ -1953,7 +1960,21 @@ async function handleLibrarySync(request: Request, env: Env): Promise<Response> 
   } catch {
     return json({ error: "JSON invalide." }, 400);
   }
-  const { upserts, deletes } = sanitizeLibrarySyncPayload(body);
+  const sanitized = sanitizeLibrarySyncPayload(body);
+  const { deletes } = sanitized;
+  let { upserts } = sanitized;
+  // Titre, affiche et genres repris de TMDB, titre inconnu de TMDB écarté
+  // (voir worker/title-metadata.ts) : jamais ce qu'a envoyé le client quand
+  // TMDB peut répondre.
+  if (upserts.length > 0) {
+    const resolutions = await (
+      await titleResolverFor(request, env, user.id)
+    )(upserts.map(({ item }) => item));
+    upserts = upserts.flatMap((upsert) => {
+      const item = canonicalItem(upsert.item, resolutions.get(titleKeyOf(upsert.item)));
+      return item ? [{ ...upsert, item }] : [];
+    });
+  }
   if (upserts.length === 0 && deletes.length === 0) {
     return json({ ok: true });
   }
@@ -2011,7 +2032,18 @@ async function handlePutCustomLists(request: Request, env: Env): Promise<Respons
   } catch {
     return json({ error: "JSON invalide." }, 400);
   }
-  await replaceCustomListsForUser(env.DB, user.id, sanitizeCustomListsPayload(body));
+  const customLists = sanitizeCustomListsPayload(body);
+  // Mêmes vérifications TMDB que handleLibrarySync, en un seul passage pour
+  // toutes les listes (un titre présent dans plusieurs listes ne coûte qu'une
+  // lecture).
+  const lists = Object.values(customLists);
+  const resolutions = await (
+    await titleResolverFor(request, env, user.id)
+  )(lists.flatMap((list) => list.items));
+  for (const list of lists) {
+    list.items = canonicalItems(list.items, resolutions);
+  }
+  await replaceCustomListsForUser(env.DB, user.id, customLists);
   publishToUser(request, user.id, { type: "custom-lists" });
   return json({ ok: true });
 }
@@ -2058,6 +2090,11 @@ async function handlePutCustomList(request: Request, env: Env, listId: string): 
   if (!alreadyExists && (await countCustomListsForUser(env.DB, user.id)) >= MAX_CUSTOM_LISTS) {
     return json({ error: "Nombre maximal de listes atteint.", reason: "too-many-lists" }, 400);
   }
+  // Mêmes vérifications TMDB que handleLibrarySync : les titres déjà vérifiés
+  // (cache partagé) ne coûtent rien, une liste jamais vérifiée l'est au fil
+  // des modifications (MAX_FETCHES_PER_WRITE appels TMDB par envoi).
+  const resolutions = await (await titleResolverFor(request, env, user.id))(list.items);
+  list.items = canonicalItems(list.items, resolutions);
   await upsertCustomListForUser(env.DB, user.id, list);
   publishToUser(request, user.id, { type: "custom-lists" });
   return json({ ok: true });

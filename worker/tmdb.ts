@@ -45,6 +45,18 @@ function sleep(ms: number): Promise<void> {
 // getTheatricalIndex...).
 const tmdbRequestLimiter = createConcurrencyLimiter(6);
 
+// Réponse TMDB en erreur : le statut reste lisible par l'appelant (fiche
+// inexistante = 404, voir worker/tmdb-titles.ts), avec le même message
+// qu'avant pour les journaux.
+export class TmdbHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, path: string) {
+    super(`Erreur TMDB (${status}) sur ${path}`);
+    this.status = status;
+  }
+}
+
 export async function tmdbFetch<T>(
   env: TmdbEnv,
   path: string,
@@ -65,13 +77,13 @@ export async function tmdbFetch<T>(
     const res = await tmdbRequestLimiter.run(() => fetch(url.toString()));
     if (res.status === 429) {
       if (attempt >= MAX_RATE_LIMIT_RETRIES) {
-        throw new Error(`Erreur TMDB (429) sur ${path}`);
+        throw new TmdbHttpError(429, path);
       }
       await sleep(retryDelayMs(res.headers.get("retry-after"), attempt));
       continue;
     }
     if (!res.ok) {
-      throw new Error(`Erreur TMDB (${res.status}) sur ${path}`);
+      throw new TmdbHttpError(res.status, path);
     }
     return res.json() as Promise<T>;
   }
