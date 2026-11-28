@@ -8,6 +8,7 @@
 //
 // Les appels à GitHub, la mémoire et les notifications sont passés en
 // paramètre (worker/tickets.ts) : vérifiable seul (scripts/verify-release.ts).
+import { changeNeedsRelease } from "./release-scope.ts";
 import { TicketError, testedOnBase, type Gh, type PullRequest } from "./tickets-logic.ts";
 
 export const RELEASE_PREFIX = "release/";
@@ -39,9 +40,14 @@ export interface ReleaseState {
   next: string;
   /** Entrées du journal qui partiront avec la release (sans doublons). */
   notes: Note[];
-  /** Changements de develop pas encore dans main (titres des commits, sans les fusions). */
+  /** Changements de develop qui attendent la release (titres des commits, sans les fusions). */
   pending: string[];
-  /** Date du plus ancien changement en attente (ms) ; 0 sans changement. */
+  /**
+   * Changements de develop pas encore dans main mais déjà en ligne : admin et tickets (Worker de
+   * l'admin, mis en ligne à chaque fusion dans develop), outillage, documentation (worker/release-scope.ts).
+   */
+  live: string[];
+  /** Date du plus ancien changement qui attend la release (ms) ; 0 sans changement. */
   since: number;
   /** Release en cours ; null sans release en cours. */
   pr: { number: number; url: string; state: "wait" | "fail" | "merged"; why: string } | null;
@@ -155,13 +161,68 @@ export function versionOnly(f: { filename: string; patch?: string }): boolean {
   return lines.length > 0 && lines.every((l) => /^[+-]\s*"version": "[^"]*",?$/.test(l));
 }
 
+/** Commit de develop (comparaison main...develop). */
+interface DevelopCommit {
+  sha?: string;
+  commit: { message: string; committer?: { date?: string } };
+  parents: unknown[];
+}
+
+const SCOPES_KEY = "releaseScopes";
+
+/**
+ * Commits qui attendent la release, d'après leurs fichiers (worker/release-scope.ts). Fichiers d'un
+ * commit lus une fois sur GitHub puis gardés en mémoire (ceux des commits encore en attente seulement).
+ * Fichiers illisibles : compté comme attendant la release, par prudence.
+ */
+async function releaseScopes(d: ReleaseDeps, commits: DevelopCommit[]): Promise<boolean[]> {
+  let known: Record<string, boolean> = {};
+  try {
+    known = JSON.parse((await d.getMeta(SCOPES_KEY)) ?? "{}") as Record<string, boolean>;
+  } catch {
+    // mémoire illisible : relue sur GitHub
+  }
+  const kept: Record<string, boolean> = {};
+  const out: boolean[] = [];
+  // Par paquets de 10 : pas de rafale d'appels à GitHub
+  for (let i = 0; i < commits.length; i += 10) {
+    const batch = await Promise.all(
+      commits.slice(i, i + 10).map(async (c) => {
+        if (!c.sha) {
+          return true;
+        }
+        if (typeof known[c.sha] === "boolean") {
+          kept[c.sha] = known[c.sha];
+          return known[c.sha];
+        }
+        try {
+          const full = await d.gh<{ files?: { filename: string }[] }>(
+            `/repos/${d.repo}/commits/${c.sha}`
+          );
+          const files = (full.files ?? []).map((f) => f.filename);
+          // Sans fichier (liste vide ou tronquée par GitHub) : attend la release, sans mémoire
+          if (!files.length || files.length >= 300) {
+            return true;
+          }
+          kept[c.sha] = changeNeedsRelease(files);
+          return kept[c.sha];
+        } catch {
+          return true;
+        }
+      })
+    );
+    out.push(...batch);
+  }
+  if (JSON.stringify(kept) !== JSON.stringify(known)) {
+    await d.setMeta(SCOPES_KEY, JSON.stringify(kept)).catch(() => {});
+  }
+  return out;
+}
+
 export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
   const [cmp, pkg, pr] = await Promise.all([
     d.gh<{
-      commits?: {
-        commit: { message: string; committer?: { date?: string } };
-        parents: unknown[];
-      }[];
+      commits?: DevelopCommit[];
       files?: { filename: string; status: string; patch?: string }[];
     }>(`/repos/${d.repo}/compare/main...develop`),
     d
@@ -180,7 +241,11 @@ export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
   // Rien à publier quand develop ne diffère de main que par le numéro de version (resynchronisation de main
   // dans develop : la version n'est gérée que sur main, develop garde la sienne)
   const real = (cmp.files ?? []).some((f) => !versionOnly(f));
-  const own = real ? (cmp.commits ?? []).filter((c) => c.parents.length < 2) : [];
+  const mine = real ? (cmp.commits ?? []).filter((c) => c.parents.length < 2) : [];
+  // Admin, tickets, outillage : déjà en ligne, n'attendent pas la release
+  const scopes = await releaseScopes(d, mine);
+  const own = mine.filter((_, i) => scopes[i]);
+  const title = (c: DevelopCommit) => c.commit.message.split("\n")[0];
   // Fragments du journal ajoutés sur develop depuis la dernière release
   const fragments = (cmp.files ?? [])
     .filter(
@@ -213,8 +278,10 @@ export async function releaseState(d: ReleaseDeps): Promise<ReleaseState> {
     version,
     next: own.length ? nextVersion(version, notes) : "",
     notes,
-    pending: own
-      .map((c) => c.commit.message.split("\n")[0])
+    pending: own.map(title).reverse().slice(0, 30),
+    live: mine
+      .filter((_, i) => !scopes[i])
+      .map(title)
       .reverse()
       .slice(0, 30),
     since: own.reduce((min, c) => {
@@ -232,7 +299,12 @@ export async function startRelease(d: ReleaseDeps, now: number): Promise<Release
   }
   const state = await releaseState(d);
   if (!state.pending.length) {
-    throw new TicketError("Rien de nouveau sur develop depuis la dernière release", 409);
+    throw new TicketError(
+      state.live.length
+        ? "Rien à mettre en ligne : les changements de develop (admin, tickets, outillage) sont déjà en ligne"
+        : "Rien de nouveau sur develop depuis la dernière release",
+      409
+    );
   }
   const { day, time } = parisStamp(now);
   const branch = `${RELEASE_PREFIX}${day}-${time}`;

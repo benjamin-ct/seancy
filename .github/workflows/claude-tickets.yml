@@ -172,6 +172,29 @@ jobs:
           fi
       # Arrêt : quota Claude (limite des 5 heures) ou serveurs saturés → pause,
       # relance automatique une heure après par le Worker ; sinon arrêté
+      # Claude arrêté sans compte rendu : ses dernières actions dans le journal public, pour savoir ce qui
+      # l'a arrêté. Dépôt public : nom de l'outil et deux premiers mots d'une commande seulement, jamais
+      # ses arguments ni le texte d'un ticket (comme « Commandes refusées à Claude »)
+      - name: Dernières actions de Claude
+        if: (failure() || cancelled() || steps.claude.outputs.conclusion == 'failure') && steps.claude.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXEC: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            let list = [];
+            try { const raw = fs.readFileSync(process.env.EXEC, "utf8"); try { list = [].concat(JSON.parse(raw)); } catch { list = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } }); } } catch {}
+            const uses = list.flatMap((m) => (m?.type === "assistant" && Array.isArray(m.message?.content) ? m.message.content : []).filter((c) => c?.type === "tool_use"));
+            const show = (u) => u.name === "Bash" ? `Bash: ${String(u.input?.command ?? "").trim().split(/\s+/).slice(0, 2).join(" ")}${u.input?.run_in_background ? " (en arrière-plan)" : ""}` : u.name === "Task" ? `Task: ${String(u.input?.subagent_type ?? "")}` : String(u.name);
+            const last = uses.slice(-12).map(show);
+            const result = list.some((m) => m?.type === "result");
+            const out = [`${list.length} message(s) dans le journal, ${uses.length} action(s), fin normale : ${result ? "oui" : "non (Claude coupé net)"}`, ...last.map((l) => `- ${l}`)].join("\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Dernières actions de Claude\n${out}\n`);
+            console.log(out);'
+      # Arrêt : quota Claude (limite des 5 heures) ou serveurs saturés → pause, relance automatique une heure
+      # après par le Worker ; Claude coupé net (processus arrêté par un signal, sans erreur ni compte rendu,
+      # lancement non annulé) → relance automatique une fois, 2 minutes après ; sinon arrêté
       - name: Ticket arrêté
         if: (failure() || cancelled() || steps.claude.outputs.conclusion == 'failure') && steps.t.outputs.id != ''
         continue-on-error: true
@@ -181,6 +204,7 @@ jobs:
           EXEC: ${{ steps.claude.outputs.execution_file }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CHECKOUT: ${{ steps.checkout.outcome }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           # Code non récupéré (jeton GitHub refusé) : scripts/tickets.ts absent, l'arrêt est noté directement par l'API
           if [ "$CHECKOUT" = failure ]; then
@@ -195,8 +219,17 @@ jobs:
             try { const raw = fs.readFileSync(f, "utf8"); try { list = [].concat(JSON.parse(raw)); } catch { list = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } }); } } catch {}
             const hit = list.some((m) => ["rate_limit", "overloaded"].includes(m?.error) || (m?.type === "result" && /usage limit|hit your (usage )?limit|limit reached/i.test(String(m.result || ""))));
             console.log(hit ? 1 : 0);' || echo 0)
+          # Coupé net : journal commencé (Claude a démarré) mais sans message final, et lancement non annulé
+          crash=$(node -e '
+            const fs = require("fs"), f = process.env.EXEC;
+            let list = [];
+            try { const raw = fs.readFileSync(f, "utf8"); try { list = [].concat(JSON.parse(raw)); } catch { list = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } }); } } catch {}
+            const started = list.some((m) => m?.type === "assistant");
+            console.log(started && !list.some((m) => m?.type === "result") ? 1 : 0);' || echo 0)
           if [ "$quota" = 1 ]; then
             node scripts/tickets.ts progress "$ID" --stage quota --text "Quota de Claude atteint : relance automatique dans 1 h" --run "$RUN" --issue "$ISSUE"
+          elif [ "$crash" = 1 ] && [ "$JOB_STATUS" != cancelled ]; then
+            node scripts/tickets.ts progress "$ID" --stage crash --text "Claude a été coupé net en plein travail : relance automatique dans 2 minutes" --run "$RUN" --issue "$ISSUE"
           else
             node scripts/tickets.ts progress "$ID" --stage fail --text "Le travail s'est arrêté sur une erreur : relance le ticket, ou regarde le détail sur GitHub" --run "$RUN"
           fi

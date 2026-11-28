@@ -8,6 +8,11 @@ ticket Trello "Épique git-flow : release develop→main automatisée").
 Les PR purement infra/outillage/doc (aucun fichier sous `src/`, `worker/` ou `migrations/`)
 n'ont rien à ajouter ici : la CI ne le demande que si le diff touche l'un de ces dossiers.
 
+Les PR qui ne touchent que l'espace admin et les tickets (`src/modules/admin/`,
+`src/modules/tickets/`, fichiers admin de `worker/`, liste dans `worker/release-scope.ts`) et
+des migrations n'en ajoutent pas non plus : le Worker de l'admin est mis en ligne à chaque
+fusion dans `develop`, sans attendre la release, et ce n'est pas une nouveauté du site.
+
 ## Format
 
 ```md

@@ -17,6 +17,7 @@ import {
   startRelease,
   type ReleaseDeps,
 } from "../worker/release.ts";
+import { changeNeedsRelease } from "../worker/release-scope.ts";
 import { TicketError } from "../worker/tickets-logic.ts";
 import { aggregateBump, bumpVersion } from "./changelogRelease.ts";
 import { isChangesetError, parseChangeset } from "./changesetLib.ts";
@@ -62,6 +63,8 @@ function fakeGitHub(opts: {
   fragments?: Record<string, string>;
   /** develop ne diffère de main que par le numéro de version (resynchronisation). */
   versionOnly?: boolean;
+  /** Fichiers d'un commit (par titre) ; src/a.ts sinon. */
+  commitFiles?: Record<string, string[]>;
 }) {
   const log: string[] = [];
   const meta = new Map<string, string>();
@@ -79,6 +82,7 @@ function fakeGitHub(opts: {
       return ok({
         commits: [
           ...(opts.commits ?? []).map((t, i) => ({
+            sha: `c${i}`,
             commit: {
               message: `${t}\n\ndétail`,
               committer: { date: `2026-11-1${i}T10:00:00Z` },
@@ -110,6 +114,13 @@ function fakeGitHub(opts: {
               { filename: ".changeset/ancien.md", status: "removed" },
               { filename: "src/a.ts", status: "added" },
             ],
+      });
+    }
+    const commitSha = /\/commits\/(c\d+)$/.exec(path)?.[1];
+    if (m === "GET" && commitSha) {
+      const t = (opts.commits ?? [])[Number(commitSha.slice(1))] ?? "";
+      return ok({
+        files: (opts.commitFiles?.[t] ?? ["src/a.ts"]).map((filename) => ({ filename })),
       });
     }
     if (m === "GET" && path.includes("/contents/.changeset/")) {
@@ -398,6 +409,82 @@ const main = async () => {
       [s.pending, s.next, s.since],
       [[], "", 0]
     );
+  }
+
+  // Admin et tickets : en ligne dès la fusion dans develop (Worker de l'admin), pas d'attente de release
+  for (const [files, expected] of [
+    [["src/modules/tickets/TicketsPage.tsx", ".changeset/x.md"], false],
+    [["src/modules/admin/Release.tsx", "worker/release.ts", "worker/tickets.ts"], false],
+    [
+      ["migrations/0030_x.sql", "scripts/verify-tickets.ts", ".claude/skills/ticket/SKILL.md"],
+      false,
+    ],
+    [["wrangler.admin.jsonc", "README.md"], false],
+    [["src/modules/tickets/api.ts", "src/sw.ts"], true],
+    [["worker/tickets.ts", "worker/index.ts"], true],
+    [["src/shared/components/Icon/Icon.tsx"], true],
+    [["package.json", "package-lock.json"], true],
+    [[".github/workflows/claude-tickets.yml"], true],
+    [["public/manifest.webmanifest"], true],
+  ] as const) {
+    check(
+      `Release ${expected ? "requise" : "inutile"} : ${files.join(", ")}`,
+      changeNeedsRelease(files),
+      expected
+    );
+  }
+  {
+    const { d, log } = fakeGitHub({
+      commits: ["fix(tickets): a", "feat(detail): b", "feat(admin): c"],
+      commitFiles: {
+        "fix(tickets): a": ["src/modules/tickets/TicketSheet.tsx"],
+        "feat(admin): c": ["src/modules/admin/Tools.tsx", "worker/admin.ts"],
+      },
+    });
+    const s = await releaseState(d);
+    check("État : seuls les changements du site attendent la release", s.pending, [
+      "feat(detail): b",
+    ]);
+    check("État : admin et tickets déjà en ligne", s.live, ["feat(admin): c", "fix(tickets): a"]);
+    check(
+      "État : date du changement du site seulement",
+      s.since,
+      Date.parse("2026-11-11T10:00:00Z")
+    );
+    const calls = log.filter((l) => l.includes("/commits/c")).length;
+    await releaseState(d);
+    check(
+      "Fichiers d'un commit lus une seule fois (gardés en mémoire)",
+      log.filter((l) => l.includes("/commits/c")).length,
+      calls
+    );
+  }
+  {
+    const { d } = fakeGitHub({
+      commits: ["fix(tickets): a"],
+      commitFiles: { "fix(tickets): a": ["src/modules/tickets/TicketSheet.tsx"] },
+    });
+    const s = await releaseState(d);
+    check(
+      "Seulement l'admin sur develop : rien à mettre en ligne, pas de version à venir",
+      [s.pending, s.next, s.since],
+      [[], "", 0]
+    );
+    await refusedAsync(
+      "Seulement l'admin sur develop : release refusée (déjà en ligne)",
+      () => startRelease(d, Date.UTC(2026, 10, 17, 17, 40)),
+      /déjà en ligne/
+    );
+  }
+  {
+    const { d } = fakeGitHub({
+      commits: ["fix: x"],
+      commitFiles: { "fix: x": [] },
+    });
+    const s = await releaseState(d);
+    check("Fichiers d'un commit illisibles : compté comme attendant la release", s.pending, [
+      "fix: x",
+    ]);
   }
   check(
     "Version seule : une autre ligne changée dans package.json compte",
