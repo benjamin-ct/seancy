@@ -172,7 +172,11 @@ export async function findOrCreateUser(
     };
   }
   const result = await db
-    .prepare("INSERT INTO users (email, created_at) VALUES (?, ?)")
+    // Restriction des listes communes active d'office (migration
+    // 0022_restrict_list_invites) : posée ici plutôt que laissée au DEFAULT
+    // de la colonne, pour ne pas dépendre de la version de la migration
+    // appliquée sur une base donnée.
+    .prepare("INSERT INTO users (email, created_at, restrict_list_invites) VALUES (?, ?, 1)")
     .bind(email, Date.now())
     .run();
   return {
@@ -181,7 +185,7 @@ export async function findOrCreateUser(
     displayName: null,
     shareSlug: null,
     username: null,
-    restrictListInvites: false,
+    restrictListInvites: true,
   };
 }
 

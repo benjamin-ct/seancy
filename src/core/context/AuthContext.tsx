@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
-  const [restrictListInvites, setRestrictListInvitesState] = useState(false);
+  const [restrictListInvites, setRestrictListInvitesState] = useState(true);
   const [admin, setAdmin] = useState(false);
 
   // `verify()` (consommation du jeton sur /auth/verify) et `refresh()` (la
@@ -157,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(null);
       setUsername(null);
       setAvatarVersion(null);
-      setRestrictListInvitesState(false);
+      setRestrictListInvitesState(true);
       setAdmin(false);
       setStatus("anonymous");
       return Promise.resolve();
@@ -182,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setDisplayName(data.displayName ?? null);
         setShareSlug(data.shareSlug ?? null);
         setUsername(data.username ?? null);
-        setRestrictListInvitesState(data.restrictListInvites ?? false);
+        setRestrictListInvitesState(data.restrictListInvites ?? true);
         setAvatarVersion(data.avatarVersion ?? null);
         setAdmin(data.admin === true);
         setStatus("authenticated");
@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(null);
         setUsername(null);
         setAvatarVersion(null);
-        setRestrictListInvitesState(false);
+        setRestrictListInvitesState(true);
         setAdmin(false);
         setStatus("anonymous");
       });
@@ -277,7 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDisplayName(data.displayName ?? null);
       setShareSlug(data.shareSlug ?? null);
       setUsername(data.username ?? null);
-      setRestrictListInvitesState(data.restrictListInvites ?? false);
+      setRestrictListInvitesState(data.restrictListInvites ?? true);
       setAvatarVersion(data.avatarVersion ?? null);
       setAdmin(data.admin === true);
       setStatus("authenticated");

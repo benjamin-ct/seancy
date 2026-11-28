@@ -736,7 +736,7 @@
   "privacyPolicyPage": {
     "title": "Privacy Policy",
     "lastUpdated": "Last updated: {{date}}",
-    "lastUpdatedValue": "November 25, 2026",
+    "lastUpdatedValue": "November 28, 2026",
     "controller": {
       "title": "Data controller",
       "textBefore": "Seancy is a personal project, with no commercial structure, operated from France. The data processing described below is therefore governed by French law and the GDPR. There isn't a dedicated public contact address yet: in the meantime, you can reach us "
@@ -769,7 +769,7 @@
       },
       "commonLists": {
         "label": "Shared lists with other members",
-        "text": " (if you create or join one): we store which accounts are members of which list and since when. Members of a list see its name, its content, and the other members' display name, username and — only if their profile is shared — profile picture; never their email address. To be invited, an account must have picked a username: a list's owner can find it by that username to add it to the list. A privacy setting lets you allow only people you follow to add you. Any member can edit the list's content, rename it or delete it for everyone, and you can leave it at any time; deleting the list or your account deletes these links."
+        "text": " (if you create or join one): we store which accounts are members of which list and since when. Members of a list see its name, its content, and the other members' display name, username and — only if their profile is shared — profile picture; never their email address. To be invited, an account must have picked a username: a list's owner can find it by that username to add it to the list. By default, only people you follow can add you to a list; a privacy setting lets you open this to everyone. Any member can edit the list's content, rename it or delete it for everyone, and you can leave it at any time; deleting the list or your account deletes these links."
       },
       "follows": {
         "label": "Follows",
@@ -1101,7 +1101,7 @@
     "groupTitle": "Shared lists",
     "groupLead": "Who can add you to a shared list.",
     "title": "Restrict to people you follow",
-    "hint": "When enabled, only people you follow can add you to one of their shared lists.",
+    "hint": "On by default: only people you follow can add you to one of their shared lists. Turn it off to let anyone add you by your username.",
     "switchLabel": "Restrict being added to a shared list to people you follow"
   },
   "topPicks": {
