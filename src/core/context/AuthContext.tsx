@@ -58,6 +58,9 @@ interface AuthContextValue {
   // Version (date de mise à jour) de la photo de profil personnelle, `null`
   // sans photo : l'avatar retombe alors sur Gravatar, puis sur l'initiale.
   avatarVersion: number | null;
+  // Si actif, seules les personnes qu'on suit peuvent nous ajouter à une
+  // liste commune (voir ListMembersDialog / handlePostListMember).
+  restrictListInvites: boolean;
   // Suppression de compte programmée (ms depuis l'epoch), `null` sinon —
   // voir DataSettings. Se reconnecter l'annule automatiquement.
   pendingDeletionAt: number | null;
@@ -75,6 +78,8 @@ interface AuthContextValue {
   // Active/désactive le partage public du profil ; désactiver invalide
   // définitivement le lien existant.
   setProfileShared: (enabled: boolean) => Promise<void>;
+  // Active/désactive la restriction d'ajout aux listes communes.
+  setListInviteRestricted: (enabled: boolean) => Promise<void>;
   // Changement d'adresse email en deux temps (voir AccountCard) : un code
   // est envoyé à la nouvelle adresse, puis sa saisie applique le changement.
   requestEmailChange: (newEmail: string) => Promise<EmailChangeRequestResult>;
@@ -134,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number | null>(null);
+  const [restrictListInvites, setRestrictListInvitesState] = useState(true);
   const [pendingDeletionAt, setPendingDeletionAt] = useState<number | null>(null);
   const [admin, setAdmin] = useState(false);
 
@@ -162,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setShareSlug(null);
       setUsername(null);
       setAvatarVersion(null);
+      setRestrictListInvitesState(true);
       setPendingDeletionAt(null);
       setAdmin(false);
       setStatus("anonymous");
@@ -177,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           displayName: string | null;
           shareSlug: string | null;
           username: string | null;
+          restrictListInvites: boolean;
           avatarVersion: number | null;
           pendingDeletionAt: number | null;
           admin?: boolean;
@@ -187,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setDisplayName(data.displayName ?? null);
         setShareSlug(data.shareSlug ?? null);
         setUsername(data.username ?? null);
+        setRestrictListInvitesState(data.restrictListInvites ?? true);
         setAvatarVersion(data.avatarVersion ?? null);
         setPendingDeletionAt(data.pendingDeletionAt ?? null);
         setAdmin(data.admin === true);
@@ -202,6 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShareSlug(null);
         setUsername(null);
         setAvatarVersion(null);
+        setRestrictListInvitesState(true);
         setPendingDeletionAt(null);
         setAdmin(false);
         setStatus("anonymous");
@@ -282,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDisplayName(data.displayName ?? null);
       setShareSlug(data.shareSlug ?? null);
       setUsername(data.username ?? null);
+      setRestrictListInvitesState(data.restrictListInvites ?? true);
       setAvatarVersion(data.avatarVersion ?? null);
       // Le serveur annule toute suppression programmée à chaque connexion
       // réussie (voir handleVerify) : toujours `null` après ce point.
@@ -354,6 +365,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || t("auth.updateShareError"));
       }
       setShareSlug(data.shareSlug ?? null);
+    },
+    [t]
+  );
+
+  const setListInviteRestricted = useCallback(
+    async (enabled: boolean): Promise<void> => {
+      const res = await fetch("/api/account/list-invite-restriction", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t("auth.updateShareError"));
+      }
+      setRestrictListInvitesState(data.restrictListInvites ?? enabled);
     },
     [t]
   );
@@ -517,6 +544,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      restrictListInvites,
       pendingDeletionAt,
       admin,
       requestLink,
@@ -526,6 +554,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logoutAll,
       updateDisplayName: updateDisplayNameCallback,
       setProfileShared,
+      setListInviteRestricted,
       requestEmailChange,
       confirmEmailChange,
       updateUsername,
@@ -543,6 +572,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       shareSlug,
       username,
       avatarVersion,
+      restrictListInvites,
       pendingDeletionAt,
       admin,
       requestLink,
@@ -552,6 +582,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logoutAll,
       updateDisplayNameCallback,
       setProfileShared,
+      setListInviteRestricted,
       requestEmailChange,
       confirmEmailChange,
       updateUsername,

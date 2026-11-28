@@ -24,6 +24,8 @@ import type { Env, SubscriptionRow } from "./types.ts";
 // est privé).
 // "reminderReleased" / "reminderAvailable" : rappels « Me prévenir » (voir
 // worker/scheduled.ts, checkReminders).
+// "addedToList" : le propriétaire d'une liste commune vous y ajoute —
+// `mediaTitle` porte le nom de la liste.
 export type NotificationKind =
   | "watchlistAvailable"
   | "favoriteGenreRelease"
@@ -31,7 +33,8 @@ export type NotificationKind =
   | "test"
   | "newFollower"
   | "reminderReleased"
-  | "reminderAvailable";
+  | "reminderAvailable"
+  | "addedToList";
 
 export interface AppNotification {
   kind: NotificationKind;
@@ -90,6 +93,10 @@ const PUSH_CONTENT: Record<
       title: "Seancy : disponible en streaming 🎬",
       body: `« ${title} » vient d'arriver sur une plateforme.`,
     }),
+    addedToList: (listName) => ({
+      title: "Seancy : liste commune 📋",
+      body: `Vous avez été ajouté à la liste « ${listName} ».`,
+    }),
   },
   en: {
     watchlistAvailable: (title) => ({
@@ -119,6 +126,10 @@ const PUSH_CONTENT: Record<
     reminderAvailable: (title) => ({
       title: "Seancy: now streaming 🎬",
       body: `"${title}" just arrived on a streaming service.`,
+    }),
+    addedToList: (listName) => ({
+      title: "Seancy: shared list 📋",
+      body: `You were added to the list "${listName}".`,
     }),
   },
 };

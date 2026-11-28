@@ -52,6 +52,9 @@
 }
 
 .tab {
+  /* Ancre le libellé .srOnly des listes partagées/communes dans l'onglet :
+     sans ça, sur mobile, il sort de la rangée qui défile et élargit la page. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;

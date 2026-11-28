@@ -44,6 +44,9 @@ export interface AuthUser {
   shareSlug: string | null;
   /** Pseudo public (migration 0012), `null` tant qu'aucun n'a été choisi. */
   username: string | null;
+  /** Si actif, seules les personnes que ce compte suit peuvent l'ajouter à
+   * une liste commune (migration 0022_restrict_list_invites). */
+  restrictListInvites: boolean;
   sessionToken: string;
   /** Fin de validité de la session (ms depuis l'epoch). */
   expiresAt: number;
@@ -153,11 +156,18 @@ export async function findOrCreateUser(
   displayName: string | null;
   shareSlug: string | null;
   username: string | null;
+  restrictListInvites: boolean;
 }> {
   const existing = await db
-    .prepare("SELECT id, email, display_name, share_slug, username FROM users WHERE email = ?")
+    .prepare(
+      "SELECT id, email, display_name, share_slug, username, restrict_list_invites FROM users WHERE email = ?"
+    )
     .bind(email)
-    .first<Pick<UserRow, "id" | "email" | "display_name" | "share_slug" | "username">>();
+    .first<
+      Pick<UserRow, "id" | "email" | "display_name" | "share_slug" | "username"> & {
+        restrict_list_invites: number;
+      }
+    >();
   if (existing) {
     return {
       id: existing.id,
@@ -165,10 +175,15 @@ export async function findOrCreateUser(
       displayName: existing.display_name,
       shareSlug: existing.share_slug,
       username: existing.username,
+      restrictListInvites: existing.restrict_list_invites === 1,
     };
   }
   const result = await db
-    .prepare("INSERT INTO users (email, created_at) VALUES (?, ?)")
+    // Restriction des listes communes active d'office (migration
+    // 0022_restrict_list_invites) : posée ici plutôt que laissée au DEFAULT
+    // de la colonne, pour ne pas dépendre de la version de la migration
+    // appliquée sur une base donnée.
+    .prepare("INSERT INTO users (email, created_at, restrict_list_invites) VALUES (?, ?, 1)")
     .bind(email, Date.now())
     .run();
   return {
@@ -177,6 +192,7 @@ export async function findOrCreateUser(
     displayName: null,
     shareSlug: null,
     username: null,
+    restrictListInvites: true,
   };
 }
 
@@ -241,7 +257,8 @@ export async function getUserFromRequest(
   const row = await db
     .prepare(
       `SELECT users.id, users.email, users.display_name, users.share_slug, users.username,
-              users.pending_deletion_at, sessions.expires_at, sessions.token
+              users.restrict_list_invites, users.pending_deletion_at, sessions.expires_at,
+              sessions.token
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token IN (?, ?)`
     )
@@ -253,6 +270,7 @@ export async function getUserFromRequest(
       display_name: string | null;
       share_slug: string | null;
       username: string | null;
+      restrict_list_invites: number;
       pending_deletion_at: number | null;
       expires_at: number;
     }>();
@@ -268,6 +286,7 @@ export async function getUserFromRequest(
     displayName: row.display_name,
     shareSlug: row.share_slug,
     username: row.username,
+    restrictListInvites: row.restrict_list_invites === 1,
     sessionToken: token,
     expiresAt: row.expires_at,
     pendingDeletionAt: row.pending_deletion_at,

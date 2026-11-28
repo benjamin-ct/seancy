@@ -1,0 +1,15 @@
+.avatar {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
