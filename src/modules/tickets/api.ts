@@ -45,7 +45,7 @@ export interface Ticket {
   notes: string;
   progress: string;
   progressAt: number;
-  stage: "" | "start" | "work" | "fail" | "quota" | "retry";
+  stage: "" | "start" | "work" | "fail" | "quota" | "crash" | "retry";
   run: string;
   issue: string;
   retries: number;

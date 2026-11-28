@@ -12,6 +12,7 @@ import {
   feedbackTicket,
   issueBody,
   mergeLabels,
+  noticeFor,
   positionBefore,
   previewFromComments,
   testedOnBase,
@@ -285,6 +286,29 @@ check("Date d'archivage lue (nettoyage)", cleanData({ archived: "12" }).archived
 
 const failedProg = applyAction(sent, { type: "progress", stage: "fail", text: "Erreur" }, T0 + 9);
 check("Arrêt noté dans l'historique", failedProg.data.history.at(-1)?.kind, "arret");
+
+// Claude coupé net : relance automatique (texte à part), relance à la main permise, notification
+const crashed = applyAction(sent, { type: "progress", stage: "crash", text: "Coupé net" }, T0 + 9);
+check("Coupé net : étape notée", crashed.data.stage, "crash");
+check(
+  "Coupé net : relance automatique, texte à part",
+  [
+    applyAction(crashed, { type: "retry", n: 1, text: "Claude coupé net : relance" }, T0 + 10).data
+      .progress,
+    applyAction(crashed, { type: "retry", n: 1 }, T0 + 10).data.retries,
+  ],
+  ["Claude coupé net : relance", 1]
+);
+check(
+  "Coupé net : relance à la main permise",
+  applyAction(crashed, { type: "send" }, T0 + 11).data.retries,
+  0
+);
+check(
+  "Coupé net : notification",
+  noticeFor({ type: "progress", stage: "crash", text: "" }, "T")?.startsWith("🔁"),
+  true
+);
 check(
   "Modification : seuls les champs permis",
   applyAction(

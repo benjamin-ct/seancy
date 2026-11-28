@@ -9,7 +9,7 @@
 //                                                          (copiés dans .cache/tickets/<id>/), carte Trello et
 //                                                          ses commentaires, retouche demandée, PR, notes
 //   node scripts/tickets.ts answer <id> --text "…" [--pr URL] [--notes "…"]   compte rendu : ticket à valider
-//   node scripts/tickets.ts progress <id> --text "…" [--stage start|work|fail|quota] [--run URL] [--issue N]
+//   node scripts/tickets.ts progress <id> --text "…" [--stage start|work|fail|quota|crash] [--run URL] [--issue N]
 //   node scripts/tickets.ts usage <id> --file <execution.json> [--run URL]   jetons et quota d'un passage de Claude (workflow)
 //   node scripts/tickets.ts file <id> capture.png …         pièces jointes (images, PDF, vidéos ; 1,5 Mo au plus)
 //   node scripts/tickets.ts add --title "…" [--detail "…"] [--status idea|todo] [--labels "Bug,Sentry"]
@@ -215,9 +215,9 @@ const commands: Record<string, () => Promise<void>> = {
   },
   async progress() {
     const stage = opt.stage || "work";
-    if (!pos[0] || !["start", "work", "fail", "quota"].includes(stage)) {
+    if (!pos[0] || !["start", "work", "fail", "quota", "crash"].includes(stage)) {
       throw new Error(
-        'usage : progress <id> --text "étape en cours" [--stage start|work|fail|quota] [--run URL] [--issue N]'
+        'usage : progress <id> --text "étape en cours" [--stage start|work|fail|quota|crash] [--run URL] [--issue N]'
       );
     }
     await call(`/${pos[0]}/progress`, {
