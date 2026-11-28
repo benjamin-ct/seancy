@@ -30,6 +30,7 @@ import {
   addListMember,
   removeListMember,
   getRestrictListInvites,
+  isInvitableUser,
   setRestrictListInvites,
   getListsSharedWithUser,
   updateDisplayName,
@@ -2300,6 +2301,11 @@ async function handlePostListMember(
   }
   if (memberId === user.id) {
     return json({ error: "Vous êtes déjà propriétaire de cette liste." }, 400);
+  }
+  // Compte inexistant (sinon erreur de clé étrangère, donc 500) ou en cours de
+  // suppression (invisible des autres, voir searchInvitableUsers).
+  if (!(await isInvitableUser(env.DB, memberId))) {
+    return json({ error: "Compte introuvable." }, 404);
   }
   if ((await countListMembers(env.DB, user.id, listId)) >= MAX_LIST_MEMBERS) {
     return json({ error: "Nombre maximal de membres atteint.", reason: "too-many-members" }, 400);

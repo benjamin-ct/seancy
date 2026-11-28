@@ -828,6 +828,9 @@ export async function deleteCustomListForUser(
 // à l'écriture — voir normalizeUsername). Contrairement à searchProfiles
 // (follows.ts), ne se limite pas aux profils publics : inviter quelqu'un
 // dans une liste commune est une action privée, pas une découverte publique.
+// Un compte en cours de suppression (délai de grâce, migration 0023) reste
+// invisible des autres ici aussi, comme dans follows.ts : ni trouvable, ni
+// invitable, ni affiché parmi les membres d'une liste.
 const LIST_MEMBER_SEARCH_LIMIT = 10;
 
 export async function searchInvitableUsers(
@@ -840,6 +843,7 @@ export async function searchInvitableUsers(
     .prepare(
       `SELECT id, username, display_name FROM users
        WHERE username IS NOT NULL AND username LIKE ?1 ESCAPE '\\' AND id <> ?2
+         AND pending_deletion_at IS NULL
        ORDER BY username LIMIT ${LIST_MEMBER_SEARCH_LIMIT}`
     )
     .bind(pattern, excludeUserId)
@@ -863,6 +867,7 @@ export async function getListMembers(
       `SELECT users.id, users.username, users.display_name, users.share_slug
        FROM list_members JOIN users ON users.id = list_members.member_id
        WHERE list_members.owner_id = ? AND list_members.list_id = ?
+         AND users.pending_deletion_at IS NULL
        ORDER BY list_members.created_at`
     )
     .bind(ownerId, listId)
@@ -878,6 +883,16 @@ export async function getListMembers(
     displayName: row.display_name,
     shareSlug: row.share_slug,
   }));
+}
+
+/** Le compte existe-t-il, hors compte en cours de suppression ? (cible d'une
+ * invitation à une liste commune). */
+export async function isInvitableUser(db: D1Database, userId: number): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 FROM users WHERE id = ? AND pending_deletion_at IS NULL")
+    .bind(userId)
+    .first();
+  return row !== null;
 }
 
 /** Seules les personnes que `targetUserId` suit peuvent-elles l'ajouter à
@@ -983,7 +998,9 @@ export async function removeListMember(
 // getCustomListsForUser, mais chaque liste porte en plus `ownerId` : c'est
 // ce qui dit au client (voir CustomList, LibraryContext) de passer par les
 // routes /api/shared-lists/:ownerId/:listId plutôt que /api/custom-lists/:id
-// pour la modifier.
+// pour la modifier. Les listes d'un propriétaire en cours de suppression sont
+// masquées, comme si elles étaient déjà supprimées (elles reviennent s'il
+// annule la suppression).
 export async function getListsSharedWithUser(
   db: D1Database,
   userId: number
@@ -996,7 +1013,8 @@ export async function getListsSharedWithUser(
          FROM list_members
          JOIN custom_lists ON custom_lists.user_id = list_members.owner_id
            AND custom_lists.id = list_members.list_id
-         WHERE list_members.member_id = ?`
+         JOIN users AS owners ON owners.id = list_members.owner_id
+         WHERE list_members.member_id = ? AND owners.pending_deletion_at IS NULL`
       )
       .bind(userId)
       .all<{ id: string; owner_id: number; name: string; created_at: number }>(),
@@ -1007,7 +1025,8 @@ export async function getListsSharedWithUser(
          FROM list_members
          JOIN custom_list_items ON custom_list_items.user_id = list_members.owner_id
            AND custom_list_items.list_id = list_members.list_id
-         WHERE list_members.member_id = ?
+         JOIN users AS owners ON owners.id = list_members.owner_id
+         WHERE list_members.member_id = ? AND owners.pending_deletion_at IS NULL
          ORDER BY custom_list_items.list_id, custom_list_items.position`
       )
       .bind(userId)
