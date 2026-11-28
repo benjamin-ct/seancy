@@ -953,6 +953,9 @@ export async function countListMembers(
   return row?.count ?? 0;
 }
 
+// Faux aussi quand le propriétaire est en cours de suppression : sa liste est
+// alors masquée à ses membres (voir getListsSharedWithUser), les routes
+// /api/shared-lists/:ownerId/:listId la traitent comme introuvable.
 export async function isListMember(
   db: D1Database,
   ownerId: number,
@@ -960,7 +963,11 @@ export async function isListMember(
   userId: number
 ): Promise<boolean> {
   const row = await db
-    .prepare("SELECT 1 FROM list_members WHERE owner_id = ? AND list_id = ? AND member_id = ?")
+    .prepare(
+      `SELECT 1 FROM list_members JOIN users AS owners ON owners.id = list_members.owner_id
+       WHERE list_members.owner_id = ? AND list_members.list_id = ? AND list_members.member_id = ?
+         AND owners.pending_deletion_at IS NULL`
+    )
     .bind(ownerId, listId, userId)
     .first();
   return row !== null;

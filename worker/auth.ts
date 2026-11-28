@@ -257,8 +257,8 @@ export async function getUserFromRequest(
   const row = await db
     .prepare(
       `SELECT users.id, users.email, users.display_name, users.share_slug, users.username,
-              users.restrict_list_invites, sessions.expires_at, sessions.token
-              users.pending_deletion_at, sessions.expires_at, sessions.token
+              users.restrict_list_invites, users.pending_deletion_at, sessions.expires_at,
+              sessions.token
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token IN (?, ?)`
     )
