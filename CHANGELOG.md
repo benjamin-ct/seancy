@@ -2,6 +2,14 @@
 
 Format libre, une entrée par release. Généré automatiquement au merge d'une release (voir .changeset/README.md).
 
+## 0.3.1 — 2026-11-28
+
+### Correctifs
+
+- Espace admin : au rechargement d'une page, l'onglet affiche directement l'icône et le titre de l'admin, sans montrer d'abord ceux du site.
+- Un clic sur une notification ouvre directement la page concernée, même quand l'application est déjà ouverte : elle ne reste plus sur la page où elle était.
+- Améliorations internes de l'outillage de développement, sans changement visible sur le site.
+
 ## 0.3.0 — 2026-11-27
 
 ### Nouveautés
