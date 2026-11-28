@@ -41,6 +41,7 @@ import {
 import {
   AUTOFIX_MAX,
   FIX_TEXT,
+  CRASH_RETRY_AFTER,
   RETRY_EVERY,
   RETRY_MAX,
   FEEDBACK_LABEL,
@@ -693,12 +694,59 @@ export async function validateQueue(env: Env, now = Date.now()): Promise<string 
   return "merged";
 }
 
-/** Tickets en pause faute de quota Claude : relancés une heure après (commentaire @claude), 8 fois au plus. */
+/**
+ * Tickets en pause faute de quota Claude : relancés une heure après (commentaire @claude), 8 fois au plus.
+ * Claude coupé net en plein travail : relancé une fois, 2 minutes après (CRASH_RETRY_AFTER).
+ */
 export async function retryTickets(env: Env, now = Date.now()): Promise<number> {
   if (!env.GITHUB_TICKETS_TOKEN) {
     return 0;
   }
-  const due = (await loadAll(env)).filter(
+  const all = await loadAll(env);
+  const crashed = all.filter(
+    (t) =>
+      t.status === "work" &&
+      t.stage === "crash" &&
+      t.issue &&
+      now - t.progressAt >= CRASH_RETRY_AFTER
+  );
+  for (const t of crashed) {
+    if (t.retries > 0) {
+      await act(
+        env,
+        t.id,
+        {
+          type: "progress",
+          stage: "fail",
+          text: "Claude a de nouveau été coupé net après une relance automatique : relance le ticket à la main",
+        },
+        now
+      );
+      await notify(env, `🚨 Ticket arrêté : **${t.title}** — Claude coupé net deux fois`, t.id);
+      continue;
+    }
+    try {
+      await gh(env)(`/repos/${repoOf(env)}/issues/${t.issue}/comments`, {
+        method: "POST",
+        body: {
+          body: prComment(
+            t.id,
+            t,
+            "Relance automatique (Claude a été coupé net la dernière fois) : reprends là où tu en étais."
+          ),
+        },
+      });
+      await act(
+        env,
+        t.id,
+        { type: "retry", n: 1, text: "Claude coupé net : relance automatique envoyée" },
+        now
+      );
+    } catch {
+      // GitHub injoignable : nouvel essai au prochain passage
+    }
+  }
+  const due = all.filter(
     (t) =>
       t.status === "work" && t.stage === "quota" && t.issue && now - t.progressAt >= RETRY_EVERY
   );
@@ -738,7 +786,7 @@ export async function retryTickets(env: Env, now = Date.now()): Promise<number> 
       // GitHub injoignable : nouvel essai au prochain passage
     }
   }
-  return due.length;
+  return due.length + crashed.length;
 }
 
 /** Preview de la PR (commentaire de la CI) notée dans les tickets à valider qui n'en ont pas encore. */
@@ -1309,7 +1357,7 @@ export async function handleTickets(
       const b = await body(request);
       const a: Action = {
         type: "progress",
-        stage: (["start", "work", "fail", "quota"].includes(String(b.stage))
+        stage: (["start", "work", "fail", "quota", "crash"].includes(String(b.stage))
           ? b.stage
           : "work") as Stage,
         text: text(b.text, 500),
