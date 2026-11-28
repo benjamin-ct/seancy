@@ -93,12 +93,38 @@
       "notifications": { "title": "Notifications", "summary": "Alertes sorties et nouveautés" },
       "affichage": { "title": "Affichage", "summary": "Langue, région, thème" },
       "donnees": { "title": "Mes données", "summary": "Export et suppression du compte" },
+      "suggestions": { "title": "Suggestions", "summary": "Proposer une idée ou une amélioration" },
       "a-propos": { "title": "À propos", "summary": "Mentions légales et contact" }
     }
   },
   "dataSettings": {
     "groupTitle": "Mes données",
     "groupLead": "Exportez une copie de vos données ou supprimez votre compte."
+  },
+  "feedbackPage": {
+    "lead": "Une fonctionnalité qui vous manque, une amélioration, un souci ? Dites-nous ce que vous aimeriez voir dans Seancy : chaque suggestion est lue.",
+    "kindLabel": "Type de suggestion",
+    "kinds": {
+      "feature": "Nouvelle fonctionnalité",
+      "improvement": "Amélioration",
+      "bug": "Problème rencontré",
+      "other": "Autre"
+    },
+    "messageLabel": "Votre suggestion",
+    "messagePlaceholder": "Par exemple : pouvoir trier ma liste par date de sortie…",
+    "count": "{{count}}/{{max}}",
+    "minHint": "{{min}} caractères minimum.",
+    "anonymous": "Votre suggestion est envoyée sans votre nom ni votre adresse e-mail : n'y mettez pas d'information personnelle.",
+    "send": "Envoyer la suggestion",
+    "sending": "Envoi…",
+    "sentTitle": "Merci pour votre suggestion !",
+    "sentText": "Elle a bien été envoyée à l'équipe de Seancy.",
+    "sendAnother": "Envoyer une autre suggestion",
+    "errors": {
+      "tooShort": "Votre suggestion est trop courte ({{min}} caractères minimum).",
+      "rateLimited": "Vous avez envoyé beaucoup de suggestions aujourd'hui : réessayez demain.",
+      "generic": "Impossible d'envoyer la suggestion pour le moment. Réessayez plus tard."
+    }
   },
   "aboutPage": {
     "lead": "Seancy, un projet personnel pour suivre ses films et séries.",
@@ -321,12 +347,12 @@
     "exportDataHint": "Téléchargez une copie de toutes les données de votre compte au format JSON (droit à la portabilité).",
     "exportDataButton": "Télécharger mes données",
     "deleteAccount": "Supprimer le compte",
-    "deleteAccountHint": "Supprime définitivement votre compte et toutes les données associées : bibliothèque, listes, préférences, rappels, abonnements aux notifications et photo de profil. Action irréversible.",
+    "deleteAccountHint": "Supprime votre compte et toutes les données associées : bibliothèque, listes, préférences, rappels, abonnements aux notifications et photo de profil. La suppression a lieu 7 jours après confirmation ; passé ce délai, elle est définitive.",
     "deleteAccountButton": "Supprimer mon compte",
-    "deleteAccountConfirmTitle": "Cette action est définitive.",
-    "deleteAccountConfirmText": "Toutes vos données seront supprimées immédiatement et ne pourront pas être récupérées. Pour confirmer, saisissez votre adresse e-mail ({{email}}) ci-dessous.",
-    "deleteAccountConfirmPlaceholder": "Votre adresse e-mail",
-    "deleteAccountConfirmButton": "Supprimer définitivement",
+    "deleteAccountCodeSent": "Un code de confirmation a été envoyé à votre adresse e-mail (valable 15 minutes). Une fois confirmée, votre profil disparaît aussitôt pour les autres membres et la suppression a lieu dans 7 jours ; vous pourrez l'annuler à tout moment avant cette échéance.",
+    "deleteAccountConfirmButton": "Confirmer la suppression",
+    "deleteAccountPending": "Votre compte sera supprimé le {{date}}. D'ici là, votre profil, vos listes partagées et vos avis ne sont plus visibles des autres membres. Reconnectez-vous avant cette date pour annuler, ou utilisez le bouton ci-dessous.",
+    "deleteAccountCancel": "Annuler la suppression",
     "deleteAccountError": "Impossible de supprimer le compte pour le moment. Réessayez.",
     "deleting": "Suppression…"
   },
@@ -749,7 +775,7 @@
       },
       "library": {
         "label": "Bibliothèque personnelle",
-        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », les notes que vous leur donnez (pour une série, aussi par saison et par épisode), vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour vous ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse e-mail ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
+        "text": " : les films/séries que vous marquez « vus » ou « envie de voir », les notes que vous leur donnez (pour une série, aussi par saison et par épisode), vos listes personnalisées et leur contenu, ainsi que les titres marqués « pas intéressé » dans la section « Pour vous ». Ces signaux servent à calculer vos recommandations personnalisées, entièrement côté serveur. Si vous activez le partage de votre profil (facultatif, désactivé par défaut), vos vus/envies/listes ainsi que vos notes, vos avis texte, votre nom affiché et votre photo de profil (la vôtre, ou à défaut celle de Gravatar, si vous en avez une) deviennent visibles en lecture seule par toute personne disposant du lien de partage — jamais votre adresse e-mail ni vos titres « pas intéressé ». Vous pouvez désactiver ce partage à tout moment, ce qui rend le lien définitivement invalide."
       },
       "preferences": {
         "label": "Préférences",
@@ -779,9 +805,13 @@
         "label": "Rappels « Me prévenir »",
         "text": " : quand vous activez la cloche d'un titre à venir, nous enregistrons sur votre compte ce titre (identifiant, nom, affiche, date de sortie), la date du rappel et les plateformes de streaming déjà connues pour ce titre. Ils servent uniquement à vous prévenir le jour de la sortie et à l'arrivée du titre sur une plateforme. Désactiver la cloche supprime le rappel."
       },
+      "feedback": {
+        "label": "Suggestions",
+        "text": " (si vous en envoyez depuis Réglages → Suggestions) : le type et le texte de votre suggestion, transmis à l'équipe de Seancy sans votre nom, votre adresse e-mail ni l'identifiant de votre compte. Elle est lue par l'équipe (qui en est prévenue sur Discord) et peut servir à préparer une évolution de l'application, y compris avec Claude, un outil de développement assisté par IA (voir plus bas). N'étant pas rattachée à votre compte, elle n'est pas supprimée avec lui : n'y mettez pas d'information personnelle. Seul un compteur technique lié à votre compte limite le nombre d'envois par jour ; il est effacé ensuite."
+      },
       "sharedProfile": {
         "label": "Profil partagé et pseudo",
-        "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse e-mail. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
+        "text": " (si vous choisissez de partager votre profil) : vos titres vus, votre envie de voir, vos listes personnalisées, vos notes, vos avis texte, votre nom affiché et votre photo de profil deviennent visibles en lecture seule par toute personne disposant du lien — jamais votre adresse e-mail. Vous pouvez aussi choisir un pseudo, facultatif et unique : il apparaît dans l'adresse du profil partagé (/u/votre_pseudo) et sur celui-ci. Désactiver le partage rend le profil inaccessible, y compris via le pseudo ; vous pouvez modifier ou effacer le pseudo à tout moment depuis votre profil."
       },
       "signInProviders": {
         "label": "Connexion avec Google ou Apple",
@@ -823,6 +853,14 @@
         "label": "Gravatar",
         "text": " (Automattic) : affiche votre photo de profil si vous en avez configuré une associée à votre adresse e-mail. Nous ne transmettons jamais votre e-mail en clair à Gravatar, seulement son empreinte (hash MD5), conformément au fonctionnement de ce service."
       },
+      "discord": {
+        "label": "Discord",
+        "text": " : prévient l'équipe de Seancy de chaque nouvelle suggestion par un message qui en reprend le début (premiers mots, sans votre nom, votre adresse e-mail ni l'identifiant de votre compte)."
+      },
+      "anthropic": {
+        "label": "Anthropic (Claude)",
+        "text": " : outil de développement assisté par IA. Quand l'équipe décide de donner suite à une suggestion, son texte peut lui être transmis pour préparer la modification de l'application (traitement lancé depuis GitHub Actions) ; il n'est jamais publié sur le dépôt public du projet."
+      },
       "outro": "Aucune de ces données n'est vendue ni utilisée à des fins publicitaires.",
       "google": {
         "label": "Google (Se connecter avec Google)",
@@ -839,7 +877,7 @@
     },
     "retention": {
       "title": "Durée de conservation",
-      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment, ainsi que toutes les données associées, depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : la suppression est immédiate et définitive. Vous pouvez aussi en demander la suppression ",
+      "textBefore": "Vos données sont conservées tant que votre compte existe. Vous pouvez le supprimer vous-même à tout moment depuis Profil → Réglages → Mes données (bouton « Supprimer mon compte ») : après confirmation par un code envoyé par e-mail, votre profil, vos listes partagées et vos avis cessent aussitôt d'être visibles des autres membres, et la suppression a lieu 7 jours plus tard ; elle reste annulable pendant ce délai (automatiquement si vous vous reconnectez, ou via un bouton dédié). Passé ce délai, toutes les données associées sont supprimées définitivement. Vous pouvez aussi en demander la suppression ",
       "textAfter": "."
     },
     "rights": {
@@ -912,6 +950,12 @@
     "whereToWatchSource": "{{region}} · via JustWatch",
     "yourRatingHeading": "Votre note",
     "rateAfterWatched": "Marquez-le comme vu pour le noter",
+    "yourReviewLabel": "Votre avis (optionnel)",
+    "yourReviewPlaceholder": "Qu'avez-vous pensé de ce titre ?",
+    "yourReviewCount": "{{count}}/{{max}}",
+    "yourReviewSave": "Enregistrer l'avis",
+    "yourReviewSaved": "Avis enregistré",
+    "yourReviewRemoved": "Avis retiré",
     "seriesAverage_one": "Moyenne de {{count}} saison notée",
     "seriesAverage_other": "Moyenne de vos {{count}} saisons notées",
     "manualSeriesKept": "Votre note de {{rating}}/10 pour la série reviendra si vous retirez les notes de saisons et d'épisodes.",
@@ -1054,7 +1098,9 @@
     "seasonRateHint": "Cochez un épisode vu pour noter la saison",
     "specialsNotInSeries": "Les épisodes spéciaux ne comptent pas dans la note de la série.",
     "rateEpisode": "Noter {{episode}}",
-    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier"
+    "episodeRatingLabel": "Note de {{episode}} : {{rating}}/10, modifier",
+    "noOverview": "Pas de résumé disponible pour cet épisode.",
+    "tmdbRating": "Note TMDB :"
   },
   "profileShare": {
     "title": "Lien public",
@@ -1173,6 +1219,8 @@
     "ownerRating": "{{rating}}/10 · note de {{name}}",
     "tabSeen": "Vus",
     "tabWant": "Envie de voir",
+    "tabReviews": "Avis",
+    "emptyReviews": "Aucun avis pour l'instant.",
     "tabLists": "Listes",
     "typeFilter": "Type de titre",
     "filterAll": "Tous",

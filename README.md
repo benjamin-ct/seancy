@@ -302,9 +302,13 @@ ne renvoie jamais de lien ni de code de connexion dans la réponse.
 ## Tickets (Claude)
 
 Les demandes de développement ne passent plus par Trello : elles vivent dans Seancy, sur la page **Tickets** de
-l'[espace admin](#espace-admin-adminseancycom) (`admin.seancy.com/tickets`), un tableau façon Trello repris de Paddock Live : **Idées**,
-**À faire**, **En cours**, **À valider**, **Faits**. Une carte glissée d'une colonne à l'autre fait l'action de la
-colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec confirmation.
+l'[espace admin](#espace-admin-adminseancycom) (`admin.seancy.com/tickets`), un tableau façon Trello repris de Paddock Live :
+**Suggestions**, **Idées**, **À faire**, **En cours**, **À valider**, **Faits**. Une carte glissée d'une colonne à
+l'autre fait l'action de la colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec confirmation.
+
+- **Suggestions** : celles des utilisateurs (Réglages › Suggestions, anonymes) arrivent dans leur propre colonne, à
+  part des idées de l'équipe, avec l'étiquette « Suggestion ». Elles se trient comme les idées : « Garder en idée »,
+  « En faire un ticket », glisser vers une autre colonne, ou « Archiver ».
 
 - **Envoi** : le Worker (`worker/tickets.ts`, logique pure dans `worker/tickets-logic.ts`, tables de la migration
   `0023`) ouvre une issue `Ticket <id>` avec `@claude`. Le workflow **Tickets (Claude)**
@@ -323,7 +327,12 @@ colonne (envoi à Claude, annulation, validation, retouche, réouverture), avec 
 - **Quota Claude épuisé** : ticket en pause, relancé tout seul une heure après (8 fois au plus). La preview de la PR
   (commentaire de la CI) est notée toute seule dans le ticket.
 - **Notifications** : sur Discord (prêt à valider, arrêté, en pause, fusionné, validation impossible).
-- **Sessions Claude** : `node scripts/tickets.ts` (`inbox`, `answer`, `progress`, `file`, `add`, `list`, `get`), avec
+- **Archivage** : « Archiver » (fiche d'une suggestion, d'une idée, d'un ticket à faire ou fait) sort la carte du tableau sans la
+  supprimer. Le bouton « Archivés » (avec leur nombre ; icône à côté du zoom sur téléphone) montre les cartes
+  archivées seules, dans leur colonne. Elles reviennent aussi dans les résultats de la recherche (étiquette
+  « Archivé ») et dans `node scripts/tickets.ts search` ; « Remettre sur le tableau », un envoi à Claude ou un
+  changement de colonne les y remet.
+- **Sessions Claude** : `node scripts/tickets.ts` (`inbox`, `answer`, `progress`, `file`, `add`, `list`, `search`, `get`), avec
   la clé `SEANCY_TICKETS_KEY` (créée sur la page Tickets → Réglages ; seule son empreinte est gardée).
 
 - **Dépôt public** : le contenu des tickets reste dans la base de Seancy ; l'issue GitHub n'en porte que l'identifiant

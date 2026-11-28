@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { ADMIN_ORIGIN } from "../../../core/lib/adminHost.ts";
+import { adminHomeUrl } from "../../../core/lib/adminHost.ts";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../core/context/AuthContext.tsx";
 import {
@@ -391,7 +391,7 @@ export default function AccountSettings() {
 
       {admin && (
         <SettingsRow label={t("accountCard.admin")} description={t("accountCard.adminHint")}>
-          <a className={styles.secondaryBtn} href={ADMIN_ORIGIN}>
+          <a className={styles.secondaryBtn} href={adminHomeUrl()}>
             {t("accountCard.adminOpen")}
           </a>
         </SettingsRow>

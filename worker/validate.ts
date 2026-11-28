@@ -21,6 +21,10 @@ const SEASON_KEY_PATTERN = /^\d{1,4}$/;
 // peut avoir plusieurs créateurs ; 10 laisse une large marge.
 const MAX_DIRECTORS = 10;
 const DIRECTOR_NAME_MAX_LENGTH = 150;
+// Avis texte libre sur un titre (ticket « Amélioration de la page de profil
+// utilisateur ») : volontairement court (pas un article), largeur choisie
+// pour rester nettement sous la limite "pas du 5000 chars" demandée.
+const MAX_REVIEW_LENGTH = 1000;
 
 const HTML_ENTITY_DECODES: Record<string, string> = {
   "&amp;": "&",
@@ -51,6 +55,7 @@ export interface CleanLibraryItem {
   updatedAt: number;
   watchedAt?: number;
   rating?: number;
+  reviewText?: string;
   runtimeMinutes?: number;
   watchedEpisodes: string[];
   manualRating?: number | null;
@@ -177,6 +182,8 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
     rawWatchedAt === null ? undefined : Math.min(rawWatchedAt, Date.now() + 86400000);
   const rating =
     r.rating == null ? undefined : Math.min(10, Math.max(0, cleanNumber(r.rating) ?? 0));
+  const reviewText =
+    r.reviewText == null ? undefined : (cleanString(r.reviewText, MAX_REVIEW_LENGTH) ?? undefined);
   const runtimeMinutes =
     r.runtimeMinutes == null ? undefined : Math.max(0, cleanNumber(r.runtimeMinutes) ?? 0);
   // Uniquement pertinent pour les séries, mais on ne restreint pas à
@@ -216,6 +223,7 @@ function sanitizeItem(mediaType: string, tmdbId: unknown, raw: unknown): CleanLi
     updatedAt,
     watchedAt,
     rating,
+    reviewText,
     runtimeMinutes,
     watchedEpisodes,
     manualRating,

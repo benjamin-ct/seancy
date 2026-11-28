@@ -33,6 +33,10 @@ export interface LibraryItem extends LibraryItemInput {
   /** Note sur 10. Pour une série, note effective arrondie (moyenne des saisons,
    * sinon `manualRating`) : voir core/lib/seriesRatings.ts. */
   rating?: number | null;
+  /** Avis texte libre sur le titre, public par défaut (comme la note) —
+   * uniquement pertinent pour un titre vu. 1000 caractères max (voir
+   * worker/validate.ts), vide/absent tant que l'utilisateur n'en a pas écrit. */
+  reviewText?: string | null;
   /** Uniquement pour les séries — clés "saison-épisode", ex. "1-5". */
   watchedEpisodes?: string[];
   /** Séries : note donnée à la main à la série entière (voir seriesRatings.ts). */

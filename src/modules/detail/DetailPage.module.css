@@ -536,6 +536,79 @@
   background: currentColor;
 }
 
+.yourReview {
+  margin-top: 14px;
+}
+
+.yourReviewLabel {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.yourReviewInput {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.yourReviewFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.yourReviewCount {
+  color: var(--subtle);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.yourReviewStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: var(--ok-ink);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Corail seulement quand il y a quelque chose à enregistrer (les actions
+   gardent la couleur d'accent, voir variables.css). */
+.yourReviewSave {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.yourReviewSave:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.yourReviewSave:disabled {
+  cursor: default;
+}
+
 /* Série notée par saisons : la note manuelle mise de côté. */
 .yourRatingNote {
   margin-top: 8px;

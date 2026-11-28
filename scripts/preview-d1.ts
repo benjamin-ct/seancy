@@ -27,6 +27,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { experimental_readRawConfig } from "wrangler";
+import { DEVELOP_DIST_DIR, buildDevelopAssets } from "./develop-assets.ts";
 
 const WRANGLER_BIN = "node_modules/.bin/wrangler";
 const SOURCE_CONFIG_PATH = "wrangler.jsonc";
@@ -99,6 +100,7 @@ interface SourceConfig {
   d1_databases?: D1Binding[];
   exports?: Record<string, { type: string }>;
   services?: unknown[];
+  assets?: Record<string, unknown>;
   ratelimits?: RateLimit[];
   [key: string]: unknown;
 }
@@ -243,7 +245,9 @@ function writeGeneratedConfig(configPath: string, dbName: string, uuid: string):
 // `develop` aux statistiques Web Analytics réelles de la prod (même
 // raisonnement que writeGeneratedConfig ci-dessus pour les previews de PR —
 // `env.CLOUDFLARE_ANALYTICS_TOKEN || null` gère déjà l'absence sans crasher,
-// voir worker/index.ts). Les vrais secrets (TMDB_API_KEY,
+// voir worker/index.ts). Les assets sont ceux de dist-develop/ (favicon,
+// icônes et nom de l'appli propres à develop, voir scripts/develop-assets.ts).
+// Les vrais secrets (TMDB_API_KEY,
 // VAPID_PRIVATE_KEY...) doivent être configurés une fois, à la main, sur ce
 // nouveau Worker (dashboard Cloudflare → Settings → Variables and Secrets)
 // — ils ne sont jamais hérités de la prod ni gérés par la CI.
@@ -264,6 +268,7 @@ function writeDevelopConfig(dbName: string, uuid: string): void {
   const generatedConfig = {
     ...developBase,
     name: DEVELOP_WORKER_NAME,
+    assets: { ...developBase.assets, directory: `./${DEVELOP_DIST_DIR}` },
     d1_databases: [targetDatabase],
     vars: { ...developBase.vars, CLOUDFLARE_ANALYTICS_TOKEN: "" },
     ratelimits: developBase.ratelimits?.map((rateLimit) => ({
@@ -312,6 +317,7 @@ function provision(prNumber: string): void {
 // ajoutées manuellement entre deux pushs. Pour repartir d'une base propre,
 // voir `reset-develop` (déclenché à la main, workflow dédié).
 function provisionDevelop(): void {
+  buildDevelopAssets();
   const uuid = ensureDatabase(DEVELOP_DATABASE_NAME);
   writeDevelopConfig(DEVELOP_DATABASE_NAME, uuid);
   applyMigrations(DEVELOP_DATABASE_NAME, DEVELOP_CONFIG_PATH);

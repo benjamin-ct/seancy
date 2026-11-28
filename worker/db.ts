@@ -10,6 +10,8 @@ import {
 } from "./follows.ts";
 import { getAvatar } from "./avatars.ts";
 import { getRemindersForUser, type ReminderSummary } from "./reminders.ts";
+import { logError } from "./logger.ts";
+import { notifiedKey } from "./notify-dedup.ts";
 import { SHARE_SLUG_PATTERN, USERNAME_PATTERN } from "./share-slug.ts";
 import type {
   CleanCustomList,
@@ -400,15 +402,18 @@ function byMostRecent(a: LibraryItem, b: LibraryItem): number {
 // résout que les profils dont le partage est actif : un profil privé
 // (share_slug NULL) est donc introuvable par construction. `viewerId` :
 // compte connecté qui consulte la page (bouton Suivre/Suivi), null sinon.
+// Compte en cours de suppression (délai de grâce, migration 0023) : introuvable
+// pour les autres, comme s'il était déjà supprimé ; son propriétaire le voit
+// encore.
 export async function getPublicProfile(
   db: D1Database,
   handle: string,
   viewerId: number | null
 ): Promise<PublicProfile | null> {
   const query = SHARE_SLUG_PATTERN.test(handle)
-    ? "SELECT id, display_name, username, share_slug, top_picks FROM users WHERE share_slug = ?"
+    ? "SELECT id, display_name, username, share_slug, top_picks, pending_deletion_at FROM users WHERE share_slug = ?"
     : USERNAME_PATTERN.test(handle)
-      ? "SELECT id, display_name, username, share_slug, top_picks FROM users WHERE username = ? AND share_slug IS NOT NULL"
+      ? "SELECT id, display_name, username, share_slug, top_picks, pending_deletion_at FROM users WHERE username = ? AND share_slug IS NOT NULL"
       : null;
   if (!query) {
     return null;
@@ -419,8 +424,9 @@ export async function getPublicProfile(
     username: string | null;
     share_slug: string;
     top_picks: string | null;
+    pending_deletion_at: number | null;
   }>();
-  if (!user) {
+  if (!user || (user.pending_deletion_at !== null && viewerId !== user.id)) {
     return null;
   }
   const other = viewerId !== null && viewerId !== user.id ? viewerId : null;
@@ -470,7 +476,7 @@ export async function getSharedProfileEmail(
   shareSlug: string
 ): Promise<string | null> {
   const row = await db
-    .prepare("SELECT email FROM users WHERE share_slug = ?")
+    .prepare("SELECT email FROM users WHERE share_slug = ? AND pending_deletion_at IS NULL")
     .bind(shareSlug)
     .first<{ email: string }>();
   return row?.email ?? null;
@@ -1106,7 +1112,7 @@ export async function getPublicListBySlug(
   const share = await db
     .prepare(
       `SELECT list_shares.user_id, list_shares.list_id, custom_lists.name, custom_lists.created_at,
-              users.display_name, users.share_slug, users.username
+              users.display_name, users.share_slug, users.username, users.pending_deletion_at
        FROM list_shares
        JOIN custom_lists ON custom_lists.user_id = list_shares.user_id AND custom_lists.id = list_shares.list_id
        JOIN users ON users.id = list_shares.user_id
@@ -1121,8 +1127,11 @@ export async function getPublicListBySlug(
       display_name: string | null;
       share_slug: string | null;
       username: string | null;
+      pending_deletion_at: number | null;
     }>();
-  if (!share) {
+  // Compte en cours de suppression : ses listes partagées disparaissent pour
+  // les autres, comme son profil (voir getPublicProfile).
+  if (!share || (share.pending_deletion_at !== null && viewerUserId !== share.user_id)) {
     return null;
   }
   const [{ results: itemRows }, { results: ratingRows }] = await Promise.all([
@@ -1539,10 +1548,7 @@ export async function markUserNotified(
 
 // Historique des notifications d'un destinataire (compte + ses abonnements),
 // chargé en une fois par le cron au lieu d'un SELECT par titre et par motif
-// (audit H5). Clés `${mediaType}:${tmdbId}:${reason}`.
-export function notifiedKey(mediaType: string, tmdbId: number, reason: string): string {
-  return `${mediaType}:${tmdbId}:${reason}`;
-}
+// (audit H5). Clés `${mediaType}:${tmdbId}:${reason}` (notifiedKey).
 
 // D1 limite le nombre de paramètres liés par requête : les ids sont découpés.
 const MAX_BOUND_IDS = 90;
@@ -1697,6 +1703,33 @@ export async function deleteUserAccount(db: D1Database, userId: number): Promise
       .bind(userId),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ]);
+}
+
+// Balayage quotidien (voir worker/scheduled.ts, runDailyCheck) : exécute les
+// suppressions de compte dont le délai de grâce de 7 jours est passé (voir
+// migration 0023, confirmAccountDeletion dans auth.ts). Un compte à la fois
+// pour qu'un échec isolé (ex. contrainte FK inattendue) n'empêche pas les
+// autres, même logique que purgeExpiredRows.
+export async function purgeAccountsPendingDeletion(
+  db: D1Database,
+  now = Date.now()
+): Promise<number> {
+  const { results } = await db
+    .prepare(
+      "SELECT id FROM users WHERE pending_deletion_at IS NOT NULL AND pending_deletion_at <= ?"
+    )
+    .bind(now)
+    .all<{ id: number }>();
+  let deleted = 0;
+  for (const { id } of results) {
+    try {
+      await deleteUserAccount(db, id);
+      deleted++;
+    } catch (err) {
+      logError(`Suppression de compte en échec (user ${id}) :`, err);
+    }
+  }
+  return deleted;
 }
 
 export interface AccountExport {

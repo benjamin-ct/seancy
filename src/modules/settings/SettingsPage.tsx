@@ -12,6 +12,7 @@ import NotificationsPage from "./pages/NotificationsPage.tsx";
 import DisplayPage from "./pages/DisplayPage.tsx";
 import DataPage from "./pages/DataPage.tsx";
 import AboutPage from "./pages/AboutPage.tsx";
+import FeedbackPage from "./pages/FeedbackPage.tsx";
 import styles from "./SettingsLayout.module.css";
 
 // Desktop uniquement (le panneau détail est masqué sur mobile tant qu'on
@@ -23,7 +24,7 @@ function SettingsSummaryPlaceholder() {
 }
 
 // Page Réglages (refonte Profil/Préférences, carte Trello
-// https://trello.com/c/Wym5VQTd) : sommaire + 8 sous-pages, montée sur
+// https://trello.com/c/Wym5VQTd) : sommaire + 9 sous-pages, montée sur
 // /reglages/* (routing propre au module, voir App.tsx). Réservée aux
 // membres connectés, même garde que ProfilePage.
 export default function SettingsPage() {
@@ -52,6 +53,7 @@ export default function SettingsPage() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="affichage" element={<DisplayPage />} />
         <Route path="donnees" element={<DataPage />} />
+        <Route path="suggestions" element={<FeedbackPage />} />
         <Route path="a-propos" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/reglages" replace />} />
       </Route>

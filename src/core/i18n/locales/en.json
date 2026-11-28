@@ -93,12 +93,38 @@
       "notifications": { "title": "Notifications", "summary": "Release and new content alerts" },
       "affichage": { "title": "Display", "summary": "Language, region, theme" },
       "donnees": { "title": "My data", "summary": "Export and delete your account" },
+      "suggestions": { "title": "Suggestions", "summary": "Suggest an idea or an improvement" },
       "a-propos": { "title": "About", "summary": "Legal notices and contact" }
     }
   },
   "dataSettings": {
     "groupTitle": "My data",
     "groupLead": "Export a copy of your data or delete your account."
+  },
+  "feedbackPage": {
+    "lead": "A missing feature, an improvement, a problem? Tell us what you would like to see in Seancy: every suggestion is read.",
+    "kindLabel": "Type of suggestion",
+    "kinds": {
+      "feature": "New feature",
+      "improvement": "Improvement",
+      "bug": "Problem",
+      "other": "Other"
+    },
+    "messageLabel": "Your suggestion",
+    "messagePlaceholder": "For example: sort my list by release date…",
+    "count": "{{count}}/{{max}}",
+    "minHint": "At least {{min}} characters.",
+    "anonymous": "Your suggestion is sent without your name or email address: please don't include personal information.",
+    "send": "Send suggestion",
+    "sending": "Sending…",
+    "sentTitle": "Thanks for your suggestion!",
+    "sentText": "It has been sent to the Seancy team.",
+    "sendAnother": "Send another suggestion",
+    "errors": {
+      "tooShort": "Your suggestion is too short (at least {{min}} characters).",
+      "rateLimited": "You have sent a lot of suggestions today: please try again tomorrow.",
+      "generic": "Unable to send your suggestion right now. Please try again later."
+    }
   },
   "aboutPage": {
     "lead": "Seancy, a personal project to keep track of movies and shows.",
@@ -321,12 +347,12 @@
     "exportDataHint": "Download a copy of all your account data in JSON format (right to data portability).",
     "exportDataButton": "Download my data",
     "deleteAccount": "Delete account",
-    "deleteAccountHint": "Permanently deletes your account and all associated data: library, lists, preferences, reminders, notification subscriptions, and profile photo. This action cannot be undone.",
+    "deleteAccountHint": "Deletes your account and all associated data: library, lists, preferences, reminders, notification subscriptions, and profile photo. Deletion happens 7 days after you confirm; after that, it cannot be undone.",
     "deleteAccountButton": "Delete my account",
-    "deleteAccountConfirmTitle": "This action is permanent.",
-    "deleteAccountConfirmText": "All your data will be deleted immediately and cannot be recovered. To confirm, type your email address ({{email}}) below.",
-    "deleteAccountConfirmPlaceholder": "Your email address",
-    "deleteAccountConfirmButton": "Delete permanently",
+    "deleteAccountCodeSent": "A confirmation code was sent to your email address (valid for 15 minutes). Once confirmed, your profile is immediately hidden from other members and deletion will happen in 7 days; you can cancel it at any time before then.",
+    "deleteAccountConfirmButton": "Confirm deletion",
+    "deleteAccountPending": "Your account will be deleted on {{date}}. Until then, your profile, shared lists and reviews are hidden from other members. Sign back in before then to cancel, or use the button below.",
+    "deleteAccountCancel": "Cancel deletion",
     "deleteAccountError": "Couldn't delete the account right now. Try again.",
     "deleting": "Deleting…"
   },
@@ -749,7 +775,7 @@
       },
       "library": {
         "label": "Personal library",
-        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", the ratings you give them (for a show, also per season and per episode), your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
+        "text": ": the movies/shows you mark as \"watched\" or \"want to watch\", the ratings you give them (for a show, also per season and per episode), your custom lists and their content, and the titles you mark \"not interested\" in the \"For you\" section. These signals are used to compute your personalized recommendations, entirely server-side. If you turn on profile sharing (optional, off by default), your watched/watchlist/lists along with your ratings, text reviews, display name and profile picture (your own, or else your Gravatar picture, if you have one) become visible read-only to anyone who has the share link — never your email address or your \"not interested\" titles. You can turn sharing off at any time, which permanently invalidates the link."
       },
       "preferences": {
         "label": "Preferences",
@@ -779,9 +805,13 @@
         "label": "“Notify me” reminders",
         "text": ": when you turn on the bell for an upcoming title, we store on your account that title (identifier, name, poster, release date), the date of the reminder and the streaming services already known for it. They are only used to notify you on release day and when the title arrives on a streaming service. Turning the bell off deletes the reminder."
       },
+      "feedback": {
+        "label": "Suggestions",
+        "text": " (if you send any from Settings → Suggestions): the type and text of your suggestion, sent to the Seancy team without your name, your email address or your account identifier. It is read by the team (notified on Discord) and may be used to prepare a change to the app, including with Claude, an AI-assisted development tool (see below). As it is not linked to your account, it is not deleted with it: please don't include personal information. Only a technical counter linked to your account limits the number of submissions per day; it is deleted afterwards."
+      },
       "sharedProfile": {
         "label": "Shared profile and username",
-        "text": " (if you choose to share your profile): what you've watched, your watchlist, your custom lists, your ratings, your display name and your profile picture become visible read-only to anyone who has the link — never your email address. You can also pick an optional, unique username: it appears in the shared profile's address (/u/your_username) and on the profile itself. Turning sharing off makes the profile unreachable, including through the username; you can change or clear the username at any time from your profile."
+        "text": " (if you choose to share your profile): what you've watched, your watchlist, your custom lists, your ratings, your text reviews, your display name and your profile picture become visible read-only to anyone who has the link — never your email address. You can also pick an optional, unique username: it appears in the shared profile's address (/u/your_username) and on the profile itself. Turning sharing off makes the profile unreachable, including through the username; you can change or clear the username at any time from your profile."
       },
       "signInProviders": {
         "label": "Sign in with Google or Apple",
@@ -823,6 +853,14 @@
         "label": "Gravatar",
         "text": " (Automattic): displays your profile picture if you've set one up linked to your email address. We never send your email address in clear text to Gravatar, only its fingerprint (MD5 hash), in line with how this service works."
       },
+      "discord": {
+        "label": "Discord",
+        "text": ": notifies the Seancy team of each new suggestion with a message that quotes its beginning (first words, without your name, your email address or your account identifier)."
+      },
+      "anthropic": {
+        "label": "Anthropic (Claude)",
+        "text": ": AI-assisted development tool. When the team decides to act on a suggestion, its text may be sent to it to prepare the change to the app (run from GitHub Actions); it is never published on the project's public repository."
+      },
       "outro": "None of this data is sold or used for advertising purposes.",
       "google": {
         "label": "Google (Sign in with Google)",
@@ -839,7 +877,7 @@
     },
     "retention": {
       "title": "Retention period",
-      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time, along with all associated data, from Profile → Settings → My data (\"Delete my account\" button): deletion is immediate and permanent. You can also request its deletion ",
+      "textBefore": "Your data is kept for as long as your account exists. You can delete it yourself at any time from Profile → Settings → My data (\"Delete my account\" button): after confirming with a code sent by email, your profile, shared lists and reviews immediately stop being visible to other members, and deletion happens 7 days later; it remains cancellable during that period (automatically if you sign back in, or with a dedicated button). After that period, all associated data is permanently deleted. You can also request its deletion ",
       "textAfter": "."
     },
     "rights": {
@@ -912,6 +950,12 @@
     "whereToWatchSource": "{{region}} · via JustWatch",
     "yourRatingHeading": "Your rating",
     "rateAfterWatched": "Mark it as watched to rate it",
+    "yourReviewLabel": "Your review (optional)",
+    "yourReviewPlaceholder": "What did you think of this title?",
+    "yourReviewCount": "{{count}}/{{max}}",
+    "yourReviewSave": "Save review",
+    "yourReviewSaved": "Review saved",
+    "yourReviewRemoved": "Review removed",
     "seriesAverage_one": "Average of {{count}} rated season",
     "seriesAverage_other": "Average of your {{count}} rated seasons",
     "manualSeriesKept": "Your {{rating}}/10 show rating comes back if you remove the season and episode ratings.",
@@ -1054,7 +1098,9 @@
     "seasonRateHint": "Mark an episode as watched to rate the season",
     "specialsNotInSeries": "Specials don't count towards the show's rating.",
     "rateEpisode": "Rate {{episode}}",
-    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit"
+    "episodeRatingLabel": "{{episode}} rating: {{rating}}/10, edit",
+    "noOverview": "No summary available for this episode.",
+    "tmdbRating": "TMDB rating:"
   },
   "profileShare": {
     "title": "Public link",
@@ -1173,6 +1219,8 @@
     "ownerRating": "{{rating}}/10 · {{name}}'s rating",
     "tabSeen": "Watched",
     "tabWant": "Watchlist",
+    "tabReviews": "Reviews",
+    "emptyReviews": "No reviews yet.",
     "tabLists": "Lists",
     "typeFilter": "Title type",
     "filterAll": "All",

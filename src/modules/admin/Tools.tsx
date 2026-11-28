@@ -5,6 +5,7 @@
 // confirmation.
 import { useState } from "react";
 import { useDocumentTitle } from "../../shared/hooks/useDocumentTitle.ts";
+import { DEV_HOSTNAME, isDevSite } from "../../core/lib/devSite.ts";
 import styles from "./Admin.module.css";
 
 const TOOLS = [
@@ -41,6 +42,7 @@ const TOOLS = [
 ] as const;
 
 export default function Tools() {
+  // Même titre posé dès le chargement par public/theme-init.js
   useDocumentTitle("Outils · Admin");
   const [busy, setBusy] = useState("");
   const [asking, setAsking] = useState("");
@@ -69,6 +71,23 @@ export default function Tools() {
         <h1 className={styles.title}>Outils</h1>
       </div>
       <div className={styles.tools}>
+        {/* Visible aussi sur téléphone, où l'en-tête n'a pas de lien ; pas sur le site de développement lui-même */}
+        {!isDevSite && (
+          <article className={styles.card}>
+            <h2>Site de développement</h2>
+            <p className={styles.muted}>
+              La version de test du site, avec les changements pas encore en ligne.
+            </p>
+            <a
+              href={`https://${DEV_HOSTNAME}/`}
+              className={styles.primary}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ouvrir
+            </a>
+          </article>
+        )}
         {TOOLS.map((t) => (
           <article key={t.id} className={styles.card}>
             <h2>{t.name}</h2>

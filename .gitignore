@@ -48,3 +48,8 @@ infra/trello-claude/ssh-keys/known_hosts
 *.njsproj
 *.sln
 *.sw?
+
+# Icônes du site de développement (ticket bleu), même générateur
+/develop-icons/
+# Assets du déploiement develop (scripts/develop-assets.ts)
+/dist-develop/
